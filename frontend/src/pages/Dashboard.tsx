@@ -188,7 +188,7 @@ export function Dashboard({ onEdit }: Props) {
     return (
       <div className="empty-state">
         <div className="empty-state-icon">⬡</div>
-        <div className="empty-state-text">No services yet.<br />Add your first service with the button above.</div>
+        <div className="empty-state-text">No apps yet.<br />Add your first app with the button above.</div>
       </div>
     )
   }

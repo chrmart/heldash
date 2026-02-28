@@ -75,12 +75,14 @@ export default function App() {
               {page === 'settings' && <SettingsPage />}
               {page === 'services' && <ServicesPage onEdit={handleEditService} />}
               {page === 'about' && (
-                <div className="glass" style={{ padding: 24, borderRadius: 'var(--radius-xl)', maxWidth: 400 }}>
-                  <h3 style={{ marginBottom: 8 }}>HELDASH</h3>
-                  <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    Personal homelab dashboard.<br />
-                    Built with ♥ and Fastify + React.
-                  </p>
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <div className="glass" style={{ padding: 24, borderRadius: 'var(--radius-xl)', maxWidth: 400, width: '100%' }}>
+                    <h3 style={{ marginBottom: 8 }}>HELDASH</h3>
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      Personal homelab dashboard.<br />
+                      Built with ♥ and Fastify + React.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

@@ -15,29 +15,14 @@ const ACCENTS: { value: ThemeAccent; label: string; color: string }[] = [
 ]
 
 export function Topbar({ onAddService, onCheckAll, checking }: Props) {
-  const { services, settings, setThemeMode, setThemeAccent } = useStore()
+  const { settings, setThemeMode, setThemeAccent } = useStore()
   const mode = settings?.theme_mode ?? 'dark'
   const accent = settings?.theme_accent ?? 'cyan'
-
-  const onlineCount = services.filter(s => s.last_status === 'online').length
-  const offlineCount = services.filter(s => s.last_status === 'offline').length
 
   return (
     <header className="topbar">
       <div className="topbar-title">
-        <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-          {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </span>
-        {services.length > 0 && (
-          <div style={{ display: 'flex', gap: 12, marginTop: 1 }}>
-            <span style={{ fontSize: 12, color: 'var(--status-online)', fontFamily: 'var(--font-mono)' }}>
-              ● {onlineCount}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--status-offline)', fontFamily: 'var(--font-mono)' }}>
-              ● {offlineCount}
-            </span>
-          </div>
-        )}
+        {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
       </div>
 
       <div className="topbar-actions">
@@ -73,7 +58,7 @@ export function Topbar({ onAddService, onCheckAll, checking }: Props) {
 
         <button
           className="btn btn-ghost btn-icon"
-          data-tooltip="Check all services"
+          data-tooltip="Check all apps"
           onClick={onCheckAll}
           disabled={checking}
         >
@@ -85,7 +70,7 @@ export function Topbar({ onAddService, onCheckAll, checking }: Props) {
 
         <button className="btn btn-primary" onClick={onAddService} style={{ gap: 6 }}>
           <Plus size={16} />
-          Add Service
+          Add App
         </button>
       </div>
     </header>

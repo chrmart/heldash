@@ -125,7 +125,7 @@ export function ServiceModal({ service, onClose }: Props) {
       <div className="modal glass" onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <h2 className="modal-title" style={{ margin: 0 }}>
-            {service ? 'Edit Service' : 'Add Service'}
+            {service ? 'Edit App' : 'Add App'}
           </h2>
           <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
         </div>
@@ -232,7 +232,7 @@ export function ServiceModal({ service, onClose }: Props) {
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> : (service ? 'Save' : 'Add Service')}
+            {saving ? <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> : (service ? 'Save' : 'Add App')}
           </button>
         </div>
       </div>

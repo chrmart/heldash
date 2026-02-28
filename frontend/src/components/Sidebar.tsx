@@ -1,4 +1,4 @@
-import { LayoutDashboard, Settings, Server, Info } from 'lucide-react'
+import { LayoutDashboard, Settings, AppWindow, Info } from 'lucide-react'
 import { useStore } from '../store/useStore'
 
 interface Props {
@@ -7,8 +7,11 @@ interface Props {
 }
 
 export function Sidebar({ page, onNavigate }: Props) {
-  const { settings } = useStore()
+  const { settings, services } = useStore()
   const title = settings?.dashboard_title ?? 'HELDASH'
+
+  const onlineCount = services.filter(s => s.last_status === 'online').length
+  const offlineCount = services.filter(s => s.last_status === 'offline').length
 
   return (
     <aside className="sidebar">
@@ -17,10 +20,24 @@ export function Sidebar({ page, onNavigate }: Props) {
         <span className="sidebar-logo-text">{title}</span>
       </div>
 
+      {/* Online / Offline counter */}
+      {services.length > 0 && (
+        <div className="sidebar-status">
+          <div className="sidebar-status-pill online">
+            <span className="sidebar-status-dot" />
+            <span>{onlineCount} Online</span>
+          </div>
+          <div className="sidebar-status-pill offline">
+            <span className="sidebar-status-dot" />
+            <span>{offlineCount} Offline</span>
+          </div>
+        </div>
+      )}
+
       <span className="nav-section-label">Navigation</span>
 
       <NavItem icon={<LayoutDashboard size={16} />} label="Dashboard" active={page === 'dashboard'} onClick={() => onNavigate('dashboard')} />
-      <NavItem icon={<Server size={16} />} label="Services" active={page === 'services'} onClick={() => onNavigate('services')} />
+      <NavItem icon={<AppWindow size={16} />} label="Apps" active={page === 'services'} onClick={() => onNavigate('services')} />
 
       <span className="nav-section-label" style={{ marginTop: 8 }}>System</span>
       <NavItem icon={<Settings size={16} />} label="Settings" active={page === 'settings'} onClick={() => onNavigate('settings')} />

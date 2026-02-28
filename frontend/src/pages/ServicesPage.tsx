@@ -24,7 +24,7 @@ export function ServicesPage({ onEdit }: Props) {
     return (
       <div className="empty-state">
         <div className="empty-state-icon">⬡</div>
-        <div className="empty-state-text">No services yet.<br />Add your first service with the button above.</div>
+        <div className="empty-state-text">No apps yet.<br />Add your first app with the button above.</div>
       </div>
     )
   }
@@ -34,7 +34,7 @@ export function ServicesPage({ onEdit }: Props) {
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
-            <th style={thStyle}>Service</th>
+            <th style={thStyle}>App</th>
             <th style={thStyle}>URL</th>
             <th style={thStyle}>Group</th>
             <th style={thStyle}>Status</th>

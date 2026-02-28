@@ -23,7 +23,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div style={{ maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ maxWidth: 600, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
 
       {/* General */}
       <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
@@ -55,7 +55,7 @@ export function SettingsPage() {
 
       {/* Groups */}
       <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
-        <h3 style={{ marginBottom: 20, fontSize: 15, fontWeight: 600 }}>Service Groups</h3>
+        <h3 style={{ marginBottom: 20, fontSize: 15, fontWeight: 600 }}>App Groups</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
           {groups.length === 0 && (
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No groups yet.</p>
