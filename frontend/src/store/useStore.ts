@@ -52,6 +52,7 @@ interface AppState {
   // User management actions (admin-only)
   loadUsers: () => Promise<void>
   createUser: (data: Partial<UserRecord> & { password: string }) => Promise<void>
+  updateUser: (id: string, data: Partial<UserRecord> & { password?: string }) => Promise<void>
   deleteUser: (id: string) => Promise<void>
   loadUserGroups: () => Promise<void>
   createUserGroup: (data: { name: string; description?: string }) => Promise<void>
@@ -268,6 +269,11 @@ export const useStore = create<AppState>((set, get) => ({
   createUser: async (data) => {
     const user = await api.users.create(data)
     set(state => ({ users: [...state.users, user] }))
+  },
+
+  updateUser: async (id, data) => {
+    const user = await api.users.update(id, data)
+    set(state => ({ users: state.users.map(u => u.id === id ? user : u) }))
   },
 
   deleteUser: async (id) => {

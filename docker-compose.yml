@@ -18,6 +18,9 @@ services:
       # Required for JWT signing. Generate with: openssl rand -hex 32
       # If omitted or empty, a built-in fallback is used (not recommended for production).
       - SECRET_KEY=CHANGE_ME_GENERATE_A_RANDOM_SECRET
+      # Set to 'true' only if accessed via HTTPS (e.g. behind nginx-proxy-manager with SSL).
+      # Leave unset/false for plain HTTP access (e.g. direct Unraid LAN access).
+      - SECURE_COOKIES=false
 
       # ── Auth (Phase 2 - leave empty for now) ─────────────
       # - OIDC_ISSUER=https://auth.yourdomain.com

@@ -44,7 +44,7 @@ function setAuthCookie(app: FastifyInstance, reply: FastifyReply, user: UserRow)
   )
   reply.setCookie('auth_token', token, {
     ...COOKIE_OPTS,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.SECURE_COOKIES === 'true',
   })
   return token
 }
