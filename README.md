@@ -1,7 +1,10 @@
 # ⬡ HEL Dashboard
 
-A personal homelab dashboard with a clean Liquid Glass design. Built for speed, extensibility, and comfort.
+A personal homelab dashboard with a clean Liquid Glass design.
+
 Coded by Claude.ai because iam to stupid to code but can wirte prompts lol
+
+## Bug reports, improvements, and feature requests are welcome via issues. :)
 
 ## Features
 
@@ -75,7 +78,7 @@ Frontend dev server runs on :5173 and proxies API calls to :8282.
 - [x] Service management + status checks
 - [x] Groups / categories
 - [x] Light/Dark + accent themes
-- [ ] Drag & Drop grid layout
+- [x] Drag & Drop grid layout
 - [ ] Local user authentication
 - [ ] OIDC via voidauth
 - [ ] API integrations (*arr stack, Immich, Emby, Unraid, ...)
