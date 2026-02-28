@@ -17,7 +17,7 @@ const PORT = parseInt(process.env.PORT ?? '8282', 10)
 const DATA_DIR = process.env.DATA_DIR ?? '/data'
 const LOG_LEVEL = process.env.LOG_LEVEL ?? 'info'
 const NODE_ENV = process.env.NODE_ENV ?? 'development'
-const SECRET_KEY = process.env.SECRET_KEY ?? 'heldash-dev-secret-change-in-production'
+const SECRET_KEY = process.env.SECRET_KEY || 'heldash-dev-secret-change-in-production'
 
 async function start() {
   // Init DB

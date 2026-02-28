@@ -15,7 +15,8 @@ services:
       - LOG_LEVEL=info         # debug | info | warn | error
 
       # ── Security ─────────────────────────────────────────
-      # Generate with: openssl rand -hex 32
+      # Required for JWT signing. Generate with: openssl rand -hex 32
+      # If omitted or empty, a built-in fallback is used (not recommended for production).
       - SECRET_KEY=CHANGE_ME_GENERATE_A_RANDOM_SECRET
 
       # ── Auth (Phase 2 - leave empty for now) ─────────────
