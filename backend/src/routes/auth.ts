@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify'
+import { FastifyInstance, FastifyReply } from 'fastify'
 import bcrypt from 'bcryptjs'
 import { nanoid } from 'nanoid'
 import { getDb } from '../db/database'
@@ -37,7 +37,7 @@ const COOKIE_OPTS = {
   maxAge: 86400, // 1 day
 } as const
 
-function setAuthCookie(app: FastifyInstance, reply: any, user: UserRow) {
+function setAuthCookie(app: FastifyInstance, reply: FastifyReply, user: UserRow) {
   const token = app.jwt.sign(
     { sub: user.id, username: user.username, role: user.role, groupId: user.user_group_id },
     { expiresIn: '1d' }
@@ -93,12 +93,9 @@ export async function authRoutes(app: FastifyInstance) {
     setAuthCookie(app, reply, user)
 
     return reply.status(201).send({
-      id: user.id,
+      sub: user.id,
       username: user.username,
       role: user.role,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      email: user.email,
       groupId: user.user_group_id,
     })
   })
@@ -119,12 +116,9 @@ export async function authRoutes(app: FastifyInstance) {
     setAuthCookie(app, reply, user)
 
     return {
-      id: user.id,
+      sub: user.id,
       username: user.username,
       role: user.role,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      email: user.email,
       groupId: user.user_group_id,
     }
   })
@@ -140,12 +134,9 @@ export async function authRoutes(app: FastifyInstance) {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.sub) as UserRow | undefined
     if (!user) return { error: 'User not found' }
     return {
-      id: user.id,
+      sub: user.id,
       username: user.username,
       role: user.role,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      email: user.email,
       groupId: user.user_group_id,
     }
   })

@@ -237,9 +237,9 @@ export const useStore = create<AppState>((set, get) => ({
   login: async (username, password) => {
     const user = await api.auth.login(username, password)
     set({
-      authUser: user as any,
+      authUser: user,
       isAuthenticated: true,
-      isAdmin: (user as any).role === 'admin',
+      isAdmin: user.role === 'admin',
     })
   },
 
@@ -251,9 +251,9 @@ export const useStore = create<AppState>((set, get) => ({
   setupAdmin: async (data) => {
     const user = await api.auth.setup(data)
     set({
-      authUser: user as any,
+      authUser: user,
       isAuthenticated: true,
-      isAdmin: true,
+      isAdmin: user.role === 'admin',
       needsSetup: false,
     })
   },

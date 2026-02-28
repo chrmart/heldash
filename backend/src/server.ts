@@ -63,18 +63,18 @@ async function start() {
     try {
       await req.jwtVerify()
     } catch {
-      reply.status(401).send({ error: 'Unauthorized' })
+      return reply.status(401).send({ error: 'Unauthorized' })
     }
   })
 
   app.decorate('requireAdmin', async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       await req.jwtVerify()
-      if (req.user.role !== 'admin') {
-        reply.status(403).send({ error: 'Forbidden' })
-      }
     } catch {
-      reply.status(401).send({ error: 'Unauthorized' })
+      return reply.status(401).send({ error: 'Unauthorized' })
+    }
+    if (req.user.role !== 'admin') {
+      return reply.status(403).send({ error: 'Forbidden' })
     }
   })
 

@@ -34,7 +34,7 @@ function runMigrations(db: Database.Database) {
     'ALTER TABLE users ADD COLUMN email TEXT',
     'ALTER TABLE users ADD COLUMN first_name TEXT',
     'ALTER TABLE users ADD COLUMN last_name TEXT',
-    'ALTER TABLE users ADD COLUMN user_group_id TEXT REFERENCES user_groups(id) ON DELETE SET NULL',
+    'ALTER TABLE users ADD COLUMN user_group_id TEXT',  // FK not enforceable via ALTER TABLE in SQLite
     'ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1',
     'ALTER TABLE users ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime(\'now\'))',
   ]
