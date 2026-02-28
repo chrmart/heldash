@@ -81,7 +81,7 @@ export const useStore = create<AppState>((set, get) => ({
   loadAll: async () => {
     set({ loading: true, error: null })
     try {
-      const [services, groups, settings] = await Promise.all([
+      const [services, groups, rawSettings] = await Promise.all([
         api.services.list(),
         api.groups.list(),
         api.settings.get(),
@@ -90,7 +90,16 @@ export const useStore = create<AppState>((set, get) => ({
         ...s,
         tags: typeof s.tags === 'string' ? JSON.parse(s.tags) : s.tags,
       }))
+      // Non-admins: apply locally stored theme preferences (no API write access)
+      const settings = { ...rawSettings }
+      if (!get().isAdmin) {
+        const m = localStorage.getItem('guest_theme_mode') as ThemeMode | null
+        const a = localStorage.getItem('guest_theme_accent') as ThemeAccent | null
+        if (m) settings.theme_mode = m
+        if (a) settings.theme_accent = a
+      }
       set({ services: parsedServices, groups, settings, loading: false })
+      applyTheme(settings)
     } catch (e: any) {
       set({ error: e.message, loading: false })
     }
@@ -212,11 +221,31 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setThemeMode: async (mode) => {
-    await get().updateSettings({ theme_mode: mode })
+    if (get().isAdmin) {
+      await get().updateSettings({ theme_mode: mode })
+    } else {
+      localStorage.setItem('guest_theme_mode', mode)
+      const settings = get().settings
+      if (settings) {
+        const updated = { ...settings, theme_mode: mode }
+        set({ settings: updated })
+        applyTheme(updated)
+      }
+    }
   },
 
   setThemeAccent: async (accent) => {
-    await get().updateSettings({ theme_accent: accent })
+    if (get().isAdmin) {
+      await get().updateSettings({ theme_accent: accent })
+    } else {
+      localStorage.setItem('guest_theme_accent', accent)
+      const settings = get().settings
+      if (settings) {
+        const updated = { ...settings, theme_accent: accent }
+        set({ settings: updated })
+        applyTheme(updated)
+      }
+    }
   },
 
   // ── Auth ────────────────────────────────────────────────────────────────────
