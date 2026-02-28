@@ -6,8 +6,23 @@ interface Props {
   onNavigate: (page: string) => void
 }
 
+function PrismaIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M11 2L21 19.5H1L11 2Z"
+        stroke="var(--accent)"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        fill="var(--accent)"
+        fillOpacity="0.12"
+      />
+    </svg>
+  )
+}
+
 export function Sidebar({ page, onNavigate }: Props) {
-  const { settings, services } = useStore()
+  const { settings, services, isAdmin } = useStore()
   const title = settings?.dashboard_title ?? 'HELDASH'
 
   const onlineCount = services.filter(s => s.last_status === 'online').length
@@ -16,7 +31,7 @@ export function Sidebar({ page, onNavigate }: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        <div className="sidebar-logo-icon">⬡</div>
+        <div className="sidebar-logo-icon"><PrismaIcon /></div>
         <span className="sidebar-logo-text">{title}</span>
       </div>
 
@@ -40,7 +55,9 @@ export function Sidebar({ page, onNavigate }: Props) {
       <NavItem icon={<AppWindow size={16} />} label="Apps" active={page === 'services'} onClick={() => onNavigate('services')} />
 
       <span className="nav-section-label" style={{ marginTop: 8 }}>System</span>
-      <NavItem icon={<Settings size={16} />} label="Settings" active={page === 'settings'} onClick={() => onNavigate('settings')} />
+      {isAdmin && (
+        <NavItem icon={<Settings size={16} />} label="Settings" active={page === 'settings'} onClick={() => onNavigate('settings')} />
+      )}
       <NavItem icon={<Info size={16} />} label="About" active={page === 'about'} onClick={() => onNavigate('about')} />
     </aside>
   )

@@ -11,7 +11,7 @@ import { LoginModal } from './components/LoginModal'
 import type { Service } from './types'
 
 export default function App() {
-  const { loadAll, checkAllServices, checkAuth, settings, authReady, needsSetup } = useStore()
+  const { loadAll, checkAllServices, checkAuth, settings, authReady, needsSetup, isAdmin } = useStore()
   const [page, setPage] = useState('dashboard')
   const [showModal, setShowModal] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
@@ -29,6 +29,13 @@ export default function App() {
       document.documentElement.setAttribute('data-accent', settings.theme_accent)
     }
   }, [settings])
+
+  // Kick non-admins off settings page (e.g. after logout while on settings)
+  useEffect(() => {
+    if (authReady && !isAdmin && page === 'settings') {
+      setPage('dashboard')
+    }
+  }, [isAdmin, authReady])
 
   // Auto-check services every 60s
   useEffect(() => {
@@ -94,8 +101,8 @@ export default function App() {
               {page === 'services' && <ServicesPage onEdit={handleEditService} />}
               {page === 'about' && (
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
-                  <div className="glass" style={{ padding: 24, borderRadius: 'var(--radius-xl)', maxWidth: 400, width: '100%' }}>
-                    <h3 style={{ marginBottom: 8 }}>HELDASH</h3>
+                  <div className="glass" style={{ padding: 32, borderRadius: 'var(--radius-xl)', maxWidth: 400, width: '100%', textAlign: 'center' }}>
+                    <h3 style={{ marginBottom: 12 }}>HELDASH</h3>
                     <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                       Personal homelab dashboard.<br />
                       Built with ♥ and Fastify + React.
