@@ -114,7 +114,7 @@ export function ServiceCard({ service, onEdit }: Props) {
         </div>
         <div
           className={`service-status ${status}`}
-          data-tooltip={status}
+          data-tooltip={status !== 'unknown' ? status : undefined}
         />
       </div>
 

@@ -15,14 +15,29 @@ const ACCENTS: { value: ThemeAccent; label: string; color: string }[] = [
 ]
 
 export function Topbar({ onAddService, onCheckAll, checking }: Props) {
-  const { settings, setThemeMode, setThemeAccent } = useStore()
+  const { services, settings, setThemeMode, setThemeAccent } = useStore()
   const mode = settings?.theme_mode ?? 'dark'
   const accent = settings?.theme_accent ?? 'cyan'
+
+  const onlineCount = services.filter(s => s.last_status === 'online').length
+  const offlineCount = services.filter(s => s.last_status === 'offline').length
 
   return (
     <header className="topbar">
       <div className="topbar-title">
-        {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
+        <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+          {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </span>
+        {services.length > 0 && (
+          <div style={{ display: 'flex', gap: 12, marginTop: 1 }}>
+            <span style={{ fontSize: 12, color: 'var(--status-online)', fontFamily: 'var(--font-mono)' }}>
+              ● {onlineCount}
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--status-offline)', fontFamily: 'var(--font-mono)' }}>
+              ● {offlineCount}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="topbar-actions">

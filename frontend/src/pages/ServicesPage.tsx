@@ -80,9 +80,11 @@ export function ServicesPage({ onEdit }: Props) {
               <td style={tdStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className={`service-status ${s.last_status ?? 'unknown'}`} style={{ flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
-                    {s.last_status ?? 'unknown'}
-                  </span>
+                  {s.last_status && s.last_status !== 'unknown' && (
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+                      {s.last_status}
+                    </span>
+                  )}
                 </div>
               </td>
               <td style={tdStyle}>

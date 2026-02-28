@@ -19,6 +19,8 @@ interface AppState {
   deleteService: (id: string) => Promise<void>
   checkService: (id: string) => Promise<void>
   checkAllServices: () => Promise<void>
+  reorderGroups: (orderedIds: string[]) => Promise<void>
+  reorderServices: (groupId: string | null, orderedIds: string[]) => Promise<void>
 
   loadGroups: () => Promise<void>
   createGroup: (data: Partial<Group>) => Promise<void>
@@ -106,6 +108,28 @@ export const useStore = create<AppState>((set, get) => ({
         : s
       )
     }))
+  },
+
+  reorderGroups: async (orderedIds) => {
+    set(state => ({
+      groups: orderedIds.map((id, i) => {
+        const g = state.groups.find(g => g.id === id)!
+        return { ...g, position: i }
+      }),
+    }))
+    await Promise.all(orderedIds.map((id, i) => api.groups.update(id, { position: i })))
+  },
+
+  reorderServices: async (groupId, orderedIds) => {
+    set(state => {
+      const idxMap: Record<string, number> = Object.fromEntries(orderedIds.map((id, i) => [id, i]))
+      return {
+        services: state.services.map(s =>
+          idxMap[s.id] !== undefined ? { ...s, position_x: idxMap[s.id] } : s
+        ),
+      }
+    })
+    await Promise.all(orderedIds.map((id, i) => api.services.update(id, { position_x: i })))
   },
 
   checkAllServices: async () => {

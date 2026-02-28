@@ -2,6 +2,27 @@ import { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database'
 import { nanoid } from 'nanoid'
 
+interface GroupRow {
+  id: string
+  name: string
+  icon: string | null
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+interface CreateGroupBody {
+  name: string
+  icon?: string | null
+  position?: number
+}
+
+interface PatchGroupBody {
+  name?: string
+  icon?: string | null
+  position?: number
+}
+
 export async function groupsRoutes(app: FastifyInstance) {
   const db = getDb()
 
@@ -9,7 +30,7 @@ export async function groupsRoutes(app: FastifyInstance) {
     return db.prepare('SELECT * FROM groups ORDER BY position').all()
   })
 
-  app.post<{ Body: any }>('/api/groups', async (req, reply) => {
+  app.post<{ Body: CreateGroupBody }>('/api/groups', async (req, reply) => {
     const { name, icon, position } = req.body
     if (!name) return reply.status(400).send({ error: 'name is required' })
     const id = nanoid()
@@ -17,8 +38,8 @@ export async function groupsRoutes(app: FastifyInstance) {
     return reply.status(201).send(db.prepare('SELECT * FROM groups WHERE id = ?').get(id))
   })
 
-  app.patch<{ Params: { id: string }; Body: any }>('/api/groups/:id', async (req, reply) => {
-    const existing = db.prepare('SELECT * FROM groups WHERE id = ?').get(req.params.id)
+  app.patch<{ Params: { id: string }; Body: PatchGroupBody }>('/api/groups/:id', async (req, reply) => {
+    const existing = db.prepare('SELECT * FROM groups WHERE id = ?').get(req.params.id) as GroupRow | undefined
     if (!existing) return reply.status(404).send({ error: 'Not found' })
     const { name, icon, position } = req.body
     db.prepare('UPDATE groups SET name = COALESCE(?, name), icon = COALESCE(?, icon), position = COALESCE(?, position), updated_at = datetime(\'now\') WHERE id = ?')

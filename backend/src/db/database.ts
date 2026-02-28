@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import path from 'path'
 import fs from 'fs'
 
-let db: Database.Database
+let db!: Database.Database
 
 export function getDb(): Database.Database {
   return db

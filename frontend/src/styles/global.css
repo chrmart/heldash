@@ -32,6 +32,7 @@
 
 /* ─── Dark Theme (Default) ────────────────────────────────────────────────── */
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg-base: #0a0c10;
   --bg-surface: #0f1217;
   --bg-elevated: #161b24;
@@ -53,6 +54,7 @@
 
 /* ─── Light Theme ─────────────────────────────────────────────────────────── */
 [data-theme="light"] {
+  color-scheme: light;
   --bg-base: #f0f2f8;
   --bg-surface: #e8eaf2;
   --bg-elevated: #ffffff;
@@ -628,6 +630,9 @@ body {
 
 /* ─── Topbar ──────────────────────────────────────────────────────────────── */
 .topbar-title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
