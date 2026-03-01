@@ -59,6 +59,6 @@ export class SonarrClient extends ArrBaseClient {
   }
 
   getCalendar(start: string, end: string) {
-    return this.get<SonarrCalendarItem[]>('calendar', { start, end, unmonitored: 'false' })
+    return this.get<SonarrCalendarItem[]>('calendar', { start, end, unmonitored: 'false', includeSeries: 'true' })
   }
 }

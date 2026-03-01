@@ -3,7 +3,9 @@ import { useStore } from '../store/useStore'
 import type { ThemeAccent } from '../types'
 
 interface Props {
+  page: string
   onAddService: () => void
+  onAddInstance: () => void
   onCheckAll: () => void
   checking: boolean
   onLogin: () => void
@@ -15,7 +17,7 @@ const ACCENTS: { value: ThemeAccent; label: string; color: string }[] = [
   { value: 'magenta', label: 'Magenta', color: '#e879f9' },
 ]
 
-export function Topbar({ onAddService, onCheckAll, checking, onLogin }: Props) {
+export function Topbar({ page, onAddService, onAddInstance, onCheckAll, checking, onLogin }: Props) {
   const { settings, setThemeMode, setThemeAccent, isAuthenticated, isAdmin, authUser, logout, loadAll } = useStore()
   const mode = settings?.theme_mode ?? 'dark'
   const accent = settings?.theme_accent ?? 'cyan'
@@ -69,6 +71,12 @@ export function Topbar({ onAddService, onCheckAll, checking, onLogin }: Props) {
           }
         </button>
 
+        {isAdmin && page === 'media' && (
+          <button className="btn btn-primary" onClick={onAddInstance} style={{ gap: 6 }}>
+            <Plus size={16} />
+            Add Instance
+          </button>
+        )}
         {isAdmin && (
           <button className="btn btn-primary" onClick={onAddService} style={{ gap: 6 }}>
             <Plus size={16} />

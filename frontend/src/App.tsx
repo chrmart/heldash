@@ -18,6 +18,7 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false)
   const [editService, setEditService] = useState<Service | null>(null)
   const [checking, setChecking] = useState(false)
+  const [showAddInstance, setShowAddInstance] = useState(false)
 
   useEffect(() => {
     checkAuth().then(() => loadAll())
@@ -90,7 +91,9 @@ export default function App() {
 
         <div className="main-area">
           <Topbar
+            page={page}
             onAddService={() => setShowModal(true)}
+            onAddInstance={() => setShowAddInstance(true)}
             onCheckAll={handleCheckAll}
             checking={checking}
             onLogin={() => setShowLogin(true)}
@@ -100,7 +103,12 @@ export default function App() {
               {page === 'dashboard' && <Dashboard onEdit={handleEditService} />}
               {page === 'settings' && <SettingsPage />}
               {page === 'services' && <ServicesPage onEdit={handleEditService} />}
-              {page === 'media' && <MediaPage />}
+              {page === 'media' && (
+                <MediaPage
+                  showAddForm={showAddInstance}
+                  onFormClose={() => setShowAddInstance(false)}
+                />
+              )}
               {page === 'about' && (
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                   <div className="glass" style={{ padding: 32, borderRadius: 'var(--radius-xl)', maxWidth: 400, width: '100%', textAlign: 'center' }}>

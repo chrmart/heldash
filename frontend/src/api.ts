@@ -1,5 +1,5 @@
 import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup } from './types'
-import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer } from './types/arr'
+import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData } from './types/arr'
 
 const BASE = '/api'
 
@@ -89,8 +89,10 @@ export const api = {
     status: (id: string) => req<ArrStatus>(`/arr/${id}/status`),
     stats: (id: string) => req<ArrStats>(`/arr/${id}/stats`),
     queue: (id: string) => req<ArrQueueResponse>(`/arr/${id}/queue`),
+    sabQueue: (id: string) => req<SabnzbdQueueData>(`/arr/${id}/queue`),
     calendar: (id: string) => req<ArrCalendarItem[]>(`/arr/${id}/calendar`),
     indexers: (id: string) => req<ProwlarrIndexer[]>(`/arr/${id}/indexers`),
+    history: (id: string) => req<SabnzbdHistoryData>(`/arr/${id}/history`),
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),

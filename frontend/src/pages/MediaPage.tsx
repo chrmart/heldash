@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
-import { Plus, Pencil, Trash2, Check, X, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
-import type { ArrInstance, ArrStats, ArrStatus, ArrQueueItem, ArrCalendarItem, SonarrCalendarItem } from '../types/arr'
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { Pencil, Trash2, Check, X, ChevronDown, ChevronUp, RefreshCw, GripVertical } from 'lucide-react'
+import type { ArrInstance, ArrStats, ArrStatus, ArrQueueItem, ArrCalendarItem, SonarrCalendarItem, SabnzbdQueueData, SabnzbdHistoryData } from '../types/arr'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -13,15 +17,56 @@ function fmtBytes(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
 
+function fmtMb(mb: number): string {
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`
+  if (mb === 0) return '0 MB'
+  return `${mb.toFixed(0)} MB`
+}
+
 function fmtPct(done: number, total: number): string {
   if (total === 0) return '0%'
   return `${Math.round(((total - done) / total) * 100)}%`
 }
 
-const TYPE_LABELS: Record<string, string> = { radarr: 'Radarr', sonarr: 'Sonarr', prowlarr: 'Prowlarr' }
-const TYPE_COLORS: Record<string, string> = { radarr: '#f59e0b', sonarr: '#3b82f6', prowlarr: '#8b5cf6' }
+const TYPE_LABELS: Record<string, string> = {
+  radarr: 'Radarr',
+  sonarr: 'Sonarr',
+  prowlarr: 'Prowlarr',
+  sabnzbd: 'SABnzbd',
+}
+const TYPE_COLORS: Record<string, string> = {
+  radarr: '#f59e0b',
+  sonarr: '#3b82f6',
+  prowlarr: '#8b5cf6',
+  sabnzbd: '#22c55e',
+}
 
-// ── Queue list ────────────────────────────────────────────────────────────────
+// ── Shared sub-components ─────────────────────────────────────────────────────
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
+      <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{value}</span>
+    </div>
+  )
+}
+
+function ExpandBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      className="btn btn-ghost btn-sm"
+      onClick={onClick}
+      style={{ fontSize: 11, gap: 4, padding: '4px 8px', color: active ? 'var(--accent)' : 'var(--text-secondary)' }}
+    >
+      {label}
+      {active ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+    </button>
+  )
+}
+
+// ── Arr queue / calendar / indexers ───────────────────────────────────────────
+
 function QueueList({ items }: { items: ArrQueueItem[] }) {
   if (items.length === 0) return <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>Queue is empty.</p>
   return (
@@ -41,7 +86,6 @@ function QueueList({ items }: { items: ArrQueueItem[] }) {
   )
 }
 
-// ── Calendar list ─────────────────────────────────────────────────────────────
 function CalendarList({ items, type }: { items: ArrCalendarItem[]; type: string }) {
   if (items.length === 0) return <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>Nothing upcoming this week.</p>
   return (
@@ -50,7 +94,7 @@ function CalendarList({ items, type }: { items: ArrCalendarItem[]; type: string 
         const isSonarr = type === 'sonarr'
         const sonarrItem = item as SonarrCalendarItem
         const title = isSonarr
-          ? `${sonarrItem.series.title} — S${String(sonarrItem.seasonNumber).padStart(2, '0')}E${String(sonarrItem.episodeNumber).padStart(2, '0')}`
+          ? `${sonarrItem.series?.title ?? 'Unknown'} — S${String(sonarrItem.seasonNumber).padStart(2, '0')}E${String(sonarrItem.episodeNumber).padStart(2, '0')}`
           : (item as any).title
         const date = isSonarr ? sonarrItem.airDateUtc : ((item as any).inCinemas ?? (item as any).digitalRelease)
         return (
@@ -66,8 +110,80 @@ function CalendarList({ items, type }: { items: ArrCalendarItem[]; type: string 
   )
 }
 
-// ── Instance card ─────────────────────────────────────────────────────────────
-function InstanceCard({ instance }: { instance: ArrInstance }) {
+function IndexerList({ items }: { items: import('../types/arr').ProwlarrIndexer[] }) {
+  if (items.length === 0) return <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>No indexers.</p>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {items.map(idx => (
+        <div key={idx.id} className="glass" style={{ padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: idx.enable ? 'var(--status-online)' : 'var(--status-offline)', flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>{idx.name}</span>
+          <span style={{ color: 'var(--text-muted)', textTransform: 'capitalize', fontSize: 11 }}>{idx.protocol}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{idx.privacy}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── SABnzbd queue / history ───────────────────────────────────────────────────
+
+function SabnzbdQueueList({ queue }: { queue: SabnzbdQueueData }) {
+  if (queue.slots.length === 0) {
+    return <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>Queue is empty.</p>
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {queue.slots.map(slot => {
+        const pct = parseFloat(slot.percentage)
+        return (
+          <div key={slot.nzo_id} className="glass" style={{ padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 12 }}>
+            <div style={{ fontWeight: 500, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.filename}</div>
+            <div style={{ height: 3, background: 'var(--glass-border)', borderRadius: 2, marginBottom: 6, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 2 }} />
+            </div>
+            <div style={{ display: 'flex', gap: 12, color: 'var(--text-muted)' }}>
+              <span>{pct.toFixed(0)}%</span>
+              <span>{fmtMb(slot.mbleft)} left</span>
+              <span>{slot.timeleft}</span>
+              <span style={{ color: slot.status === 'Downloading' ? 'var(--status-online)' : 'var(--text-muted)' }}>{slot.status}</span>
+            </div>
+          </div>
+        )
+      })}
+      {queue.noofslots > queue.slots.length && (
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '4px 0' }}>
+          +{queue.noofslots - queue.slots.length} more items
+        </p>
+      )}
+    </div>
+  )
+}
+
+function SabnzbdHistoryList({ history }: { history: SabnzbdHistoryData }) {
+  if (history.slots.length === 0) {
+    return <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>No history yet.</p>
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {history.slots.map(slot => (
+        <div key={slot.nzo_id} className="glass" style={{ padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+            background: slot.status === 'Completed' ? 'var(--status-online)' : 'var(--status-offline)',
+          }} />
+          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.name}</span>
+          <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{fmtBytes(slot.bytes)}</span>
+          {slot.cat && <span style={{ color: 'var(--text-muted)', fontSize: 11, flexShrink: 0 }}>{slot.cat}</span>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Card content (inner, no drag/action wrappers) ─────────────────────────────
+
+function ArrCardContent({ instance }: { instance: ArrInstance }) {
   const { stats, statuses, queues, calendars, indexers, loadQueue, loadCalendar, loadIndexers } = useArrStore()
   const [expanded, setExpanded] = useState<'queue' | 'calendar' | 'indexers' | null>(null)
   const [loadingExpand, setLoadingExpand] = useState(false)
@@ -80,24 +196,18 @@ function InstanceCard({ instance }: { instance: ArrInstance }) {
     if (expanded === section) { setExpanded(null); return }
     setExpanded(section)
     if (section === 'queue' && !queues[instance.id]) {
-      setLoadingExpand(true)
-      await loadQueue(instance.id).catch(() => {})
-      setLoadingExpand(false)
+      setLoadingExpand(true); await loadQueue(instance.id).catch(() => {}); setLoadingExpand(false)
     }
     if (section === 'calendar' && !calendars[instance.id]) {
-      setLoadingExpand(true)
-      await loadCalendar(instance.id).catch(() => {})
-      setLoadingExpand(false)
+      setLoadingExpand(true); await loadCalendar(instance.id).catch(() => {}); setLoadingExpand(false)
     }
     if (section === 'indexers' && !indexers[instance.id]) {
-      setLoadingExpand(true)
-      await loadIndexers(instance.id).catch(() => {})
-      setLoadingExpand(false)
+      setLoadingExpand(true); await loadIndexers(instance.id).catch(() => {}); setLoadingExpand(false)
     }
   }
 
   return (
-    <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{
@@ -108,7 +218,7 @@ function InstanceCard({ instance }: { instance: ArrInstance }) {
         }}>
           {TYPE_LABELS[instance.type]}
         </span>
-        <span style={{ fontWeight: 600, fontSize: 15, flex: 1 }}>{instance.name}</span>
+        <span style={{ fontWeight: 600, fontSize: 15, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{instance.name}</span>
         <span style={{
           width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
           background: online === null ? 'var(--text-muted)' : online ? 'var(--status-online)' : 'var(--status-offline)',
@@ -116,15 +226,13 @@ function InstanceCard({ instance }: { instance: ArrInstance }) {
         }} />
       </div>
 
-      {/* Version */}
       {status?.online && status.version && (
         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
           {status.instanceName ?? TYPE_LABELS[instance.type]} v{status.version}
         </div>
       )}
 
-      {/* Stats */}
-      {stat && (
+      {stat && stat.type !== 'sabnzbd' && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {stat.type === 'radarr' && (
             <>
@@ -152,7 +260,6 @@ function InstanceCard({ instance }: { instance: ArrInstance }) {
         </div>
       )}
 
-      {/* Expand buttons */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {instance.type !== 'prowlarr' && (
           <>
@@ -165,7 +272,6 @@ function InstanceCard({ instance }: { instance: ArrInstance }) {
         )}
       </div>
 
-      {/* Expanded content */}
       {expanded && (
         <div>
           {loadingExpand
@@ -180,49 +286,162 @@ function InstanceCard({ instance }: { instance: ArrInstance }) {
           }
         </div>
       )}
-    </div>
+    </>
   )
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
-      <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{value}</span>
-    </div>
-  )
-}
+function SabnzbdCardContent({ instance }: { instance: ArrInstance }) {
+  const { stats, statuses, sabQueues, histories, loadSabQueue, loadHistory } = useArrStore()
+  const [expanded, setExpanded] = useState<'queue' | 'history' | null>(null)
+  const [loadingExpand, setLoadingExpand] = useState(false)
 
-function ExpandBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      className="btn btn-ghost btn-sm"
-      onClick={onClick}
-      style={{ fontSize: 11, gap: 4, padding: '4px 8px', color: active ? 'var(--accent)' : 'var(--text-secondary)' }}
-    >
-      {label}
-      {active ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-    </button>
-  )
-}
+  const status: ArrStatus | undefined = statuses[instance.id]
+  const stat: ArrStats | undefined = stats[instance.id]
+  const sabStat = stat?.type === 'sabnzbd' ? stat : undefined
+  const online = status?.online ?? null
 
-function IndexerList({ items }: { items: import('../types/arr').ProwlarrIndexer[] }) {
-  if (items.length === 0) return <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>No indexers.</p>
+  const handleExpand = async (section: 'queue' | 'history') => {
+    if (expanded === section) { setExpanded(null); return }
+    setExpanded(section)
+    if (section === 'queue' && !sabQueues[instance.id]) {
+      setLoadingExpand(true); await loadSabQueue(instance.id).catch(() => {}); setLoadingExpand(false)
+    }
+    if (section === 'history' && !histories[instance.id]) {
+      setLoadingExpand(true); await loadHistory(instance.id).catch(() => {}); setLoadingExpand(false)
+    }
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {items.map(idx => (
-        <div key={idx.id} className="glass" style={{ padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: idx.enable ? 'var(--status-online)' : 'var(--status-offline)', flexShrink: 0 }} />
-          <span style={{ flex: 1 }}>{idx.name}</span>
-          <span style={{ color: 'var(--text-muted)', textTransform: 'capitalize', fontSize: 11 }}>{idx.protocol}</span>
-          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{idx.privacy}</span>
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: 1, padding: '2px 8px',
+          borderRadius: 'var(--radius-sm)', background: `${TYPE_COLORS['sabnzbd']}22`,
+          color: TYPE_COLORS['sabnzbd'], border: `1px solid ${TYPE_COLORS['sabnzbd']}44`,
+          textTransform: 'uppercase',
+        }}>SABnzbd</span>
+        <span style={{ fontWeight: 600, fontSize: 15, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{instance.name}</span>
+        <span style={{
+          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+          background: online === null ? 'var(--text-muted)' : online ? 'var(--status-online)' : 'var(--status-offline)',
+          boxShadow: online ? '0 0 6px var(--status-online)' : 'none',
+        }} />
+      </div>
+
+      {status?.online && status.version && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>SABnzbd v{status.version}</div>
+      )}
+
+      {sabStat && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <Stat label="Queue" value={sabStat.queueCount} />
+          <Stat label="Left" value={fmtMb(sabStat.mbleft)} />
+          <Stat label="Speed" value={sabStat.paused ? 'Paused' : (sabStat.speed || '—')} />
+          <Stat label="Disk Free" value={`${sabStat.diskspaceFreeGb.toFixed(1)} GB`} />
         </div>
-      ))}
+      )}
+
+      <div style={{ display: 'flex', gap: 6 }}>
+        <ExpandBtn label="Queue" active={expanded === 'queue'} onClick={() => handleExpand('queue')} />
+        <ExpandBtn label="History" active={expanded === 'history'} onClick={() => handleExpand('history')} />
+      </div>
+
+      {expanded && (
+        <div>
+          {loadingExpand
+            ? <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+            : expanded === 'queue' && sabQueues[instance.id]
+              ? <SabnzbdQueueList queue={sabQueues[instance.id]!} />
+              : expanded === 'history' && histories[instance.id]
+                ? <SabnzbdHistoryList history={histories[instance.id]!} />
+                : null
+          }
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Sortable card wrapper ─────────────────────────────────────────────────────
+
+function SortableInstanceCard({
+  instance,
+  isAdmin,
+  isEditing,
+  onEdit,
+  onDelete,
+}: {
+  instance: ArrInstance
+  isAdmin: boolean
+  isEditing: boolean
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: instance.id })
+  const [hovered, setHovered] = useState(false)
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <div
+        className="glass"
+        style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14, position: 'relative' }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        {/* Drag handle — top-left, admin only */}
+        {isAdmin && (
+          <div
+            {...attributes}
+            {...listeners}
+            style={{
+              position: 'absolute', top: 12, left: 12, cursor: 'grab', padding: 4,
+              opacity: hovered ? 0.5 : 0, transition: 'opacity 150ms ease', color: 'var(--text-muted)',
+              zIndex: 1,
+            }}
+          >
+            <GripVertical size={14} />
+          </div>
+        )}
+
+        {/* Card content — padded left to not overlap drag handle */}
+        <div style={{ paddingLeft: isAdmin ? 16 : 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {instance.type === 'sabnzbd'
+            ? <SabnzbdCardContent instance={instance} />
+            : <ArrCardContent instance={instance} />
+          }
+        </div>
+
+        {/* Edit/delete actions — bottom-right, appear on hover */}
+        {isAdmin && !isEditing && (
+          <div style={{
+            position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 4,
+            opacity: hovered ? 1 : 0, transition: 'opacity 150ms ease',
+          }}>
+            <button className="btn btn-ghost btn-icon btn-sm" onClick={onEdit} style={{ width: 26, height: 26, padding: 4 }}>
+              <Pencil size={11} />
+            </button>
+            <button
+              className="btn btn-danger btn-icon btn-sm"
+              onClick={onDelete}
+              style={{ width: 26, height: 26, padding: 4 }}
+            >
+              <Trash2 size={11} />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 // ── Admin: instance edit form ─────────────────────────────────────────────────
+
 function InstanceForm({
   initial,
   onSave,
@@ -255,12 +474,13 @@ function InstanceForm({
   }
 
   return (
-    <div className="glass" style={{ padding: 16, borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className="glass" style={{ padding: 16, borderRadius: 'var(--radius-xl)', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <select className="form-input" value={type} onChange={e => setType(e.target.value)} style={{ fontSize: 13, padding: '5px 8px', flexShrink: 0 }} disabled={!!initial?.id}>
           <option value="radarr">Radarr</option>
           <option value="sonarr">Sonarr</option>
           <option value="prowlarr">Prowlarr</option>
+          <option value="sabnzbd">SABnzbd</option>
         </select>
         <input className="form-input" placeholder="Name *" value={name} onChange={e => setName(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
       </div>
@@ -280,16 +500,46 @@ function InstanceForm({
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export function MediaPage() {
+
+interface Props {
+  showAddForm?: boolean
+  onFormClose?: () => void
+}
+
+export function MediaPage({ showAddForm: showFromParent, onFormClose }: Props) {
   const { isAdmin } = useStore()
-  const { instances, loadInstances, loadAllStats, createInstance, updateInstance, deleteInstance } = useArrStore()
+  const { instances, loadInstances, loadAllStats, createInstance, updateInstance, deleteInstance, reorderInstances } = useArrStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
+  // Sync add-form trigger from parent (Topbar button)
+  useEffect(() => {
+    if (showFromParent) {
+      setShowAddForm(true)
+      onFormClose?.()
+    }
+  }, [showFromParent])
+
   useEffect(() => {
     loadInstances().then(() => loadAllStats()).catch(() => {})
   }, [])
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+
+  const sorted = [...instances].sort((a, b) => a.position - b.position)
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = sorted.findIndex(i => i.id === active.id)
+    const newIndex = sorted.findIndex(i => i.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+    const reordered = [...sorted]
+    const [moved] = reordered.splice(oldIndex, 1)
+    reordered.splice(newIndex, 0, moved)
+    reorderInstances(reordered.map(i => i.id))
+  }
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -298,7 +548,7 @@ export function MediaPage() {
   }
 
   const handleCreate = async (data: { type: string; name: string; url: string; api_key: string }) => {
-    await createInstance(data)
+    await createInstance({ ...data, position: instances.length })
     setShowAddForm(false)
     await loadAllStats()
   }
@@ -307,14 +557,6 @@ export function MediaPage() {
     await updateInstance(id, { name: data.name, url: data.url, ...(data.api_key ? { api_key: data.api_key } : {}) })
     setEditingId(null)
   }
-
-  // Group instances by type
-  const byType: Record<string, ArrInstance[]> = {}
-  for (const inst of instances) {
-    if (!byType[inst.type]) byType[inst.type] = []
-    byType[inst.type].push(inst)
-  }
-  const typeOrder: ('radarr' | 'sonarr' | 'prowlarr')[] = ['radarr', 'sonarr', 'prowlarr']
 
   if (instances.length === 0 && !isAdmin) {
     return (
@@ -325,7 +567,7 @@ export function MediaPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, flex: 1 }}>Media</h2>
@@ -337,64 +579,38 @@ export function MediaPage() {
         </button>
       </div>
 
-      {/* Instance cards grouped by type */}
-      {typeOrder.map(type => {
-        const group = byType[type]
-        if (!group?.length) return null
-        return (
-          <section key={type}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: TYPE_COLORS[type], marginBottom: 12 }}>
-              {TYPE_LABELS[type]}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-              {group.map(inst => (
-                <div key={inst.id}>
-                  {editingId === inst.id
-                    ? <InstanceForm
-                        initial={inst}
-                        onSave={(data) => handleUpdate(inst.id, data)}
-                        onCancel={() => setEditingId(null)}
-                      />
-                    : (
-                      <div style={{ position: 'relative' }}>
-                        <InstanceCard instance={inst} />
-                        {isAdmin && (
-                          <div style={{ position: 'absolute', top: 14, right: 14, display: 'flex', gap: 4 }}>
-                            <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setEditingId(inst.id)} style={{ width: 26, height: 26, padding: 4 }}>
-                              <Pencil size={11} />
-                            </button>
-                            <button
-                              className="btn btn-danger btn-icon btn-sm"
-                              onClick={() => { if (confirm(`Delete "${inst.name}"?`)) deleteInstance(inst.id) }}
-                              style={{ width: 26, height: 26, padding: 4 }}
-                            >
-                              <Trash2 size={11} />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  }
-                </div>
-              ))}
-            </div>
-          </section>
-        )
-      })}
+      {/* Sortable flat grid */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={sorted.map(i => i.id)} strategy={rectSortingStrategy}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+            {sorted.map(inst => (
+              editingId === inst.id
+                ? (
+                  <InstanceForm
+                    key={inst.id}
+                    initial={inst}
+                    onSave={(data) => handleUpdate(inst.id, data)}
+                    onCancel={() => setEditingId(null)}
+                  />
+                )
+                : (
+                  <SortableInstanceCard
+                    key={inst.id}
+                    instance={inst}
+                    isAdmin={isAdmin}
+                    isEditing={editingId === inst.id}
+                    onEdit={() => setEditingId(inst.id)}
+                    onDelete={() => { if (confirm(`Delete "${inst.name}"?`)) deleteInstance(inst.id) }}
+                  />
+                )
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
 
-      {/* Admin: add instance */}
-      {isAdmin && (
-        <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Add Instance</div>
-          {showAddForm
-            ? <InstanceForm onSave={handleCreate} onCancel={() => setShowAddForm(false)} />
-            : (
-              <button className="btn btn-primary" onClick={() => setShowAddForm(true)} style={{ gap: 6 }}>
-                <Plus size={14} /> Add Instance
-              </button>
-            )
-          }
-        </section>
+      {/* Admin: add instance form (triggered from Topbar) */}
+      {isAdmin && showAddForm && (
+        <InstanceForm onSave={handleCreate} onCancel={() => setShowAddForm(false)} />
       )}
     </div>
   )

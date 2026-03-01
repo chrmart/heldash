@@ -179,8 +179,8 @@ function GroupVisibilityEditor({
         ))}
       </div>
       {tab === 'apps'
-        ? <VisibilityChecklist label="App Visibility" items={services} hiddenIds={group.hidden_service_ids} onSave={onSaveApps} />
-        : <VisibilityChecklist label="Media Visibility" items={arrInstances.map(i => ({ id: i.id, name: i.name }))} hiddenIds={group.hidden_arr_ids} onSave={onSaveArr} />
+        ? <VisibilityChecklist label="Visibility" items={services} hiddenIds={group.hidden_service_ids} onSave={onSaveApps} />
+        : <VisibilityChecklist label="Visibility" items={arrInstances.map(i => ({ id: i.id, name: i.name }))} hiddenIds={group.hidden_arr_ids} onSave={onSaveArr} />
       }
     </div>
   )
@@ -195,7 +195,7 @@ export function SettingsPage() {
     users, loadUsers, createUser, updateUser, deleteUser,
     userGroups, loadUserGroups, createUserGroup, deleteUserGroup, updateGroupVisibility, updateArrVisibility,
   } = useStore()
-  const { instances: arrInstances } = useArrStore()
+  const { instances: arrInstances, loadInstances } = useArrStore()
 
   const [title, setTitle] = useState(settings?.dashboard_title ?? 'HELDASH')
   const [newGroup, setNewGroup] = useState('')
@@ -216,6 +216,7 @@ export function SettingsPage() {
     if (isAdmin) {
       loadUsers().catch(() => {})
       loadUserGroups().catch(() => {})
+      loadInstances().catch(() => {})
     }
   }, [isAdmin])
 

@@ -1,4 +1,4 @@
-export type ArrType = 'radarr' | 'sonarr' | 'prowlarr'
+export type ArrType = 'radarr' | 'sonarr' | 'prowlarr' | 'sabnzbd'
 
 export interface ArrInstance {
   id: string
@@ -42,7 +42,53 @@ export interface ProwlarrStats {
   grabCount24h: number
 }
 
-export type ArrStats = RadarrStats | SonarrStats | ProwlarrStats
+export interface SabnzbdStats {
+  type: 'sabnzbd'
+  speed: string         // "1.2 MB/s" — formatted by SABnzbd
+  mbleft: number        // MB remaining in queue
+  mb: number            // total MB in queue
+  paused: boolean
+  queueCount: number    // total items (regardless of slot limit)
+  diskspaceFreeGb: number
+}
+
+export type ArrStats = RadarrStats | SonarrStats | ProwlarrStats | SabnzbdStats
+
+// ── SABnzbd queue / history ───────────────────────────────────────────────────
+export interface SabnzbdQueueSlot {
+  nzo_id: string
+  filename: string
+  status: string
+  mbleft: number
+  mb: number
+  percentage: string  // "75.2"
+  timeleft: string    // "0:12:34"
+  cat: string
+}
+
+export interface SabnzbdQueueData {
+  speed: string
+  mbleft: string      // float as string
+  mb: string
+  paused: boolean
+  noofslots: number
+  slots: SabnzbdQueueSlot[]
+}
+
+export interface SabnzbdHistorySlot {
+  nzo_id: string
+  name: string
+  status: string      // "Completed" | "Failed" | ...
+  bytes: number
+  fail_message: string
+  cat: string
+  download_time: number
+}
+
+export interface SabnzbdHistoryData {
+  noofslots: number
+  slots: SabnzbdHistorySlot[]
+}
 
 // ── Queue ─────────────────────────────────────────────────────────────────────
 export interface ArrQueueItem {

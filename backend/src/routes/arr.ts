@@ -4,6 +4,7 @@ import { getDb } from '../db/database'
 import { RadarrClient } from '../arr/radarr'
 import { SonarrClient } from '../arr/sonarr'
 import { ProwlarrClient } from '../arr/prowlarr'
+import { SabnzbdClient } from '../arr/sabnzbd'
 
 // ── DB row type ───────────────────────────────────────────────────────────────
 interface ArrInstanceRow {
@@ -104,7 +105,8 @@ export async function arrRoutes(app: FastifyInstance) {
   function makeClient(row: ArrInstanceRow): RadarrClient | SonarrClient | ProwlarrClient {
     if (row.type === 'radarr') return new RadarrClient(row.url, row.api_key)
     if (row.type === 'sonarr') return new SonarrClient(row.url, row.api_key)
-    return new ProwlarrClient(row.url, row.api_key)
+    if (row.type === 'prowlarr') return new ProwlarrClient(row.url, row.api_key)
+    throw new Error(`makeClient called for unsupported type: ${row.type}`)
   }
 
   // ── Instance CRUD (admin-only) ─────────────────────────────────────────────
@@ -132,8 +134,8 @@ export async function arrRoutes(app: FastifyInstance) {
     { preHandler: [app.requireAdmin] },
     async (req, reply) => {
       const { type, name, url, api_key, enabled = true, position = 0 } = req.body
-      if (!['radarr', 'sonarr', 'prowlarr'].includes(type)) {
-        return reply.status(400).send({ error: 'type must be radarr, sonarr or prowlarr' })
+      if (!['radarr', 'sonarr', 'prowlarr', 'sabnzbd'].includes(type)) {
+        return reply.status(400).send({ error: 'type must be radarr, sonarr, prowlarr or sabnzbd' })
       }
       if (!name?.trim() || !url?.trim() || !api_key?.trim()) {
         return reply.status(400).send({ error: 'name, url and api_key are required' })
@@ -217,6 +219,10 @@ export async function arrRoutes(app: FastifyInstance) {
     const row = await resolveInstance(req, reply, req.params.id)
     if (!row) return
     try {
+      if (row.type === 'sabnzbd') {
+        const { version } = await new SabnzbdClient(row.url, row.api_key).getVersion()
+        return { online: true, type: 'sabnzbd', version }
+      }
       const status = await makeClient(row).getSystemStatus()
       return { online: true, type: row.type, ...status }
     } catch {
@@ -229,6 +235,19 @@ export async function arrRoutes(app: FastifyInstance) {
     const row = await resolveInstance(req, reply, req.params.id)
     if (!row) return
     try {
+      if (row.type === 'sabnzbd') {
+        // limit=1 to minimise payload; noofslots always reflects total count
+        const { queue } = await new SabnzbdClient(row.url, row.api_key).getQueue(0, 1)
+        return {
+          type: 'sabnzbd',
+          speed: queue.speed,
+          mbleft: parseFloat(queue.mbleft),
+          mb: parseFloat(queue.mb),
+          paused: queue.paused,
+          queueCount: queue.noofslots,
+          diskspaceFreeGb: parseFloat(queue.diskspace1),
+        }
+      }
       if (row.type === 'radarr') {
         const movies = await new RadarrClient(row.url, row.api_key).getMovies()
         return {
@@ -277,6 +296,10 @@ export async function arrRoutes(app: FastifyInstance) {
     if (!row) return
     if (row.type === 'prowlarr') return reply.status(400).send({ error: 'Prowlarr has no queue' })
     try {
+      if (row.type === 'sabnzbd') {
+        const { queue } = await new SabnzbdClient(row.url, row.api_key).getQueue(0, 20)
+        return queue
+      }
       const client = row.type === 'radarr'
         ? new RadarrClient(row.url, row.api_key)
         : new SonarrClient(row.url, row.api_key)
@@ -286,11 +309,24 @@ export async function arrRoutes(app: FastifyInstance) {
     }
   })
 
+  // GET /api/arr/:id/history (SABnzbd only)
+  app.get<{ Params: { id: string } }>('/api/arr/:id/history', async (req, reply) => {
+    const row = await resolveInstance(req, reply, req.params.id)
+    if (!row) return
+    if (row.type !== 'sabnzbd') return reply.status(400).send({ error: 'Only available for SABnzbd' })
+    try {
+      const { history } = await new SabnzbdClient(row.url, row.api_key).getHistory(0, 10)
+      return history
+    } catch (e: any) {
+      return reply.status(502).send({ error: 'Upstream error', detail: e.message })
+    }
+  })
+
   // GET /api/arr/:id/calendar
   app.get<{ Params: { id: string } }>('/api/arr/:id/calendar', async (req, reply) => {
     const row = await resolveInstance(req, reply, req.params.id)
     if (!row) return
-    if (row.type === 'prowlarr') return reply.status(400).send({ error: 'Prowlarr has no calendar' })
+    if (row.type === 'prowlarr' || row.type === 'sabnzbd') return reply.status(400).send({ error: 'Not supported for this instance type' })
     try {
       const { start, end } = calendarRange()
       const client = row.type === 'radarr'
