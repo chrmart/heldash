@@ -92,6 +92,8 @@ export async function authRoutes(app: FastifyInstance) {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow
     setAuthCookie(app, reply, user)
 
+    app.log.info({ username: user.username }, 'Initial admin account created')
+
     return reply.status(201).send({
       sub: user.id,
       username: user.username,
@@ -106,14 +108,25 @@ export async function authRoutes(app: FastifyInstance) {
     if (!username || !password) return reply.status(400).send({ error: 'username and password required' })
 
     const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as UserRow | undefined
-    if (!user || !user.password_hash) return reply.status(401).send({ error: 'Invalid credentials' })
-    if (!user.is_active) return reply.status(403).send({ error: 'Account disabled' })
+    if (!user || !user.password_hash) {
+      app.log.warn({ username }, 'Login failed: user not found')
+      return reply.status(401).send({ error: 'Invalid credentials' })
+    }
+    if (!user.is_active) {
+      app.log.warn({ username }, 'Login attempt on disabled account')
+      return reply.status(403).send({ error: 'Account disabled' })
+    }
 
     const valid = await bcrypt.compare(password, user.password_hash)
-    if (!valid) return reply.status(401).send({ error: 'Invalid credentials' })
+    if (!valid) {
+      app.log.warn({ username }, 'Login failed: invalid password')
+      return reply.status(401).send({ error: 'Invalid credentials' })
+    }
 
     db.prepare("UPDATE users SET last_login = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(user.id)
     setAuthCookie(app, reply, user)
+
+    app.log.info({ username, groupId: user.user_group_id }, 'User logged in')
 
     return {
       sub: user.id,
@@ -124,8 +137,14 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   // POST /api/auth/logout
-  app.post('/api/auth/logout', async (_req, reply) => {
+  app.post('/api/auth/logout', async (req, reply) => {
+    let username = 'unknown'
+    try {
+      await req.jwtVerify()
+      username = req.user.username
+    } catch { /* token missing or invalid — still allow logout */ }
     reply.clearCookie('auth_token', { path: '/' })
+    app.log.info({ username }, 'User logged out')
     return { ok: true }
   })
 

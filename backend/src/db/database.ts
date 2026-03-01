@@ -8,7 +8,8 @@ export function getDb(): Database.Database {
   return db
 }
 
-export function initDb(dataDir: string): Database.Database {
+// Returns the number of new migrations applied (0 if all already up-to-date)
+export function initDb(dataDir: string): number {
   const dbDir = path.join(dataDir, 'db')
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true })
@@ -23,12 +24,12 @@ export function initDb(dataDir: string): Database.Database {
   db.pragma('foreign_keys = ON')
 
   applySchema(db)
-  runMigrations(db)
-  return db
+  return runMigrations(db)
 }
 
-function runMigrations(db: Database.Database) {
-  // Add icon_url column to existing databases (safe to run multiple times)
+// Returns count of newly applied migrations (columns that didn't exist yet)
+function runMigrations(db: Database.Database): number {
+  let applied = 0
   const migrations: string[] = [
     'ALTER TABLE services ADD COLUMN icon_url TEXT',
     'ALTER TABLE users ADD COLUMN email TEXT',
@@ -49,6 +50,7 @@ function runMigrations(db: Database.Database) {
   for (const sql of migrations) {
     try {
       db.exec(sql)
+      applied++
     } catch {
       // Column already exists – ignore
     }
@@ -70,6 +72,8 @@ function runMigrations(db: Database.Database) {
   // Sync role column from group membership (runs every startup — idempotent)
   db.exec("UPDATE users SET role = 'admin' WHERE user_group_id = 'grp_admin'")
   db.exec("UPDATE users SET role = 'user' WHERE user_group_id IS NULL OR user_group_id != 'grp_admin'")
+
+  return applied
 }
 
 function applySchema(db: Database.Database) {

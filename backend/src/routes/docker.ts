@@ -86,7 +86,8 @@ export async function dockerRoutes(app: FastifyInstance) {
     let res
     try {
       res = await dockerReq('/v1.41/containers/json?all=true')
-    } catch {
+    } catch (err) {
+      app.log.warn({ err }, 'Docker socket unavailable (container list)')
       return reply.status(503).send({ error: 'Docker unavailable' })
     }
 
@@ -114,7 +115,8 @@ export async function dockerRoutes(app: FastifyInstance) {
     let res
     try {
       res = await dockerReq(`/v1.41/containers/${id}/stats?stream=false`)
-    } catch {
+    } catch (err) {
+      app.log.warn({ id, err }, 'Docker socket unavailable (container stats)')
       return reply.status(503).send({ error: 'Docker unavailable' })
     }
 
@@ -144,7 +146,8 @@ export async function dockerRoutes(app: FastifyInstance) {
     let listRes
     try {
       listRes = await dockerReq('/v1.41/containers/json?all=true')
-    } catch {
+    } catch (err) {
+      app.log.warn({ err }, 'Docker socket unavailable (batch stats)')
       return reply.status(503).send({ error: 'Docker unavailable' })
     }
     if (!listRes.statusCode || listRes.statusCode >= 400) {
@@ -202,7 +205,8 @@ export async function dockerRoutes(app: FastifyInstance) {
       dockerRes = await dockerReq(
         `/v1.41/containers/${id}/logs?follow=1&stdout=1&stderr=1&timestamps=1&tail=${tail}`
       )
-    } catch {
+    } catch (err) {
+      app.log.warn({ id, err }, 'Docker unavailable (log stream)')
       reply.raw.write('data: {"stream":"stderr","log":"Docker unavailable","timestamp":""}\n\n')
       reply.raw.end()
       return
@@ -283,9 +287,16 @@ export async function dockerRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }
     let res
     try { res = await dockerReq(`/v1.41/containers/${id}/start`, 'POST') }
-    catch { return reply.status(503).send({ error: 'Docker unavailable' }) }
+    catch (err) {
+      app.log.warn({ id, err }, 'Docker unavailable (start container)')
+      return reply.status(503).send({ error: 'Docker unavailable' })
+    }
     await res.body.text().catch(() => {})
-    if (res.statusCode === 204 || res.statusCode === 304) return { ok: true }
+    if (res.statusCode === 204 || res.statusCode === 304) {
+      app.log.info({ id, user: req.user.username }, 'Container started')
+      return { ok: true }
+    }
+    app.log.warn({ id, statusCode: res.statusCode }, 'Failed to start container')
     return reply.status(res.statusCode ?? 502).send({ error: 'Docker API error' })
   })
 
@@ -294,9 +305,16 @@ export async function dockerRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }
     let res
     try { res = await dockerReq(`/v1.41/containers/${id}/stop`, 'POST') }
-    catch { return reply.status(503).send({ error: 'Docker unavailable' }) }
+    catch (err) {
+      app.log.warn({ id, err }, 'Docker unavailable (stop container)')
+      return reply.status(503).send({ error: 'Docker unavailable' })
+    }
     await res.body.text().catch(() => {})
-    if (res.statusCode === 204 || res.statusCode === 304) return { ok: true }
+    if (res.statusCode === 204 || res.statusCode === 304) {
+      app.log.info({ id, user: req.user.username }, 'Container stopped')
+      return { ok: true }
+    }
+    app.log.warn({ id, statusCode: res.statusCode }, 'Failed to stop container')
     return reply.status(res.statusCode ?? 502).send({ error: 'Docker API error' })
   })
 
@@ -305,9 +323,16 @@ export async function dockerRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }
     let res
     try { res = await dockerReq(`/v1.41/containers/${id}/restart`, 'POST') }
-    catch { return reply.status(503).send({ error: 'Docker unavailable' }) }
+    catch (err) {
+      app.log.warn({ id, err }, 'Docker unavailable (restart container)')
+      return reply.status(503).send({ error: 'Docker unavailable' })
+    }
     await res.body.text().catch(() => {})
-    if (res.statusCode === 204) return { ok: true }
+    if (res.statusCode === 204) {
+      app.log.info({ id, user: req.user.username }, 'Container restarted')
+      return { ok: true }
+    }
+    app.log.warn({ id, statusCode: res.statusCode }, 'Failed to restart container')
     return reply.status(res.statusCode ?? 502).send({ error: 'Docker API error' })
   })
 }

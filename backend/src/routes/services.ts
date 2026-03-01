@@ -128,6 +128,7 @@ export async function servicesRoutes(app: FastifyInstance) {
       width ?? 1, height ?? 1
     )
 
+    app.log.info({ id, name }, 'Service created')
     return reply.status(201).send(db.prepare('SELECT * FROM services WHERE id = ?').get(id))
   })
 
@@ -170,6 +171,7 @@ export async function servicesRoutes(app: FastifyInstance) {
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
     }
     db.prepare('DELETE FROM services WHERE id = ?').run(req.params.id)
+    app.log.info({ id: req.params.id, name: existing.name }, 'Service deleted')
     return reply.status(204).send()
   })
 
@@ -179,9 +181,16 @@ export async function servicesRoutes(app: FastifyInstance) {
     if (!service) return reply.status(404).send({ error: 'Not found' })
 
     const checkUrl = service.check_url || service.url
-    app.log.debug({ checkUrl }, 'Pinging service')
+    const oldStatus = service.last_status
     const status = await pingService(checkUrl)
-    app.log.debug({ checkUrl, status }, 'Ping result')
+
+    if (status !== oldStatus) {
+      if (status === 'offline') {
+        app.log.warn({ id: service.id, name: service.name, url: checkUrl }, 'Service went offline')
+      } else if (status === 'online') {
+        app.log.info({ id: service.id, name: service.name }, 'Service back online')
+      }
+    }
 
     db.prepare('UPDATE services SET last_status = ?, last_checked = datetime(\'now\') WHERE id = ?')
       .run(status, req.params.id)
@@ -195,7 +204,17 @@ export async function servicesRoutes(app: FastifyInstance) {
     const results = await Promise.all(
       services.map(async (s) => {
         const checkUrl = s.check_url || s.url
+        const oldStatus = s.last_status
         const status = await pingService(checkUrl)
+
+        if (status !== oldStatus) {
+          if (status === 'offline') {
+            app.log.warn({ id: s.id, name: s.name, url: checkUrl }, 'Service went offline')
+          } else if (status === 'online') {
+            app.log.info({ id: s.id, name: s.name }, 'Service back online')
+          }
+        }
+
         db.prepare('UPDATE services SET last_status = ?, last_checked = datetime(\'now\') WHERE id = ?')
           .run(status, s.id)
         return { id: s.id, status }
