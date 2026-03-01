@@ -1,4 +1,4 @@
-import { Sun, Moon, RefreshCw, Plus, LogIn, LogOut, Pencil, LayoutGrid, LayoutList } from 'lucide-react'
+import { Sun, Moon, RefreshCw, Plus, LogIn, LogOut, Pencil, LayoutGrid, LayoutList, Minus } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import type { ThemeAccent } from '../types'
@@ -79,11 +79,15 @@ export function Topbar({ page, onAddService, onAddInstance, onCheckAll, checking
               <>
                 <button className="btn btn-ghost" onClick={() => addPlaceholder('app')} style={{ gap: 6 }}>
                   <LayoutGrid size={15} />
-                  App Placeholder
+                  App
                 </button>
                 <button className="btn btn-ghost" onClick={() => addPlaceholder('instance')} style={{ gap: 6 }}>
                   <LayoutList size={15} />
-                  Instance Placeholder
+                  Instance
+                </button>
+                <button className="btn btn-ghost" onClick={() => addPlaceholder('row')} style={{ gap: 6 }}>
+                  <Minus size={15} />
+                  Row
                 </button>
               </>
             )}

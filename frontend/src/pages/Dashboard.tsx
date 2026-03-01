@@ -98,7 +98,7 @@ function DashboardServiceCard({ item, onEdit, editMode }: {
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
     >
-      <ServiceCard service={item.service} onEdit={onEdit} hideAdminActions={editMode} />
+      <ServiceCard service={item.service} onEdit={onEdit} hideAdminActions={true} />
       {editMode && (
         <EditOverlay
           dragProps={{ ...attributes, ...listeners }}
@@ -160,6 +160,9 @@ function DashboardPlaceholderCard({ item }: { item: DashboardPlaceholderItem }) 
   const [showHandle, setShowHandle] = useState(false)
 
   const isInstance = item.type === 'placeholder_instance'
+  const isRow = item.type === 'placeholder_row'
+
+  const label = isRow ? 'Row' : isInstance ? 'Instance' : 'App'
 
   return (
     <div
@@ -167,22 +170,28 @@ function DashboardPlaceholderCard({ item }: { item: DashboardPlaceholderItem }) 
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0.4 : 1,
+        opacity: isDragging ? 0.3 : 1,
         position: 'relative',
-        gridColumn: isInstance ? 'span 2' : undefined,
+        gridColumn: isRow ? '1 / -1' : isInstance ? 'span 2' : undefined,
       }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
     >
       <div
         style={{
-          border: '1.5px dashed var(--glass-border)',
-          borderRadius: isInstance ? 'var(--radius-xl)' : 'var(--radius-lg)',
-          background: 'transparent',
-          opacity: 0.4,
-          minHeight: isInstance ? 100 : 80,
+          border: '1.5px dashed var(--accent)',
+          borderRadius: isRow ? 'var(--radius-sm)' : isInstance ? 'var(--radius-xl)' : 'var(--radius-lg)',
+          background: 'var(--accent-subtle)',
+          minHeight: isRow ? 28 : isInstance ? 100 : 80,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
-      />
+      >
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1, color: 'var(--accent)', textTransform: 'uppercase', opacity: 0.7 }}>
+          {label}
+        </span>
+      </div>
       <EditOverlay
         dragProps={{ ...attributes, ...listeners }}
         showHandle={showHandle}
@@ -217,7 +226,7 @@ export function Dashboard({ onEdit }: Props) {
   }, [items.filter(i => i.type === 'arr_instance').length])
 
   const isPlaceholder = (type: string) =>
-    type === 'placeholder' || type === 'placeholder_app' || type === 'placeholder_instance'
+    type === 'placeholder' || type === 'placeholder_app' || type === 'placeholder_instance' || type === 'placeholder_row'
 
   // In view mode: hide placeholders
   const visibleItems = editMode ? items : items.filter(i => !isPlaceholder(i.type))
@@ -256,35 +265,37 @@ export function Dashboard({ onEdit }: Props) {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={visibleItems.map(i => i.id)} strategy={rectSortingStrategy}>
-        <div
-          className="services-grid"
-          style={{ gridAutoFlow: 'dense' }}
-        >
-          {visibleItems.map(item => {
-            if (item.type === 'service') {
-              return (
-                <DashboardServiceCard
-                  key={item.id}
-                  item={item as DashboardServiceItem}
-                  onEdit={onEdit}
-                  editMode={editMode}
-                />
-              )
-            }
-            if (item.type === 'arr_instance') {
-              return (
-                <DashboardArrCard
-                  key={item.id}
-                  item={item as DashboardArrItem}
-                  editMode={editMode}
-                />
-              )
-            }
-            if (isPlaceholder(item.type)) {
-              return <DashboardPlaceholderCard key={item.id} item={item as DashboardPlaceholderItem} />
-            }
-            return null
-          })}
+        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+          <div
+            className="services-grid"
+            style={{ gridAutoFlow: 'dense' }}
+          >
+            {visibleItems.map(item => {
+              if (item.type === 'service') {
+                return (
+                  <DashboardServiceCard
+                    key={item.id}
+                    item={item as DashboardServiceItem}
+                    onEdit={onEdit}
+                    editMode={editMode}
+                  />
+                )
+              }
+              if (item.type === 'arr_instance') {
+                return (
+                  <DashboardArrCard
+                    key={item.id}
+                    item={item as DashboardArrItem}
+                    editMode={editMode}
+                  />
+                )
+              }
+              if (isPlaceholder(item.type)) {
+                return <DashboardPlaceholderCard key={item.id} item={item as DashboardPlaceholderItem} />
+              }
+              return null
+            })}
+          </div>
         </div>
       </SortableContext>
     </DndContext>

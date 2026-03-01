@@ -70,7 +70,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const result = []
 
     for (const item of items) {
-      if (item.type === 'placeholder' || item.type === 'placeholder_app' || item.type === 'placeholder_instance') {
+      if (item.type === 'placeholder' || item.type === 'placeholder_app' || item.type === 'placeholder_instance' || item.type === 'placeholder_row') {
         result.push({ id: item.id, type: item.type, position: item.position })
         continue
       }
@@ -129,10 +129,10 @@ export async function dashboardRoutes(app: FastifyInstance) {
   app.post('/api/dashboard/items', { preHandler: app.requireAdmin }, async (req, reply) => {
     const { type, ref_id } = req.body as AddItemBody
 
-    if (!['service', 'arr_instance', 'placeholder', 'placeholder_app', 'placeholder_instance'].includes(type)) {
+    if (!['service', 'arr_instance', 'placeholder', 'placeholder_app', 'placeholder_instance', 'placeholder_row'].includes(type)) {
       return reply.status(400).send({ error: 'Invalid type' })
     }
-    const isPlaceholderType = type === 'placeholder' || type === 'placeholder_app' || type === 'placeholder_instance'
+    const isPlaceholderType = type === 'placeholder' || type === 'placeholder_app' || type === 'placeholder_instance' || type === 'placeholder_row'
     if (!isPlaceholderType && !ref_id) {
       return reply.status(400).send({ error: 'ref_id required for service and arr_instance' })
     }
