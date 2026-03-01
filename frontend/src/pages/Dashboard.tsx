@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
+import { useArrStore } from '../store/useArrStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { ServiceCard } from '../components/ServiceCard'
+import { ArrCardContent, SabnzbdCardContent } from '../components/MediaCard'
 import type { Service, DashboardItem, DashboardServiceItem, DashboardArrItem, DashboardPlaceholderItem } from '../types'
 import {
   DndContext,
@@ -18,17 +20,9 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, X, Plus, Pencil, ExternalLink } from 'lucide-react'
+import { GripVertical, X } from 'lucide-react'
 
-// Accent colors for arr instance type badges
-const TYPE_COLORS: Record<string, string> = {
-  radarr: '#f59e0b',
-  sonarr: '#6366f1',
-  prowlarr: '#8b5cf6',
-  sabnzbd: '#22c55e',
-}
-
-// ── Shared drag/remove overlay ────────────────────────────────────────────────
+// ── Shared edit-mode overlay (drag handle + remove button) ────────────────────
 function EditOverlay({
   dragProps,
   showHandle,
@@ -85,7 +79,7 @@ function EditOverlay({
   )
 }
 
-// ── Service card wrapper ──────────────────────────────────────────────────────
+// ── Service card ──────────────────────────────────────────────────────────────
 function DashboardServiceCard({ item, onEdit, editMode }: {
   item: DashboardServiceItem
   onEdit: (s: Service) => void
@@ -93,8 +87,7 @@ function DashboardServiceCard({ item, onEdit, editMode }: {
 }) {
   const { removeItem } = useDashboardStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: item.id,
-    disabled: !editMode,
+    id: item.id, disabled: !editMode,
   })
   const [showHandle, setShowHandle] = useState(false)
 
@@ -118,53 +111,46 @@ function DashboardServiceCard({ item, onEdit, editMode }: {
   )
 }
 
-// ── Arr instance card ─────────────────────────────────────────────────────────
+// ── Arr instance card (full media-style) ──────────────────────────────────────
 function DashboardArrCard({ item, editMode }: {
   item: DashboardArrItem
   editMode: boolean
 }) {
   const { removeItem } = useDashboardStore()
+  const { services } = useStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: item.id,
-    disabled: !editMode,
+    id: item.id, disabled: !editMode,
   })
   const [showHandle, setShowHandle] = useState(false)
-  const color = TYPE_COLORS[item.instance.type] ?? 'var(--accent)'
+
+  // Find matching service by URL to inherit its icon
+  const normalizeUrl = (u: string) => u.replace(/\/$/, '').toLowerCase()
+  const instUrl = normalizeUrl(item.instance.url)
+  const matchingService = services.find(s =>
+    normalizeUrl(s.url) === instUrl || (s.check_url && normalizeUrl(s.check_url) === instUrl)
+  )
+  const iconUrl = matchingService?.icon_url ?? null
+  const iconEmoji = matchingService?.icon ?? null
 
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        position: 'relative',
+        gridColumn: 'span 2',
+      }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
     >
-      <a
-        href={item.instance.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="service-card glass"
-      >
-        <div className="service-card-header">
-          <span style={{
-            display: 'inline-block',
-            padding: '2px 7px',
-            borderRadius: 4,
-            background: `${color}22`,
-            color,
-            fontSize: 10,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-          }}>
-            {item.instance.type}
-          </span>
-          <ExternalLink size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-        </div>
-        <div>
-          <div className="service-name">{item.instance.name}</div>
-          <div className="service-url">{item.instance.url.replace(/^https?:\/\//, '')}</div>
-        </div>
-      </a>
+      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {item.instance.type === 'sabnzbd'
+          ? <SabnzbdCardContent instance={item.instance} iconUrl={iconUrl} iconEmoji={iconEmoji} />
+          : <ArrCardContent instance={item.instance} iconUrl={iconUrl} iconEmoji={iconEmoji} />
+        }
+      </div>
       {editMode && (
         <EditOverlay
           dragProps={{ ...attributes, ...listeners }}
@@ -183,23 +169,28 @@ function DashboardPlaceholderCard({ item }: { item: DashboardPlaceholderItem }) 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
   const [showHandle, setShowHandle] = useState(false)
 
+  const isInstance = item.type === 'placeholder_instance'
+
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        position: 'relative',
+        gridColumn: isInstance ? 'span 2' : undefined,
+      }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
     >
       <div
-        className="service-card"
         style={{
           border: '1.5px dashed var(--glass-border)',
+          borderRadius: isInstance ? 'var(--radius-xl)' : 'var(--radius-lg)',
           background: 'transparent',
-          backdropFilter: 'none',
-          boxShadow: 'none',
-          cursor: 'default',
-          opacity: 0.45,
-          minHeight: 80,
+          opacity: 0.4,
+          minHeight: isInstance ? 100 : 80,
         }}
       />
       <EditOverlay
@@ -219,12 +210,27 @@ interface Props {
 
 export function Dashboard({ onEdit }: Props) {
   const { isAdmin } = useStore()
-  const { items, editMode, loading, setEditMode, addPlaceholder, reorder } = useDashboardStore()
+  const { instances, loadInstances, loadAllStats } = useArrStore()
+  const { items, editMode, loading, reorder } = useDashboardStore()
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
-  // In display mode: hide placeholders
-  const visibleItems = editMode ? items : items.filter(i => i.type !== 'placeholder')
+  // Load arr stats when dashboard has arr instances
+  useEffect(() => {
+    if (items.some(i => i.type === 'arr_instance')) {
+      if (instances.length === 0) {
+        loadInstances().then(() => loadAllStats()).catch(() => {})
+      } else {
+        loadAllStats().catch(() => {})
+      }
+    }
+  }, [items.filter(i => i.type === 'arr_instance').length])
+
+  const isPlaceholder = (type: string) =>
+    type === 'placeholder' || type === 'placeholder_app' || type === 'placeholder_instance'
+
+  // In view mode: hide placeholders
+  const visibleItems = editMode ? items : items.filter(i => !isPlaceholder(i.type))
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
@@ -244,75 +250,53 @@ export function Dashboard({ onEdit }: Props) {
     )
   }
 
+  if (!loading && visibleItems.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-state-icon">⬡</div>
+        <div className="empty-state-text">
+          {isAdmin
+            ? 'Dashboard is empty.\nEnable "Show on Dashboard" in app or instance settings.'
+            : 'No items on the dashboard yet.'}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div>
-      {/* Edit mode toolbar (admin only) */}
-      {isAdmin && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <button
-            className={editMode ? 'btn btn-primary' : 'btn btn-ghost'}
-            style={{ gap: 6, fontSize: 12 }}
-            onClick={() => setEditMode(!editMode)}
-          >
-            <Pencil size={13} />
-            {editMode ? 'Done' : 'Edit Dashboard'}
-          </button>
-          {editMode && (
-            <button
-              className="btn btn-ghost"
-              style={{ gap: 6, fontSize: 12 }}
-              onClick={addPlaceholder}
-            >
-              <Plus size={13} />
-              Add Placeholder
-            </button>
-          )}
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={visibleItems.map(i => i.id)} strategy={rectSortingStrategy}>
+        <div
+          className="services-grid"
+          style={{ gridAutoFlow: 'dense' }}
+        >
+          {visibleItems.map(item => {
+            if (item.type === 'service') {
+              return (
+                <DashboardServiceCard
+                  key={item.id}
+                  item={item as DashboardServiceItem}
+                  onEdit={onEdit}
+                  editMode={editMode}
+                />
+              )
+            }
+            if (item.type === 'arr_instance') {
+              return (
+                <DashboardArrCard
+                  key={item.id}
+                  item={item as DashboardArrItem}
+                  editMode={editMode}
+                />
+              )
+            }
+            if (isPlaceholder(item.type)) {
+              return <DashboardPlaceholderCard key={item.id} item={item as DashboardPlaceholderItem} />
+            }
+            return null
+          })}
         </div>
-      )}
-
-      {visibleItems.length === 0 && !loading && (
-        <div className="empty-state">
-          <div className="empty-state-icon">⬡</div>
-          <div className="empty-state-text">
-            {isAdmin
-              ? 'Dashboard is empty.\nEnable "Show on Dashboard" in app or instance settings.'
-              : 'No items on the dashboard yet.'}
-          </div>
-        </div>
-      )}
-
-      {/* Sortable flat grid */}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={visibleItems.map(i => i.id)} strategy={rectSortingStrategy}>
-          <div className="services-grid">
-            {visibleItems.map(item => {
-              if (item.type === 'service') {
-                return (
-                  <DashboardServiceCard
-                    key={item.id}
-                    item={item as DashboardServiceItem}
-                    onEdit={onEdit}
-                    editMode={editMode}
-                  />
-                )
-              }
-              if (item.type === 'arr_instance') {
-                return (
-                  <DashboardArrCard
-                    key={item.id}
-                    item={item as DashboardArrItem}
-                    editMode={editMode}
-                  />
-                )
-              }
-              if (item.type === 'placeholder') {
-                return <DashboardPlaceholderCard key={item.id} item={item as DashboardPlaceholderItem} />
-              }
-              return null
-            })}
-          </div>
-        </SortableContext>
-      </DndContext>
-    </div>
+      </SortableContext>
+    </DndContext>
   )
 }

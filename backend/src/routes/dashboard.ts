@@ -70,8 +70,8 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const result = []
 
     for (const item of items) {
-      if (item.type === 'placeholder') {
-        result.push({ id: item.id, type: 'placeholder', position: item.position })
+      if (item.type === 'placeholder' || item.type === 'placeholder_app' || item.type === 'placeholder_instance') {
+        result.push({ id: item.id, type: item.type, position: item.position })
         continue
       }
 
@@ -129,7 +129,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
   app.post('/api/dashboard/items', { preHandler: app.requireAdmin }, async (req, reply) => {
     const { type, ref_id } = req.body as AddItemBody
 
-    if (!['service', 'arr_instance', 'placeholder'].includes(type)) {
+    if (!['service', 'arr_instance', 'placeholder', 'placeholder_app', 'placeholder_instance'].includes(type)) {
       return reply.status(400).send({ error: 'Invalid type' })
     }
     if (type !== 'placeholder' && !ref_id) {

@@ -12,7 +12,7 @@ interface DashboardState {
 
   addService: (refId: string) => Promise<void>
   addArrInstance: (refId: string) => Promise<void>
-  addPlaceholder: () => Promise<void>
+  addPlaceholder: (size: 'app' | 'instance') => Promise<void>
   removeItem: (id: string) => Promise<void>
   removeByRef: (type: 'service' | 'arr_instance', refId: string) => Promise<void>
   reorder: (orderedIds: string[]) => Promise<void>
@@ -50,10 +50,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await get().loadDashboard()
   },
 
-  addPlaceholder: async () => {
-    const raw = await api.dashboard.addItem('placeholder')
+  addPlaceholder: async (size) => {
+    const type = size === 'instance' ? 'placeholder_instance' : 'placeholder_app'
+    const raw = await api.dashboard.addItem(type)
     set(state => ({
-      items: [...state.items, { id: raw.id, type: 'placeholder', position: raw.position }],
+      items: [...state.items, { id: raw.id, type, position: raw.position } as import('../types').DashboardPlaceholderItem],
     }))
   },
 

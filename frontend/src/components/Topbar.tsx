@@ -1,4 +1,4 @@
-import { Sun, Moon, RefreshCw, Plus, LogIn, LogOut } from 'lucide-react'
+import { Sun, Moon, RefreshCw, Plus, LogIn, LogOut, Pencil, LayoutGrid, LayoutList } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import type { ThemeAccent } from '../types'
@@ -20,7 +20,7 @@ const ACCENTS: { value: ThemeAccent; label: string; color: string }[] = [
 
 export function Topbar({ page, onAddService, onAddInstance, onCheckAll, checking, onLogin }: Props) {
   const { settings, setThemeMode, setThemeAccent, isAuthenticated, isAdmin, authUser, logout, loadAll } = useStore()
-  const { loadDashboard } = useDashboardStore()
+  const { loadDashboard, editMode, setEditMode, addPlaceholder } = useDashboardStore()
   const mode = settings?.theme_mode ?? 'dark'
   const accent = settings?.theme_accent ?? 'cyan'
 
@@ -73,6 +73,30 @@ export function Topbar({ page, onAddService, onAddInstance, onCheckAll, checking
           }
         </button>
 
+        {isAdmin && page === 'dashboard' && (
+          <>
+            {editMode && (
+              <>
+                <button className="btn btn-ghost" onClick={() => addPlaceholder('app')} style={{ gap: 6 }}>
+                  <LayoutGrid size={15} />
+                  App Placeholder
+                </button>
+                <button className="btn btn-ghost" onClick={() => addPlaceholder('instance')} style={{ gap: 6 }}>
+                  <LayoutList size={15} />
+                  Instance Placeholder
+                </button>
+              </>
+            )}
+            <button
+              className={editMode ? 'btn btn-primary' : 'btn btn-ghost'}
+              onClick={() => setEditMode(!editMode)}
+              style={{ gap: 6 }}
+            >
+              <Pencil size={15} />
+              {editMode ? 'Done' : 'Edit Dashboard'}
+            </button>
+          </>
+        )}
         {isAdmin && page === 'media' && (
           <button className="btn btn-primary" onClick={onAddInstance} style={{ gap: 6 }}>
             <Plus size={16} />
