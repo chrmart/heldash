@@ -101,9 +101,9 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
               .filter(d => d.total > 0)
               .map(d => {
                 const pct = Math.round((d.used / d.total) * 100)
-                const freeGb = (d.free / 1024).toFixed(0)
+                const usedGb = (d.used / 1024).toFixed(0)
                 const totalGb = (d.total / 1024).toFixed(0)
-                return `${d.name} ${pct}% · ${freeGb}/${totalGb} GB`
+                return `${d.name} ${pct}% · ${usedGb}/${totalGb} GB`
               })
             parts = [
               ss.cpu.load >= 0 ? `CPU ${ss.cpu.load}%` : null,
