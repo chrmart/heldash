@@ -3,6 +3,7 @@ import { useDockerStore } from '../store/useDockerStore'
 import { useStore } from '../store/useStore'
 import { ArrowLeft, RefreshCw, Play, Square, RotateCcw, Search, ChevronUp, ChevronDown } from 'lucide-react'
 import type { DockerContainer, ContainerStats, DockerLogEvent } from '../types'
+import { containerCounts } from '../utils'
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ state }: { state: string }) {
@@ -445,9 +446,7 @@ export function DockerPage() {
     )
   }
 
-  const running    = containers.filter(c => c.state === 'running').length
-  const stopped    = containers.filter(c => c.state === 'exited' || c.state === 'dead' || c.state === 'created').length
-  const restarting = containers.filter(c => c.state === 'restarting').length
+  const { running, stopped, restarting } = containerCounts(containers)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

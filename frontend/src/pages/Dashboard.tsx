@@ -7,10 +7,10 @@ import { ServiceCard } from '../components/ServiceCard'
 import { ArrCardContent, SabnzbdCardContent } from '../components/MediaCard'
 import { AdGuardStatsView, DockerOverviewContent } from './WidgetsPage'
 import type { Service, DashboardItem, DashboardServiceItem, DashboardArrItem, DashboardPlaceholderItem, DashboardWidgetItem, ServerStats, AdGuardStats, AdGuardHomeConfig } from '../types'
+import { normalizeUrl } from '../utils'
 
 function DashboardWidgetIcon({ widget }: { widget: DashboardWidgetItem['widget'] }) {
   const { services } = useStore()
-  const normalizeUrl = (u: string) => u.replace(/\/$/, '').toLowerCase()
 
   if (widget.type === 'docker_overview') {
     return <Container size={20} style={{ color: 'var(--accent)', flexShrink: 0 }} />
@@ -372,16 +372,17 @@ export function Dashboard({ onEdit }: Props) {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
+  const arrItemCount = items.filter(i => i.type === 'arr_instance').length
+
   // Load arr stats when dashboard has arr instances
   useEffect(() => {
-    if (items.some(i => i.type === 'arr_instance')) {
-      if (instances.length === 0) {
-        loadInstances().then(() => loadAllStats()).catch(() => {})
-      } else {
-        loadAllStats().catch(() => {})
-      }
+    if (arrItemCount === 0) return
+    if (instances.length === 0) {
+      loadInstances().then(() => loadAllStats()).catch(() => {})
+    } else {
+      loadAllStats().catch(() => {})
     }
-  }, [items.filter(i => i.type === 'arr_instance').length])
+  }, [arrItemCount])
 
   const isPlaceholder = (type: string) =>
     type === 'placeholder' || type === 'placeholder_app' || type === 'placeholder_instance' || type === 'placeholder_row'

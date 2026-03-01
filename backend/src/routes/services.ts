@@ -87,17 +87,18 @@ export async function servicesRoutes(app: FastifyInstance) {
       groupId = req.user.groupId ?? 'grp_guest'
     } catch { /* unauthenticated — apply guest group visibility */ }
 
-    const all = db.prepare('SELECT * FROM services ORDER BY position_y, position_x').all() as ServiceRow[]
-
     // Admin group sees everything
-    if (groupId === 'grp_admin') return all
+    if (groupId === 'grp_admin') {
+      return db.prepare('SELECT * FROM services ORDER BY position_y, position_x').all()
+    }
 
-    // All other groups: filter out hidden services
-    const hidden = new Set(
-      (db.prepare('SELECT service_id FROM group_service_visibility WHERE group_id = ?').all(groupId) as { service_id: string }[])
-        .map(r => r.service_id)
-    )
-    return all.filter(s => !hidden.has(s.id))
+    // All other groups: LEFT JOIN filters hidden services in SQL (avoids loading all rows into memory)
+    return db.prepare(`
+      SELECT s.* FROM services s
+      LEFT JOIN group_service_visibility g ON s.id = g.service_id AND g.group_id = ?
+      WHERE g.service_id IS NULL
+      ORDER BY s.position_y, s.position_x
+    `).all(groupId)
   })
 
   // GET /api/services/:id

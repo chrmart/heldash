@@ -64,6 +64,10 @@ interface AppState {
   updateDockerWidgetAccess: (groupId: string, enabled: boolean) => Promise<void>
 }
 
+function parseService<T extends { tags: string | string[] }>(s: T): T {
+  return { ...s, tags: typeof s.tags === 'string' ? JSON.parse(s.tags) : s.tags }
+}
+
 export const useStore = create<AppState>((set, get) => ({
   services: [],
   groups: [],
@@ -90,10 +94,7 @@ export const useStore = create<AppState>((set, get) => ({
         api.groups.list(),
         api.settings.get(),
       ])
-      const parsedServices = services.map(s => ({
-        ...s,
-        tags: typeof s.tags === 'string' ? JSON.parse(s.tags) : s.tags,
-      }))
+      const parsedServices = services.map(parseService)
       // Non-admins: apply locally stored theme preferences (no API write access)
       const settings = { ...rawSettings }
       if (!get().isAdmin) {
@@ -111,13 +112,11 @@ export const useStore = create<AppState>((set, get) => ({
 
   loadServices: async () => {
     const services = await api.services.list()
-    const parsed = services.map(s => ({ ...s, tags: typeof s.tags === 'string' ? JSON.parse(s.tags) : s.tags }))
-    set({ services: parsed })
+    set({ services: services.map(parseService) })
   },
 
   createService: async (data) => {
-    const svc = await api.services.create(data)
-    const parsed = { ...svc, tags: typeof svc.tags === 'string' ? JSON.parse(svc.tags) : svc.tags }
+    const parsed = parseService(await api.services.create(data))
     set(state => ({ services: [...state.services, parsed] }))
     if (svc.check_enabled) {
       get().checkService(parsed.id).catch(() => { /* ignore */ })
@@ -139,8 +138,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateService: async (id, data) => {
-    const svc = await api.services.update(id, data)
-    const parsed = { ...svc, tags: typeof svc.tags === 'string' ? JSON.parse(svc.tags) : svc.tags }
+    const parsed = parseService(await api.services.update(id, data))
     set(state => ({ services: state.services.map(s => s.id === id ? parsed : s) }))
   },
 

@@ -284,10 +284,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (isAdmin) {
-      loadUsers().catch(() => {})
-      loadUserGroups().catch(() => {})
-      loadInstances().catch(() => {})
-      loadWidgets().catch(() => {})
+      Promise.all([loadUsers(), loadUserGroups(), loadInstances(), loadWidgets()]).catch(() => {})
     }
   }, [isAdmin])
 

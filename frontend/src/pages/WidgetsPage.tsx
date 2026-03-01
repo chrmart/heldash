@@ -5,11 +5,11 @@ import { useDashboardStore } from '../store/useDashboardStore'
 import { useStore } from '../store/useStore'
 import { Trash2, Pencil, X, Check, Plus, Minus, LayoutDashboard, Shield, ShieldOff, Upload, Container, Play, Square, RotateCcw } from 'lucide-react'
 import type { Widget, ServerStatusConfig, AdGuardHomeConfig, ServerStats, AdGuardStats } from '../types'
+import { normalizeUrl, containerCounts } from '../utils'
 
 // ── Widget icon — URL-matched service icon or custom icon_url ─────────────────
 function WidgetIcon({ widget, size = 32 }: { widget: Pick<Widget, 'type' | 'config' | 'icon_url'>; size?: number }) {
   const { services } = useStore()
-  const normalizeUrl = (u: string) => u.replace(/\/$/, '').toLowerCase()
 
   if (widget.type === 'docker_overview') {
     if (widget.icon_url) {
@@ -55,9 +55,7 @@ export function DockerOverviewContent({ isAdmin }: { isAdmin: boolean }) {
     return () => clearInterval(t)
   }, [])
 
-  const running    = containers.filter(c => c.state === 'running').length
-  const stopped    = containers.filter(c => c.state === 'exited' || c.state === 'dead' || c.state === 'created').length
-  const restarting = containers.filter(c => c.state === 'restarting').length
+  const { running, stopped, restarting } = containerCounts(containers)
 
   const selectedContainer = containers.find(c => c.id === selectedId) ?? null
 

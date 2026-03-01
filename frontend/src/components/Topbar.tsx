@@ -6,6 +6,7 @@ import { useWidgetStore } from '../store/useWidgetStore'
 import { useDockerStore } from '../store/useDockerStore'
 import { api } from '../api'
 import type { ThemeAccent, ServerStats, AdGuardStats } from '../types'
+import { containerCounts } from '../utils'
 
 interface Props {
   page: string
@@ -37,6 +38,7 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
 
   const topbarWidgets = widgets.filter(w => w.show_in_topbar)
   const hasDockerTopbar = topbarWidgets.some(w => w.type === 'docker_overview')
+  const statsWidgetKey = topbarWidgets.filter(w => w.type !== 'docker_overview').map(w => w.id).join(',')
 
   // Server clock: fetch server time once, compute offset, tick every second
   const [serverOffset, setServerOffset] = useState(0)
@@ -59,14 +61,14 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
 
   // Poll stats for server_status + adguard_home topbar widgets
   useEffect(() => {
-    const statsWidgets = topbarWidgets.filter(w => w.type !== 'docker_overview')
-    if (statsWidgets.length === 0) return
-    statsWidgets.forEach(w => loadStats(w.id).catch(() => {}))
+    if (!statsWidgetKey) return
+    const ids = statsWidgetKey.split(',')
+    ids.forEach(id => loadStats(id).catch(() => {}))
     const interval = setInterval(() => {
-      statsWidgets.forEach(w => loadStats(w.id).catch(() => {}))
+      ids.forEach(id => loadStats(id).catch(() => {}))
     }, 15_000)
     return () => clearInterval(interval)
-  }, [topbarWidgets.filter(w => w.type !== 'docker_overview').map(w => w.id).join(',')])
+  }, [statsWidgetKey])
 
   // Poll container list for docker_overview topbar widgets
   useEffect(() => {
@@ -111,9 +113,7 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
             pct >= 90 ? 'var(--status-offline)' : pct >= 70 ? '#f59e0b' : 'var(--status-online)'
 
           if (w.type === 'docker_overview') {
-            const running    = containers.filter(c => c.state === 'running').length
-            const stopped    = containers.filter(c => c.state === 'exited' || c.state === 'dead' || c.state === 'created').length
-            const restarting = containers.filter(c => c.state === 'restarting').length
+            const { running, stopped, restarting } = containerCounts(containers)
             return (
               <div key={w.id} style={pillStyle}>
                 {label('Docker:')}
