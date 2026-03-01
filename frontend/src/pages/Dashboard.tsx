@@ -154,13 +154,27 @@ function DashboardArrCard({ item, editMode }: {
 }
 
 // ── Placeholder card ──────────────────────────────────────────────────────────
-function DashboardPlaceholderCard({ item }: { item: DashboardPlaceholderItem }) {
+function DashboardPlaceholderCard({ item, editMode }: { item: DashboardPlaceholderItem; editMode: boolean }) {
   const { removeItem } = useDashboardStore()
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id, disabled: !editMode,
+  })
   const [showHandle, setShowHandle] = useState(false)
 
   const isInstance = item.type === 'placeholder_instance'
   const isRow = item.type === 'placeholder_row'
+  const gridColumn = isRow ? '1 / -1' : isInstance ? 'span 2' : undefined
+  const minHeight = isRow ? 28 : isInstance ? 100 : 80
+
+  // Outside edit mode: invisible spacer that still occupies grid space to preserve layout
+  if (!editMode) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={{ gridColumn, minHeight, visibility: 'hidden', pointerEvents: 'none' }}
+      />
+    )
+  }
 
   const label = isRow ? 'Row' : isInstance ? 'Instance' : 'App'
 
@@ -172,7 +186,7 @@ function DashboardPlaceholderCard({ item }: { item: DashboardPlaceholderItem }) 
         transition,
         opacity: isDragging ? 0.3 : 1,
         position: 'relative',
-        gridColumn: isRow ? '1 / -1' : isInstance ? 'span 2' : undefined,
+        gridColumn,
       }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
@@ -182,7 +196,7 @@ function DashboardPlaceholderCard({ item }: { item: DashboardPlaceholderItem }) 
           border: '1.5px dashed var(--accent)',
           borderRadius: isRow ? 'var(--radius-sm)' : isInstance ? 'var(--radius-xl)' : 'var(--radius-lg)',
           background: 'var(--accent-subtle)',
-          minHeight: isRow ? 28 : isInstance ? 100 : 80,
+          minHeight,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -228,8 +242,9 @@ export function Dashboard({ onEdit }: Props) {
   const isPlaceholder = (type: string) =>
     type === 'placeholder' || type === 'placeholder_app' || type === 'placeholder_instance' || type === 'placeholder_row'
 
-  // In view mode: hide placeholders
-  const visibleItems = editMode ? items : items.filter(i => !isPlaceholder(i.type))
+  // Placeholders always stay in the DOM to preserve grid layout.
+  // Outside edit mode they render as invisible spacers (visibility:hidden).
+  const realItems = items.filter(i => !isPlaceholder(i.type))
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
@@ -249,7 +264,7 @@ export function Dashboard({ onEdit }: Props) {
     )
   }
 
-  if (!loading && visibleItems.length === 0) {
+  if (!loading && realItems.length === 0) {
     return (
       <div className="empty-state">
         <div className="empty-state-icon">⬡</div>
@@ -264,13 +279,13 @@ export function Dashboard({ onEdit }: Props) {
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={visibleItems.map(i => i.id)} strategy={rectSortingStrategy}>
+      <SortableContext items={items.map(i => i.id)} strategy={rectSortingStrategy}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div
             className="services-grid"
             style={{ gridAutoFlow: 'dense' }}
           >
-            {visibleItems.map(item => {
+            {items.map(item => {
               if (item.type === 'service') {
                 return (
                   <DashboardServiceCard
@@ -291,7 +306,7 @@ export function Dashboard({ onEdit }: Props) {
                 )
               }
               if (isPlaceholder(item.type)) {
-                return <DashboardPlaceholderCard key={item.id} item={item as DashboardPlaceholderItem} />
+                return <DashboardPlaceholderCard key={item.id} item={item as DashboardPlaceholderItem} editMode={editMode} />
               }
               return null
             })}
