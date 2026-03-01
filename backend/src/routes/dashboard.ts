@@ -19,6 +19,7 @@ interface WidgetRow {
   config: string
   position: number
   show_in_topbar: number
+  icon_url: string | null
   created_at: string
   updated_at: string
 }
@@ -129,6 +130,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
             name: widget.name,
             config: JSON.parse(widget.config ?? '{}'),
             show_in_topbar: widget.show_in_topbar === 1,
+            icon_url: widget.icon_url ?? null,
           },
         })
         continue

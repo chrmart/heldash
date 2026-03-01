@@ -6,7 +6,30 @@ import { useWidgetStore } from '../store/useWidgetStore'
 import { ServiceCard } from '../components/ServiceCard'
 import { ArrCardContent, SabnzbdCardContent } from '../components/MediaCard'
 import { AdGuardStatsView } from './WidgetsPage'
-import type { Service, DashboardItem, DashboardServiceItem, DashboardArrItem, DashboardPlaceholderItem, DashboardWidgetItem, ServerStats, AdGuardStats } from '../types'
+import type { Service, DashboardItem, DashboardServiceItem, DashboardArrItem, DashboardPlaceholderItem, DashboardWidgetItem, ServerStats, AdGuardStats, AdGuardHomeConfig } from '../types'
+
+function DashboardWidgetIcon({ widget }: { widget: DashboardWidgetItem['widget'] }) {
+  const { services } = useStore()
+  const normalizeUrl = (u: string) => u.replace(/\/$/, '').toLowerCase()
+
+  let iconUrl: string | null = null
+  let iconEmoji: string | null = null
+
+  if (widget.type === 'adguard_home') {
+    const widgetUrl = normalizeUrl((widget.config as AdGuardHomeConfig).url ?? '')
+    const match = widgetUrl
+      ? services.find(s => normalizeUrl(s.url) === widgetUrl || (s.check_url && normalizeUrl(s.check_url) === widgetUrl))
+      : undefined
+    iconUrl = match?.icon_url ?? widget.icon_url ?? null
+    iconEmoji = match?.icon ?? null
+  } else {
+    iconUrl = widget.icon_url ?? null
+  }
+
+  if (iconUrl) return <img src={iconUrl} alt="" style={{ width: 24, height: 24, objectFit: 'contain', borderRadius: 4, flexShrink: 0 }} />
+  if (iconEmoji) return <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{iconEmoji}</span>
+  return null
+}
 import {
   DndContext,
   DragEndEvent,
@@ -201,7 +224,10 @@ function DashboardWidgetCard({ item, editMode }: {
       onMouseLeave={() => setShowHandle(false)}
     >
       <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{item.widget.name}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <DashboardWidgetIcon widget={item.widget} />
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{item.widget.name}</div>
+        </div>
 
         {item.widget.type === 'adguard_home' ? (
           s ? (

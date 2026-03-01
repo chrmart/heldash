@@ -117,6 +117,8 @@ export const api = {
       req<{ ok: boolean }>(`/widgets/${id}/adguard/protection`, {
         method: 'POST', body: JSON.stringify({ enabled }),
       }),
+    uploadIcon: (id: string, data: string, contentType: string) =>
+      req<{ icon_url: string }>(`/widgets/${id}/icon`, { method: 'POST', body: JSON.stringify({ data, content_type: contentType }) }),
   },
 
   dashboard: {

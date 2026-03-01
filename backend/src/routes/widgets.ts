@@ -1,7 +1,11 @@
 import { FastifyInstance, FastifyRequest } from 'fastify'
 import { nanoid } from 'nanoid'
 import { promises as fsp } from 'fs'
+import fs from 'fs'
+import path from 'path'
 import { getDb } from '../db/database'
+
+const DATA_DIR = process.env.DATA_DIR ?? '/data'
 
 // ── DB row types ──────────────────────────────────────────────────────────────
 interface WidgetRow {
@@ -11,6 +15,7 @@ interface WidgetRow {
   config: string
   position: number
   show_in_topbar: number
+  icon_url: string | null
   created_at: string
   updated_at: string
 }
@@ -49,6 +54,7 @@ function sanitize(r: WidgetRow) {
     config,
     position: r.position,
     show_in_topbar: r.show_in_topbar === 1,
+    icon_url: r.icon_url ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at,
   }
@@ -263,8 +269,13 @@ export async function widgetsRoutes(app: FastifyInstance) {
   // DELETE /api/widgets/:id — delete + cascade (admin only)
   app.delete('/api/widgets/:id', { preHandler: [app.requireAdmin] }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    if (!db.prepare('SELECT id FROM widgets WHERE id = ?').get(id)) {
-      return reply.status(404).send({ error: 'Not found' })
+    const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined
+    if (!row) return reply.status(404).send({ error: 'Not found' })
+    // Delete icon file if present
+    if (row.icon_url) {
+      const filename = path.basename(row.icon_url)
+      const filePath = path.join(DATA_DIR, 'icons', filename)
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
     }
     db.prepare('DELETE FROM dashboard_items WHERE type = ? AND ref_id = ?').run('widget', id)
     db.prepare('DELETE FROM group_widget_visibility WHERE widget_id = ?').run(id)
@@ -292,6 +303,38 @@ export async function widgetsRoutes(app: FastifyInstance) {
       getDiskStats(disks),
     ])
     return { cpu: { load: cpu }, ram, disks: diskStats }
+  })
+
+  // POST /api/widgets/:id/icon — upload icon image (base64 JSON, admin only)
+  app.post('/api/widgets/:id/icon', { preHandler: [app.requireAdmin] }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined
+    if (!row) return reply.status(404).send({ error: 'Not found' })
+
+    const { data, content_type } = req.body as { data: string; content_type: string }
+    if (!data || !content_type) return reply.status(400).send({ error: 'data and content_type are required' })
+
+    const extMap: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/svg+xml': 'svg' }
+    const ext = extMap[content_type]
+    if (!ext) return reply.status(415).send({ error: 'Unsupported image type (PNG, JPG, SVG only)' })
+
+    const buffer = Buffer.from(data, 'base64')
+    if (buffer.length > 512 * 1024) return reply.status(413).send({ error: 'Image too large (max 512 KB)' })
+
+    const iconsDir = path.join(DATA_DIR, 'icons')
+    fs.mkdirSync(iconsDir, { recursive: true })
+
+    // Delete old icon if present
+    if (row.icon_url) {
+      const oldPath = path.join(iconsDir, path.basename(row.icon_url))
+      if (fs.existsSync(oldPath)) { try { fs.unlinkSync(oldPath) } catch { /* ignore */ } }
+    }
+
+    const filename = `widget_${id}.${ext}`
+    fs.writeFileSync(path.join(iconsDir, filename), buffer)
+    const icon_url = `/icons/${filename}`
+    db.prepare("UPDATE widgets SET icon_url = ?, updated_at = datetime('now') WHERE id = ?").run(icon_url, id)
+    return { icon_url }
   })
 
   // POST /api/widgets/:id/adguard/protection — toggle AdGuard protection (admin only)

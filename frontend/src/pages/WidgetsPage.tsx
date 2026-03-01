@@ -1,9 +1,37 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useWidgetStore } from '../store/useWidgetStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { useStore } from '../store/useStore'
-import { Trash2, Pencil, X, Check, Plus, Minus, LayoutDashboard, Shield, ShieldOff } from 'lucide-react'
+import { Trash2, Pencil, X, Check, Plus, Minus, LayoutDashboard, Shield, ShieldOff, Upload } from 'lucide-react'
 import type { Widget, ServerStatusConfig, AdGuardHomeConfig, ServerStats, AdGuardStats } from '../types'
+
+// ── Widget icon — URL-matched service icon or custom icon_url ─────────────────
+function WidgetIcon({ widget, size = 32 }: { widget: Pick<Widget, 'type' | 'config' | 'icon_url'>; size?: number }) {
+  const { services } = useStore()
+  const normalizeUrl = (u: string) => u.replace(/\/$/, '').toLowerCase()
+
+  let iconUrl: string | null = null
+  let iconEmoji: string | null = null
+
+  if (widget.type === 'adguard_home') {
+    const widgetUrl = normalizeUrl((widget.config as AdGuardHomeConfig).url ?? '')
+    const match = widgetUrl
+      ? services.find(s => normalizeUrl(s.url) === widgetUrl || (s.check_url && normalizeUrl(s.check_url) === widgetUrl))
+      : undefined
+    iconUrl = match?.icon_url ?? widget.icon_url ?? null
+    iconEmoji = match?.icon ?? null
+  } else {
+    iconUrl = widget.icon_url ?? null
+  }
+
+  if (iconUrl) {
+    return <img src={iconUrl} alt="" style={{ width: size, height: size, objectFit: 'contain', borderRadius: 6, flexShrink: 0 }} />
+  }
+  if (iconEmoji) {
+    return <span style={{ fontSize: size * 0.7, lineHeight: 1, flexShrink: 0 }}>{iconEmoji}</span>
+  }
+  return null
+}
 
 // ── Disk config row ───────────────────────────────────────────────────────────
 function DiskRow({
@@ -50,7 +78,7 @@ function WidgetForm({
   onCancel,
 }: {
   initial?: Widget
-  onSave: (data: { name: string; type: string; config: object; show_in_topbar: boolean }) => Promise<void>
+  onSave: (data: { name: string; type: string; config: object; show_in_topbar: boolean; iconData?: { data: string; contentType: string } | null }) => Promise<void>
   onCancel: () => void
 }) {
   const isEdit = !!initial
@@ -71,8 +99,23 @@ function WidgetForm({
   const [agUsername, setAgUsername] = useState(existingAdGuard?.username ?? '')
   const [agPassword, setAgPassword] = useState('')  // blank = keep existing on edit
 
+  // icon
+  const [pendingIcon, setPendingIcon] = useState<{ data: string; contentType: string; preview: string } | null>(null)
+  const iconInputRef = useRef<HTMLInputElement>(null)
+
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const handleIconFile = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = e => {
+      const dataUrl = e.target?.result as string
+      const [header, data] = dataUrl.split(',')
+      const contentType = header.split(':')[1].split(';')[0]
+      setPendingIcon({ data, contentType, preview: dataUrl })
+    }
+    reader.readAsDataURL(file)
+  }
 
   // Update default name when type changes (only on create)
   const handleTypeChange = (t: 'server_status' | 'adguard_home') => {
@@ -98,7 +141,7 @@ function WidgetForm({
 
     setSaving(true)
     try {
-      await onSave({ name: name.trim(), type, config, show_in_topbar: showTopbar })
+      await onSave({ name: name.trim(), type, config, show_in_topbar: showTopbar, iconData: pendingIcon ? { data: pendingIcon.data, contentType: pendingIcon.contentType } : null })
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -141,6 +184,48 @@ function WidgetForm({
             onChange={e => setName(e.target.value)}
             placeholder={type === 'adguard_home' ? 'AdGuard Home' : 'Server Status'}
           />
+        </div>
+
+        {/* Icon — only shown when no URL-match is expected (server_status) or as override */}
+        <div>
+          <label className="form-label" style={{ fontSize: 11 }}>
+            Icon
+            {type === 'adguard_home' && <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>(auto-matched from app URL, or upload custom)</span>}
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {(pendingIcon?.preview ?? (isEdit ? initial?.icon_url : null)) && (
+              <img
+                src={pendingIcon?.preview ?? initial?.icon_url ?? ''}
+                alt=""
+                style={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 6, border: '1px solid var(--glass-border)' }}
+              />
+            )}
+            <input
+              ref={iconInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml"
+              style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleIconFile(f) }}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => iconInputRef.current?.click()}
+              style={{ gap: 4, fontSize: 12 }}
+            >
+              <Upload size={12} /> {pendingIcon || (isEdit && initial?.icon_url) ? 'Change Icon' : 'Upload Icon'}
+            </button>
+            {(pendingIcon || (isEdit && initial?.icon_url)) && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setPendingIcon(null)}
+                style={{ fontSize: 12, color: 'var(--text-muted)' }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 16 }}>
@@ -268,11 +353,14 @@ function WidgetCard({
   return (
     <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14, position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>{widget.name}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8 }}>
-            <span>{widget.type === 'adguard_home' ? 'AdGuard Home' : 'Server Status'}</span>
-            {widget.show_in_topbar && <span style={{ color: 'var(--accent)' }}>· Topbar</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <WidgetIcon widget={widget} size={32} />
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{widget.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8 }}>
+              <span>{widget.type === 'adguard_home' ? 'AdGuard Home' : 'Server Status'}</span>
+              {widget.show_in_topbar && <span style={{ color: 'var(--accent)' }}>· Topbar</span>}
+            </div>
           </div>
         </div>
         {isAdmin && (
@@ -427,7 +515,7 @@ interface Props {
 
 export function WidgetsPage({ showAddForm, onFormClose }: Props) {
   const { isAdmin } = useStore()
-  const { widgets, loadWidgets, createWidget, updateWidget, deleteWidget } = useWidgetStore()
+  const { widgets, loadWidgets, createWidget, updateWidget, deleteWidget, uploadWidgetIcon } = useWidgetStore()
   const { isOnDashboard, addWidget, removeByRef } = useDashboardStore()
   const [editingId, setEditingId] = useState<string | null>(null)
 
@@ -435,13 +523,17 @@ export function WidgetsPage({ showAddForm, onFormClose }: Props) {
     loadWidgets().catch(() => {})
   }, [])
 
-  const handleCreate = async (data: { name: string; type: string; config: object; show_in_topbar: boolean }) => {
-    await createWidget(data)
+  const handleCreate = async (data: { name: string; type: string; config: object; show_in_topbar: boolean; iconData?: { data: string; contentType: string } | null }) => {
+    const { iconData, ...widgetData } = data
+    const id = await createWidget(widgetData)
+    if (iconData) await uploadWidgetIcon(id, iconData.data, iconData.contentType)
     onFormClose()
   }
 
-  const handleUpdate = async (id: string, data: { name: string; type: string; config: object; show_in_topbar: boolean }) => {
-    await updateWidget(id, data)
+  const handleUpdate = async (id: string, data: { name: string; type: string; config: object; show_in_topbar: boolean; iconData?: { data: string; contentType: string } | null }) => {
+    const { iconData, ...widgetData } = data
+    await updateWidget(id, widgetData)
+    if (iconData) await uploadWidgetIcon(id, iconData.data, iconData.contentType)
     setEditingId(null)
   }
 

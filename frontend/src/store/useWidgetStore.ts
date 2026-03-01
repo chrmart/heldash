@@ -11,6 +11,7 @@ interface WidgetState {
   createWidget: (data: { type: string; name: string; config: object; show_in_topbar?: boolean }) => Promise<string>
   updateWidget: (id: string, data: Partial<{ name: string; config: object; show_in_topbar: boolean; position: number }>) => Promise<void>
   deleteWidget: (id: string) => Promise<void>
+  uploadWidgetIcon: (id: string, data: string, contentType: string) => Promise<void>
   loadStats: (id: string) => Promise<void>
   setAdGuardProtection: (id: string, enabled: boolean) => Promise<void>
 }
@@ -47,6 +48,11 @@ export const useWidgetStore = create<WidgetState>((set, get) => ({
       widgets: state.widgets.filter(w => w.id !== id),
       stats: Object.fromEntries(Object.entries(state.stats).filter(([k]) => k !== id)),
     }))
+  },
+
+  uploadWidgetIcon: async (id, data, contentType) => {
+    const { icon_url } = await api.widgets.uploadIcon(id, data, contentType)
+    set(state => ({ widgets: state.widgets.map(w => w.id === id ? { ...w, icon_url } : w) }))
   },
 
   loadStats: async (id) => {

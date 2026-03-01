@@ -106,6 +106,7 @@ export interface Widget {
   config: ServerStatusConfig | AdGuardHomeConfig
   position: number
   show_in_topbar: boolean
+  icon_url: string | null
   created_at: string
   updated_at: string
 }
@@ -130,7 +131,7 @@ export interface DashboardWidgetItem {
   type: 'widget'
   position: number
   ref_id: string
-  widget: Pick<Widget, 'id' | 'type' | 'name' | 'config' | 'show_in_topbar'>
+  widget: Pick<Widget, 'id' | 'type' | 'name' | 'config' | 'show_in_topbar' | 'icon_url'>
 }
 
 export type DashboardItem = DashboardServiceItem | DashboardArrItem | DashboardPlaceholderItem | DashboardWidgetItem

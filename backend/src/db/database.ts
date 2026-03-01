@@ -39,6 +39,8 @@ function runMigrations(db: Database.Database) {
     'ALTER TABLE users ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime(\'now\'))',
     // Per-user dashboard: existing items become the shared guest dashboard
     'ALTER TABLE dashboard_items ADD COLUMN owner_id TEXT NOT NULL DEFAULT \'guest\'',
+    // Widget icons
+    'ALTER TABLE widgets ADD COLUMN icon_url TEXT',
   ]
   for (const sql of migrations) {
     try {
