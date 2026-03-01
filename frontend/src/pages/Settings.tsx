@@ -17,7 +17,7 @@ function TabBar({ active, onChange }: { active: SettingsTab; onChange: (t: Setti
     { id: 'oidc',    label: 'OIDC / SSO', icon: <KeyRound size={13} /> },
   ]
   return (
-    <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2 }}>
+    <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2, alignSelf: 'center' }}>
       {tabs.map(t => (
         <button
           key={t.id}
