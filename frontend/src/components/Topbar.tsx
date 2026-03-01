@@ -77,7 +77,7 @@ export function Topbar({ page, onAddService, onAddInstance, onCheckAll, checking
             Add Instance
           </button>
         )}
-        {isAdmin && (
+        {isAdmin && (page === 'dashboard' || page === 'services') && (
           <button className="btn btn-primary" onClick={onAddService} style={{ gap: 6 }}>
             <Plus size={16} />
             Add App
