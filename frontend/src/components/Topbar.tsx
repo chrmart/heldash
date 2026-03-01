@@ -1,5 +1,6 @@
 import { Sun, Moon, RefreshCw, Plus, LogIn, LogOut } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { useDashboardStore } from '../store/useDashboardStore'
 import type { ThemeAccent } from '../types'
 
 interface Props {
@@ -19,6 +20,7 @@ const ACCENTS: { value: ThemeAccent; label: string; color: string }[] = [
 
 export function Topbar({ page, onAddService, onAddInstance, onCheckAll, checking, onLogin }: Props) {
   const { settings, setThemeMode, setThemeAccent, isAuthenticated, isAdmin, authUser, logout, loadAll } = useStore()
+  const { loadDashboard } = useDashboardStore()
   const mode = settings?.theme_mode ?? 'dark'
   const accent = settings?.theme_accent ?? 'cyan'
 
@@ -77,7 +79,7 @@ export function Topbar({ page, onAddService, onAddInstance, onCheckAll, checking
             Add Instance
           </button>
         )}
-        {isAdmin && (page === 'dashboard' || page === 'services') && (
+        {isAdmin && page === 'services' && (
           <button className="btn btn-primary" onClick={onAddService} style={{ gap: 6 }}>
             <Plus size={16} />
             Add App
@@ -92,7 +94,7 @@ export function Topbar({ page, onAddService, onAddInstance, onCheckAll, checking
             <button
               className="btn btn-ghost btn-icon"
               data-tooltip="Logout"
-              onClick={() => logout().then(() => loadAll())}
+              onClick={() => logout().then(() => Promise.all([loadAll(), loadDashboard()]))}
             >
               <LogOut size={16} />
             </button>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
+import { useDashboardStore } from '../store/useDashboardStore'
 import { X, LogIn } from 'lucide-react'
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 
 export function LoginModal({ onClose }: Props) {
   const { login, loadAll } = useStore()
+  const { loadDashboard } = useDashboardStore()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -20,7 +22,7 @@ export function LoginModal({ onClose }: Props) {
     setLoading(true)
     try {
       await login(username.trim(), password)
-      await loadAll() // reload services filtered for the now-logged-in user
+      await Promise.all([loadAll(), loadDashboard()])
       onClose()
     } catch (err: any) {
       setError(err.message ?? 'Login failed')

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
+import { useDashboardStore } from '../store/useDashboardStore'
 import { ServiceCard } from '../components/ServiceCard'
-import type { Service, Group } from '../types'
+import type { Service, DashboardItem, DashboardServiceItem, DashboardArrItem, DashboardPlaceholderItem } from '../types'
 import {
   DndContext,
   DragEndEvent,
@@ -13,244 +14,305 @@ import {
 import {
   SortableContext,
   useSortable,
-  verticalListSortingStrategy,
   rectSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical } from 'lucide-react'
+import { GripVertical, X, Plus, Pencil, ExternalLink } from 'lucide-react'
 
-interface Props {
-  onEdit: (service: Service) => void
+// Accent colors for arr instance type badges
+const TYPE_COLORS: Record<string, string> = {
+  radarr: '#f59e0b',
+  sonarr: '#6366f1',
+  prowlarr: '#8b5cf6',
+  sabnzbd: '#22c55e',
 }
 
-// ── Sortable Service Card ────────────────────────────────────────────────────
-function SortableServiceCard({ service, onEdit, isAdmin }: { service: Service; onEdit: (s: Service) => void; isAdmin: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: service.id, disabled: !isAdmin })
+// ── Shared drag/remove overlay ────────────────────────────────────────────────
+function EditOverlay({
+  dragProps,
+  showHandle,
+  isDragging,
+  onRemove,
+}: {
+  dragProps: object
+  showHandle: boolean
+  isDragging: boolean
+  onRemove: () => void
+}) {
+  return (
+    <>
+      <div
+        {...dragProps}
+        style={{
+          position: 'absolute', left: 6, top: 6,
+          opacity: showHandle && !isDragging ? 0.8 : 0,
+          transition: 'opacity 150ms ease',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          color: 'var(--text-muted)',
+          zIndex: 10,
+          width: 20, height: 20,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: 4,
+          background: 'var(--glass-bg)',
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        <GripVertical size={12} />
+      </div>
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove() }}
+        title="Remove from dashboard"
+        style={{
+          position: 'absolute', right: 6, top: 6,
+          opacity: showHandle ? 0.8 : 0,
+          transition: 'opacity 150ms ease',
+          cursor: 'pointer',
+          color: 'var(--text-muted)',
+          zIndex: 10,
+          width: 20, height: 20,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: 4,
+          background: 'var(--glass-bg)',
+          backdropFilter: 'blur(8px)',
+          border: 'none',
+          padding: 0,
+        }}
+      >
+        <X size={11} />
+      </button>
+    </>
+  )
+}
+
+// ── Service card wrapper ──────────────────────────────────────────────────────
+function DashboardServiceCard({ item, onEdit, editMode }: {
+  item: DashboardServiceItem
+  onEdit: (s: Service) => void
+  editMode: boolean
+}) {
+  const { removeItem } = useDashboardStore()
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+    disabled: !editMode,
+  })
   const [showHandle, setShowHandle] = useState(false)
 
   return (
     <div
       ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-        position: 'relative',
-      }}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
     >
-      <ServiceCard service={service} onEdit={onEdit} />
-      {isAdmin && (
-        <div
-          {...attributes}
-          {...listeners}
-          style={{
-            position: 'absolute',
-            left: 6,
-            bottom: 6,
-            opacity: showHandle && !isDragging ? 0.5 : 0,
-            transition: 'opacity 150ms ease',
-            cursor: isDragging ? 'grabbing' : 'grab',
-            color: 'var(--text-muted)',
-            zIndex: 10,
-            width: 18,
-            height: 18,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 4,
-          }}
-        >
-          <GripVertical size={11} />
-        </div>
+      <ServiceCard service={item.service} onEdit={onEdit} hideAdminActions={editMode} />
+      {editMode && (
+        <EditOverlay
+          dragProps={{ ...attributes, ...listeners }}
+          showHandle={showHandle}
+          isDragging={isDragging}
+          onRemove={() => removeItem(item.id)}
+        />
       )}
     </div>
   )
 }
 
-// ── Sortable Group Section ───────────────────────────────────────────────────
-function SortableGroupSection({
-  group,
-  services,
-  onEdit,
-  onReorder,
-  isAdmin,
-}: {
-  group: Group
-  services: Service[]
-  onEdit: (s: Service) => void
-  onReorder: (groupId: string | null, orderedIds: string[]) => void
-  isAdmin: boolean
+// ── Arr instance card ─────────────────────────────────────────────────────────
+function DashboardArrCard({ item, editMode }: {
+  item: DashboardArrItem
+  editMode: boolean
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: group.id, disabled: !isAdmin })
+  const { removeItem } = useDashboardStore()
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+    disabled: !editMode,
+  })
   const [showHandle, setShowHandle] = useState(false)
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
-
-  const handleServiceDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const oldIndex = services.findIndex(s => s.id === active.id)
-    const newIndex = services.findIndex(s => s.id === over.id)
-    if (oldIndex === -1 || newIndex === -1) return
-    const newOrder = arrayMove(services, oldIndex, newIndex)
-    onReorder(group.id, newOrder.map(s => s.id))
-  }
+  const color = TYPE_COLORS[item.instance.type] ?? 'var(--accent)'
 
   return (
     <div
       ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-        marginBottom: 32,
-      }}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        {isAdmin && (
-          <div
-            {...attributes}
-            {...listeners}
-            style={{
-              cursor: isDragging ? 'grabbing' : 'grab',
-              opacity: showHandle ? 0.5 : 0,
-              transition: 'opacity 150ms ease',
-              color: 'var(--text-muted)',
-              display: 'flex',
-              alignItems: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <GripVertical size={14} />
-          </div>
-        )}
-        {group.icon && <span>{group.icon}</span>}
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-          {group.name}
-        </span>
-        <div className="accent-strip" style={{ flex: 1 }} />
-      </div>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleServiceDragEnd}>
-        <SortableContext items={services.map(s => s.id)} strategy={rectSortingStrategy}>
-          <div className="services-grid">
-            {services.map(s => (
-              <SortableServiceCard key={s.id} service={s} onEdit={onEdit} isAdmin={isAdmin} />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+      <a
+        href={item.instance.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="service-card glass"
+      >
+        <div className="service-card-header">
+          <span style={{
+            display: 'inline-block',
+            padding: '2px 7px',
+            borderRadius: 4,
+            background: `${color}22`,
+            color,
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+          }}>
+            {item.instance.type}
+          </span>
+          <ExternalLink size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+        </div>
+        <div>
+          <div className="service-name">{item.instance.name}</div>
+          <div className="service-url">{item.instance.url.replace(/^https?:\/\//, '')}</div>
+        </div>
+      </a>
+      {editMode && (
+        <EditOverlay
+          dragProps={{ ...attributes, ...listeners }}
+          showHandle={showHandle}
+          isDragging={isDragging}
+          onRemove={() => removeItem(item.id)}
+        />
+      )}
     </div>
   )
 }
 
-// ── Dashboard ────────────────────────────────────────────────────────────────
-export function Dashboard({ onEdit }: Props) {
-  const { services, groups, reorderGroups, reorderServices, isAdmin } = useStore()
-  const [filter, setFilter] = useState('')
+// ── Placeholder card ──────────────────────────────────────────────────────────
+function DashboardPlaceholderCard({ item }: { item: DashboardPlaceholderItem }) {
+  const { removeItem } = useDashboardStore()
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
+  const [showHandle, setShowHandle] = useState(false)
 
-  const filtered = services.filter(s =>
-    s.name.toLowerCase().includes(filter.toLowerCase()) ||
-    s.description?.toLowerCase().includes(filter.toLowerCase())
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
+      onMouseEnter={() => setShowHandle(true)}
+      onMouseLeave={() => setShowHandle(false)}
+    >
+      <div
+        className="service-card"
+        style={{
+          border: '1.5px dashed var(--glass-border)',
+          background: 'transparent',
+          backdropFilter: 'none',
+          boxShadow: 'none',
+          cursor: 'default',
+          opacity: 0.45,
+          minHeight: 80,
+        }}
+      />
+      <EditOverlay
+        dragProps={{ ...attributes, ...listeners }}
+        showHandle={showHandle}
+        isDragging={isDragging}
+        onRemove={() => removeItem(item.id)}
+      />
+    </div>
   )
+}
 
-  const sortedGroups = [...groups].sort((a, b) => a.position - b.position)
-  const grouped = sortedGroups.map(g => ({
-    group: g,
-    services: filtered.filter(s => s.group_id === g.id).sort((a, b) => a.position_x - b.position_x),
-  })).filter(g => g.services.length > 0)
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+interface Props {
+  onEdit: (service: Service) => void
+}
 
-  const ungrouped = filtered.filter(s => !s.group_id).sort((a, b) => a.position_x - b.position_x)
+export function Dashboard({ onEdit }: Props) {
+  const { isAdmin } = useStore()
+  const { items, editMode, loading, setEditMode, addPlaceholder, reorder } = useDashboardStore()
 
-  const groupSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
-  const ungroupedSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
-  const handleGroupDragEnd = (event: DragEndEvent) => {
+  // In display mode: hide placeholders
+  const visibleItems = editMode ? items : items.filter(i => i.type !== 'placeholder')
+
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    const groupIds = sortedGroups.map(g => g.id)
-    const oldIndex = groupIds.indexOf(active.id as string)
-    const newIndex = groupIds.indexOf(over.id as string)
+    const ids = items.map(i => i.id)
+    const oldIndex = ids.indexOf(active.id as string)
+    const newIndex = ids.indexOf(over.id as string)
     if (oldIndex === -1 || newIndex === -1) return
-    reorderGroups(arrayMove(groupIds, oldIndex, newIndex))
+    reorder(arrayMove(ids, oldIndex, newIndex))
   }
 
-  const handleUngroupedDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const oldIndex = ungrouped.findIndex(s => s.id === active.id)
-    const newIndex = ungrouped.findIndex(s => s.id === over.id)
-    if (oldIndex === -1 || newIndex === -1) return
-    const newOrder = arrayMove(ungrouped, oldIndex, newIndex)
-    reorderServices(null, newOrder.map(s => s.id))
-  }
-
-  if (services.length === 0) {
+  if (loading && items.length === 0) {
     return (
-      <div className="empty-state">
-        <div className="empty-state-icon">⬡</div>
-        <div className="empty-state-text">No apps yet.<br />Add your first app with the button above.</div>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+        <div className="spinner" style={{ width: 24, height: 24, borderWidth: 2 }} />
       </div>
     )
   }
 
   return (
     <div>
-      {/* Search */}
-      {services.length > 4 && (
-        <input
-          className="form-input"
-          placeholder="Search services..."
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          style={{ marginBottom: 24, maxWidth: 320 }}
-        />
-      )}
-
-      {/* Grouped sections with sortable groups */}
-      {grouped.length > 0 && (
-        <DndContext sensors={groupSensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd}>
-          <SortableContext items={grouped.map(g => g.group.id)} strategy={verticalListSortingStrategy}>
-            {grouped.map(({ group, services: gs }) => (
-              <SortableGroupSection
-                key={group.id}
-                group={group}
-                services={gs}
-                onEdit={onEdit}
-                onReorder={reorderServices}
-                isAdmin={isAdmin}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
-      )}
-
-      {/* Ungrouped services */}
-      {ungrouped.length > 0 && (
-        <div>
-          {grouped.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                Other
-              </span>
-              <div className="accent-strip" style={{ flex: 1 }} />
-            </div>
+      {/* Edit mode toolbar (admin only) */}
+      {isAdmin && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <button
+            className={editMode ? 'btn btn-primary' : 'btn btn-ghost'}
+            style={{ gap: 6, fontSize: 12 }}
+            onClick={() => setEditMode(!editMode)}
+          >
+            <Pencil size={13} />
+            {editMode ? 'Done' : 'Edit Dashboard'}
+          </button>
+          {editMode && (
+            <button
+              className="btn btn-ghost"
+              style={{ gap: 6, fontSize: 12 }}
+              onClick={addPlaceholder}
+            >
+              <Plus size={13} />
+              Add Placeholder
+            </button>
           )}
-          <DndContext sensors={ungroupedSensors} collisionDetection={closestCenter} onDragEnd={handleUngroupedDragEnd}>
-            <SortableContext items={ungrouped.map(s => s.id)} strategy={rectSortingStrategy}>
-              <div className="services-grid">
-                {ungrouped.map(s => (
-                  <SortableServiceCard key={s.id} service={s} onEdit={onEdit} isAdmin={isAdmin} />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
         </div>
       )}
+
+      {visibleItems.length === 0 && !loading && (
+        <div className="empty-state">
+          <div className="empty-state-icon">⬡</div>
+          <div className="empty-state-text">
+            {isAdmin
+              ? 'Dashboard is empty.\nEnable "Show on Dashboard" in app or instance settings.'
+              : 'No items on the dashboard yet.'}
+          </div>
+        </div>
+      )}
+
+      {/* Sortable flat grid */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={visibleItems.map(i => i.id)} strategy={rectSortingStrategy}>
+          <div className="services-grid">
+            {visibleItems.map(item => {
+              if (item.type === 'service') {
+                return (
+                  <DashboardServiceCard
+                    key={item.id}
+                    item={item as DashboardServiceItem}
+                    onEdit={onEdit}
+                    editMode={editMode}
+                  />
+                )
+              }
+              if (item.type === 'arr_instance') {
+                return (
+                  <DashboardArrCard
+                    key={item.id}
+                    item={item as DashboardArrItem}
+                    editMode={editMode}
+                  />
+                )
+              }
+              if (item.type === 'placeholder') {
+                return <DashboardPlaceholderCard key={item.id} item={item as DashboardPlaceholderItem} />
+              }
+              return null
+            })}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
   )
 }

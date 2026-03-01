@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
+import { useDashboardStore } from '../store/useDashboardStore'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
@@ -448,13 +449,17 @@ function InstanceForm({
   onCancel,
 }: {
   initial?: Partial<ArrInstance> & { api_key?: string }
-  onSave: (data: { type: string; name: string; url: string; api_key: string }) => Promise<void>
+  onSave: (data: { type: string; name: string; url: string; api_key: string; showOnDashboard: boolean }) => Promise<void>
   onCancel: () => void
 }) {
+  const { isOnDashboard } = useDashboardStore()
   const [type, setType] = useState(initial?.type ?? 'radarr')
   const [name, setName] = useState(initial?.name ?? '')
   const [url, setUrl] = useState(initial?.url ?? '')
   const [apiKey, setApiKey] = useState('')
+  const [showOnDashboard, setShowOnDashboard] = useState(
+    initial?.id ? isOnDashboard('arr_instance', initial.id) : false
+  )
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -465,7 +470,7 @@ function InstanceForm({
     if (!apiKey.trim() && !initial?.id) return setError('API Key required')
     setSaving(true)
     try {
-      await onSave({ type, name: name.trim(), url: url.trim(), api_key: apiKey.trim() })
+      await onSave({ type, name: name.trim(), url: url.trim(), api_key: apiKey.trim(), showOnDashboard })
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -486,6 +491,10 @@ function InstanceForm({
       </div>
       <input className="form-input" placeholder="URL (e.g. http://192.168.1.100:7878) *" value={url} onChange={e => setUrl(e.target.value)} />
       <input className="form-input" type="password" placeholder={initial?.id ? 'API Key (leave empty to keep)' : 'API Key *'} value={apiKey} onChange={e => setApiKey(e.target.value)} />
+      <label className="form-toggle">
+        <input type="checkbox" checked={showOnDashboard} onChange={e => setShowOnDashboard(e.target.checked)} />
+        <span className="form-label" style={{ margin: 0, fontSize: 13 }}>Show on Dashboard</span>
+      </label>
       {error && <div style={{ fontSize: 12, color: 'var(--status-offline)' }}>{error}</div>}
       <div style={{ display: 'flex', gap: 6 }}>
         <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving} style={{ fontSize: 12, gap: 4 }}>
@@ -509,6 +518,7 @@ interface Props {
 export function MediaPage({ showAddForm: showFromParent, onFormClose }: Props) {
   const { isAdmin } = useStore()
   const { instances, loadInstances, loadAllStats, createInstance, updateInstance, deleteInstance, reorderInstances } = useArrStore()
+  const { addArrInstance, removeByRef, isOnDashboard, getDashboardItemId, removeItem } = useDashboardStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -547,14 +557,23 @@ export function MediaPage({ showAddForm: showFromParent, onFormClose }: Props) {
     setRefreshing(false)
   }
 
-  const handleCreate = async (data: { type: string; name: string; url: string; api_key: string }) => {
-    await createInstance({ ...data, position: instances.length })
+  const handleCreate = async (data: { type: string; name: string; url: string; api_key: string; showOnDashboard: boolean }) => {
+    const newId = await createInstance({ type: data.type, name: data.name, url: data.url, api_key: data.api_key, position: instances.length })
+    if (data.showOnDashboard) await addArrInstance(newId).catch(() => {})
     setShowAddForm(false)
     await loadAllStats()
   }
 
-  const handleUpdate = async (id: string, data: { type: string; name: string; url: string; api_key: string }) => {
+  const handleUpdate = async (id: string, data: { type: string; name: string; url: string; api_key: string; showOnDashboard: boolean }) => {
     await updateInstance(id, { name: data.name, url: data.url, ...(data.api_key ? { api_key: data.api_key } : {}) })
+    const wasOnDashboard = isOnDashboard('arr_instance', id)
+    if (data.showOnDashboard && !wasOnDashboard) {
+      await addArrInstance(id).catch(() => {})
+    } else if (!data.showOnDashboard && wasOnDashboard) {
+      const itemId = getDashboardItemId('arr_instance', id)
+      if (itemId) await removeItem(itemId).catch(() => {})
+      else await removeByRef('arr_instance', id).catch(() => {})
+    }
     setEditingId(null)
   }
 
@@ -592,6 +611,7 @@ export function MediaPage({ showAddForm: showFromParent, onFormClose }: Props) {
                     onSave={(data) => handleUpdate(inst.id, data)}
                     onCancel={() => setEditingId(null)}
                   />
+
                 )
                 : (
                   <SortableInstanceCard

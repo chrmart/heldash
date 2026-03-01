@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from './store/useStore'
+import { useDashboardStore } from './store/useDashboardStore'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { Dashboard } from './pages/Dashboard'
@@ -13,6 +14,7 @@ import type { Service } from './types'
 
 export default function App() {
   const { loadAll, checkAllServices, checkAuth, settings, authReady, needsSetup, isAdmin } = useStore()
+  const { loadDashboard } = useDashboardStore()
   const [page, setPage] = useState('dashboard')
   const [showModal, setShowModal] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
@@ -21,7 +23,7 @@ export default function App() {
   const [showAddInstance, setShowAddInstance] = useState(false)
 
   useEffect(() => {
-    checkAuth().then(() => loadAll())
+    checkAuth().then(() => Promise.all([loadAll(), loadDashboard()]))
   }, [])
 
   // Apply theme from settings

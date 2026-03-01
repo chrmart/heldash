@@ -156,6 +156,15 @@ function applySchema(db: Database.Database) {
       PRIMARY KEY (group_id, instance_id)
     );
 
+    -- Dashboard items — unified ordered list (services, arr instances, placeholders)
+    CREATE TABLE IF NOT EXISTS dashboard_items (
+      id         TEXT PRIMARY KEY,
+      type       TEXT NOT NULL,    -- 'service' | 'arr_instance' | 'placeholder'
+      ref_id     TEXT,             -- NULL for placeholders
+      position   INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- Insert default settings if not exist
     INSERT OR IGNORE INTO settings (key, value) VALUES
       ('theme_mode', '"dark"'),

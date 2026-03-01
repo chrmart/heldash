@@ -22,7 +22,7 @@ interface ArrState {
   loadSabQueue: (id: string) => Promise<void>
   loadHistory: (id: string) => Promise<void>
 
-  createInstance: (data: { type: string; name: string; url: string; api_key: string }) => Promise<void>
+  createInstance: (data: { type: string; name: string; url: string; api_key: string }) => Promise<string>
   updateInstance: (id: string, data: { name?: string; url?: string; api_key?: string; enabled?: boolean; position?: number }) => Promise<void>
   deleteInstance: (id: string) => Promise<void>
   reorderInstances: (orderedIds: string[]) => Promise<void>
@@ -99,6 +99,7 @@ export const useArrStore = create<ArrState>((set, get) => ({
   createInstance: async (data) => {
     const instance = await api.arr.instances.create(data)
     set(state => ({ instances: [...state.instances, instance] }))
+    return instance.id
   },
 
   updateInstance: async (id, data) => {

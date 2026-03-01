@@ -60,6 +60,37 @@ export interface UserRecord {
   created_at: string
 }
 
+// ── Dashboard item types ──────────────────────────────────────────────────────
+export interface DashboardServiceItem {
+  id: string
+  type: 'service'
+  position: number
+  ref_id: string
+  service: Service
+}
+
+export interface DashboardArrItem {
+  id: string
+  type: 'arr_instance'
+  position: number
+  ref_id: string
+  instance: {
+    id: string
+    type: string
+    name: string
+    url: string
+    enabled: boolean
+  }
+}
+
+export interface DashboardPlaceholderItem {
+  id: string
+  type: 'placeholder'
+  position: number
+}
+
+export type DashboardItem = DashboardServiceItem | DashboardArrItem | DashboardPlaceholderItem
+
 export interface UserGroup {
   id: string
   name: string

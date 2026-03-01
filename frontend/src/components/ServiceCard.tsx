@@ -6,9 +6,10 @@ import { RefreshCw, Pencil, Trash2 } from 'lucide-react'
 interface Props {
   service: Service
   onEdit: (service: Service) => void
+  hideAdminActions?: boolean
 }
 
-export function ServiceCard({ service, onEdit }: Props) {
+export function ServiceCard({ service, onEdit, hideAdminActions }: Props) {
   const { checkService, deleteService, isAdmin } = useStore()
   const [checking, setChecking] = useState(false)
   const [showActions, setShowActions] = useState(false)
@@ -57,7 +58,7 @@ export function ServiceCard({ service, onEdit }: Props) {
         flex-direction: column-reverse → JSX order [Delete, Edit, Refresh]
         renders as: Refresh (top), Edit (middle), Delete (bottom)
       */}
-      {isAdmin && (
+      {isAdmin && !hideAdminActions && (
         <div style={{
           position: 'absolute',
           right: 6,

@@ -1,4 +1,4 @@
-import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup } from './types'
+import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem } from './types'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData } from './types/arr'
 
 const BASE = '/api'
@@ -93,6 +93,19 @@ export const api = {
     calendar: (id: string) => req<ArrCalendarItem[]>(`/arr/${id}/calendar`),
     indexers: (id: string) => req<ProwlarrIndexer[]>(`/arr/${id}/indexers`),
     history: (id: string) => req<SabnzbdHistoryData>(`/arr/${id}/history`),
+  },
+
+  dashboard: {
+    list: () => req<DashboardItem[]>('/dashboard'),
+    addItem: (type: string, ref_id?: string) =>
+      req<{ id: string; type: string; ref_id: string | null; position: number }>(
+        '/dashboard/items', { method: 'POST', body: JSON.stringify({ type, ref_id }) }
+      ),
+    removeItem: (id: string) => req<void>(`/dashboard/items/${id}`, { method: 'DELETE' }),
+    removeByRef: (type: string, ref_id: string) =>
+      req<void>('/dashboard/items/by-ref', { method: 'DELETE', body: JSON.stringify({ type, ref_id }) }),
+    reorder: (ids: string[]) =>
+      req<{ ok: boolean }>('/dashboard/reorder', { method: 'PATCH', body: JSON.stringify({ ids }) }),
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Service } from '../types'
 import { useStore } from '../store/useStore'
+import { useDashboardStore } from '../store/useDashboardStore'
 import { X, Upload } from 'lucide-react'
 
 interface Props {
@@ -21,7 +22,9 @@ const defaultForm = {
 
 export function ServiceModal({ service, onClose }: Props) {
   const { createService, updateService, uploadServiceIcon, groups } = useStore()
+  const { isOnDashboard, getDashboardItemId, addService, removeItem, removeByRef } = useDashboardStore()
   const [form, setForm] = useState(defaultForm)
+  const [showOnDashboard, setShowOnDashboard] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -43,8 +46,10 @@ export function ServiceModal({ service, onClose }: Props) {
         check_url: service.check_url ?? '',
         check_interval: service.check_interval ?? 60,
       })
+      setShowOnDashboard(isOnDashboard('service', service.id))
     } else {
       setForm(defaultForm)
+      setShowOnDashboard(false)
     }
     setIconFile(null)
     setIconPreview(null)
@@ -106,6 +111,16 @@ export function ServiceModal({ service, onClose }: Props) {
 
       if (iconFile) {
         await uploadServiceIcon(serviceId, iconFile)
+      }
+
+      // Sync dashboard membership
+      const wasOnDashboard = service ? isOnDashboard('service', service.id) : false
+      if (showOnDashboard && !wasOnDashboard) {
+        await addService(serviceId)
+      } else if (!showOnDashboard && wasOnDashboard && service) {
+        const itemId = getDashboardItemId('service', service.id)
+        if (itemId) await removeItem(itemId)
+        else await removeByRef('service', service.id)
       }
 
       onClose()
@@ -199,15 +214,27 @@ export function ServiceModal({ service, onClose }: Props) {
           <input className="form-input" value={form.description} onChange={e => set('description', e.target.value)} placeholder="Movie management" />
         </div>
 
-        <div className="form-group">
-          <label className="form-toggle">
-            <input
-              type="checkbox"
-              checked={form.check_enabled}
-              onChange={e => set('check_enabled', e.target.checked)}
-            />
-            <span className="form-label" style={{ margin: 0 }}>Enable Status Check</span>
-          </label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="form-group">
+            <label className="form-toggle">
+              <input
+                type="checkbox"
+                checked={form.check_enabled}
+                onChange={e => set('check_enabled', e.target.checked)}
+              />
+              <span className="form-label" style={{ margin: 0 }}>Enable Status Check</span>
+            </label>
+          </div>
+          <div className="form-group">
+            <label className="form-toggle">
+              <input
+                type="checkbox"
+                checked={showOnDashboard}
+                onChange={e => setShowOnDashboard(e.target.checked)}
+              />
+              <span className="form-label" style={{ margin: 0 }}>Show on Dashboard</span>
+            </label>
+          </div>
         </div>
 
         {form.check_enabled && (
