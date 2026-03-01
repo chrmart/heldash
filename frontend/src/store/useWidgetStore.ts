@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import { api } from '../api'
-import type { Widget, ServerStats } from '../types'
+import type { Widget, WidgetStats } from '../types'
 
 interface WidgetState {
   widgets: Widget[]
-  stats: Record<string, ServerStats>
+  stats: Record<string, WidgetStats>
   loading: boolean
 
   loadWidgets: () => Promise<void>
@@ -12,6 +12,7 @@ interface WidgetState {
   updateWidget: (id: string, data: Partial<{ name: string; config: object; show_in_topbar: boolean; position: number }>) => Promise<void>
   deleteWidget: (id: string) => Promise<void>
   loadStats: (id: string) => Promise<void>
+  setAdGuardProtection: (id: string, enabled: boolean) => Promise<void>
 }
 
 export const useWidgetStore = create<WidgetState>((set, get) => ({
@@ -53,7 +54,13 @@ export const useWidgetStore = create<WidgetState>((set, get) => ({
       const s = await api.widgets.stats(id)
       set(state => ({ stats: { ...state.stats, [id]: s } }))
     } catch {
-      // ignore stat errors (server may not be Linux)
+      // ignore stat errors (server may not be Linux / AdGuard unreachable)
     }
+  },
+
+  setAdGuardProtection: async (id, enabled) => {
+    await api.widgets.setAdGuardProtection(id, enabled)
+    // Reload stats so protection_enabled reflects the new state
+    await get().loadStats(id)
   },
 }))

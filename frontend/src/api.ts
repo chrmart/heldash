@@ -1,4 +1,4 @@
-import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, Widget, ServerStats } from './types'
+import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, Widget, WidgetStats } from './types'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData } from './types/arr'
 
 const BASE = '/api'
@@ -112,7 +112,11 @@ export const api = {
     update: (id: string, data: Partial<{ name: string; config: object; show_in_topbar: boolean; position: number }>) =>
       req<Widget>(`/widgets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) => req<void>(`/widgets/${id}`, { method: 'DELETE' }),
-    stats: (id: string) => req<ServerStats>(`/widgets/${id}/stats`),
+    stats: (id: string) => req<WidgetStats>(`/widgets/${id}/stats`),
+    setAdGuardProtection: (id: string, enabled: boolean) =>
+      req<{ ok: boolean }>(`/widgets/${id}/adguard/protection`, {
+        method: 'POST', body: JSON.stringify({ enabled }),
+      }),
   },
 
   dashboard: {

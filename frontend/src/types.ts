@@ -93,11 +93,17 @@ export interface ServerStatusConfig {
   disks: { path: string; name: string }[]
 }
 
+export interface AdGuardHomeConfig {
+  url: string
+  username: string
+  // password intentionally omitted — never sent to frontend
+}
+
 export interface Widget {
   id: string
-  type: 'server_status'
+  type: 'server_status' | 'adguard_home'
   name: string
-  config: ServerStatusConfig
+  config: ServerStatusConfig | AdGuardHomeConfig
   position: number
   show_in_topbar: boolean
   created_at: string
@@ -109,6 +115,15 @@ export interface ServerStats {
   ram: { total: number; used: number; free: number }
   disks: { path: string; name: string; total: number; used: number; free: number }[]
 }
+
+export interface AdGuardStats {
+  total_queries: number    // -1 = unreachable/error
+  blocked_queries: number
+  blocked_percent: number
+  protection_enabled: boolean
+}
+
+export type WidgetStats = ServerStats | AdGuardStats
 
 export interface DashboardWidgetItem {
   id: string

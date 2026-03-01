@@ -5,7 +5,8 @@ import { useDashboardStore } from '../store/useDashboardStore'
 import { useWidgetStore } from '../store/useWidgetStore'
 import { ServiceCard } from '../components/ServiceCard'
 import { ArrCardContent, SabnzbdCardContent } from '../components/MediaCard'
-import type { Service, DashboardItem, DashboardServiceItem, DashboardArrItem, DashboardPlaceholderItem, DashboardWidgetItem } from '../types'
+import { AdGuardStatsView } from './WidgetsPage'
+import type { Service, DashboardItem, DashboardServiceItem, DashboardArrItem, DashboardPlaceholderItem, DashboardWidgetItem, ServerStats, AdGuardStats } from '../types'
 import {
   DndContext,
   DragEndEvent,
@@ -159,12 +160,14 @@ function DashboardWidgetCard({ item, editMode }: {
   item: DashboardWidgetItem
   editMode: boolean
 }) {
+  const { isAdmin } = useStore()
   const { removeItem } = useDashboardStore()
-  const { stats, loadStats } = useWidgetStore()
+  const { stats, loadStats, setAdGuardProtection } = useWidgetStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id, disabled: !editMode,
   })
   const [showHandle, setShowHandle] = useState(false)
+  const [toggling, setToggling] = useState(false)
   const s = stats[item.widget.id]
 
   useEffect(() => {
@@ -173,8 +176,16 @@ function DashboardWidgetCard({ item, editMode }: {
     return () => clearInterval(interval)
   }, [item.widget.id])
 
-  const ramUsedGb = s ? (s.ram.used / 1024).toFixed(1) : null
-  const ramTotalGb = s ? (s.ram.total / 1024).toFixed(1) : null
+  const handleProtectionToggle = async () => {
+    if (!isAdmin || item.widget.type !== 'adguard_home' || !s) return
+    const ag = s as AdGuardStats
+    setToggling(true)
+    try {
+      await setAdGuardProtection(item.widget.id, !ag.protection_enabled)
+    } finally {
+      setToggling(false)
+    }
+  }
 
   return (
     <div
@@ -191,16 +202,38 @@ function DashboardWidgetCard({ item, editMode }: {
     >
       <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{item.widget.name}</div>
-        {s ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <DashStatBar label="CPU" value={s.cpu.load >= 0 ? s.cpu.load : null} extra={s.cpu.load >= 0 ? `${s.cpu.load}%` : '—'} />
-            <DashStatBar label="RAM" value={s.ram.total > 0 ? Math.round((s.ram.used / s.ram.total) * 100) : null} extra={s.ram.total > 0 ? `${ramUsedGb}/${ramTotalGb} GB` : '—'} />
-            {s.disks.map(d => (
-              <DashStatBar key={d.path} label={d.name} value={d.total > 0 ? Math.round((d.used / d.total) * 100) : null} extra={d.total > 0 ? `${Math.round(d.used / 1024)}/${Math.round(d.total / 1024)} GB` : '—'} />
-            ))}
-          </div>
+
+        {item.widget.type === 'adguard_home' ? (
+          s ? (
+            <AdGuardStatsView
+              stats={s as AdGuardStats}
+              isAdmin={isAdmin}
+              toggling={toggling}
+              onToggle={handleProtectionToggle}
+            />
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</div>
+          )
         ) : (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</div>
+          // server_status
+          s ? (
+            (() => {
+              const ss = s as ServerStats
+              const ramUsedGb = (ss.ram.used / 1024).toFixed(1)
+              const ramTotalGb = (ss.ram.total / 1024).toFixed(1)
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <DashStatBar label="CPU" value={ss.cpu.load >= 0 ? ss.cpu.load : null} extra={ss.cpu.load >= 0 ? `${ss.cpu.load}%` : '—'} />
+                  <DashStatBar label="RAM" value={ss.ram.total > 0 ? Math.round((ss.ram.used / ss.ram.total) * 100) : null} extra={ss.ram.total > 0 ? `${ramUsedGb}/${ramTotalGb} GB` : '—'} />
+                  {ss.disks.map(d => (
+                    <DashStatBar key={d.path} label={d.name} value={d.total > 0 ? Math.round((d.used / d.total) * 100) : null} extra={d.total > 0 ? `${Math.round(d.used / 1024)}/${Math.round(d.total / 1024)} GB` : '—'} />
+                  ))}
+                </div>
+              )
+            })()
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</div>
+          )
         )}
       </div>
       {editMode && (

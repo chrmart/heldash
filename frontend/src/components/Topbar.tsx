@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { useWidgetStore } from '../store/useWidgetStore'
 import { api } from '../api'
-import type { ThemeAccent } from '../types'
+import type { ThemeAccent, ServerStats, AdGuardStats } from '../types'
 
 interface Props {
   page: string
@@ -77,21 +77,42 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
         {topbarWidgets.map(w => {
           const s = stats[w.id]
           if (!s) return null
-          const ramUsedGb = (s.ram.used / 1024).toFixed(1)
-          const ramTotalGb = (s.ram.total / 1024).toFixed(1)
-          const diskParts = s.disks
-            .filter(d => d.total > 0)
-            .map(d => {
-              const pct = Math.round((d.used / d.total) * 100)
-              const freeGb = (d.free / 1024).toFixed(0)
-              const totalGb = (d.total / 1024).toFixed(0)
-              return `${d.name} ${pct}% · ${freeGb}/${totalGb} GB`
-            })
-          const parts = [
-            s.cpu.load >= 0 ? `CPU ${s.cpu.load}%` : null,
-            s.ram.total > 0 ? `RAM ${ramUsedGb}/${ramTotalGb} GB` : null,
-            ...diskParts,
-          ].filter(Boolean)
+
+          let parts: (string | null)[] = []
+
+          if (w.type === 'adguard_home') {
+            const ag = s as AdGuardStats
+            if (ag.total_queries === -1) {
+              parts = ['DNS —']
+            } else {
+              const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+              parts = [
+                `DNS ${fmt(ag.total_queries)} req`,
+                `${fmt(ag.blocked_queries)} blocked (${ag.blocked_percent}%)`,
+                ag.protection_enabled ? 'Protected' : 'Paused',
+              ]
+            }
+          } else {
+            // server_status
+            const ss = s as ServerStats
+            const ramUsedGb = (ss.ram.used / 1024).toFixed(1)
+            const ramTotalGb = (ss.ram.total / 1024).toFixed(1)
+            const diskParts = ss.disks
+              .filter(d => d.total > 0)
+              .map(d => {
+                const pct = Math.round((d.used / d.total) * 100)
+                const freeGb = (d.free / 1024).toFixed(0)
+                const totalGb = (d.total / 1024).toFixed(0)
+                return `${d.name} ${pct}% · ${freeGb}/${totalGb} GB`
+              })
+            parts = [
+              ss.cpu.load >= 0 ? `CPU ${ss.cpu.load}%` : null,
+              ss.ram.total > 0 ? `RAM ${ramUsedGb}/${ramTotalGb} GB` : null,
+              ...diskParts,
+            ]
+          }
+
+          const filtered = parts.filter(Boolean) as string[]
           return (
             <div
               key={w.id}
@@ -107,7 +128,7 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
                 boxShadow: '0 0 8px rgba(var(--accent-rgb), 0.15)',
               }}
             >
-              {parts.map((p, i) => (
+              {filtered.map((p, i) => (
                 <span key={i} style={{ whiteSpace: 'nowrap' }}>{p}</span>
               ))}
             </div>

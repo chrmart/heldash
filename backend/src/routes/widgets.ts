@@ -30,14 +30,23 @@ interface PatchWidgetBody {
   position?: number
 }
 
+interface AdGuardProtectionBody {
+  enabled: boolean
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function sanitize(r: WidgetRow) {
+  const rawConfig = JSON.parse(r.config ?? '{}')
+  // Strip password from adguard_home configs — credentials never leave the backend
+  const config = r.type === 'adguard_home'
+    ? (({ password: _p, ...safe }) => safe)(rawConfig)
+    : rawConfig
   return {
     id: r.id,
     type: r.type,
     name: r.name,
-    config: JSON.parse(r.config ?? '{}'),
+    config,
     position: r.position,
     show_in_topbar: r.show_in_topbar === 1,
     created_at: r.created_at,
@@ -55,13 +64,12 @@ async function callerGroupId(req: FastifyRequest): Promise<string | null> {
   }
 }
 
-// ── System stats helpers (Linux /proc + fs.statfs) ────────────────────────────
+// ── Server Status helpers (Linux /proc + fs.statfs) ───────────────────────────
 
 function parseProcStat(raw: string): { total: number; idle: number } {
-  // First line: "cpu  user nice system idle iowait irq softirq steal ..."
   const line = raw.split('\n')[0]
   const parts = line.trim().split(/\s+/).slice(1).map(Number)
-  const idle = parts[3] + (parts[4] ?? 0)       // idle + iowait
+  const idle = parts[3] + (parts[4] ?? 0)
   const total = parts.reduce((a, b) => a + b, 0)
   return { total, idle }
 }
@@ -76,7 +84,7 @@ async function getCpuLoad(): Promise<number> {
     const dTotal = s2.total - s1.total
     const dIdle = s2.idle - s1.idle
     if (dTotal === 0) return 0
-    return Math.round(((dTotal - dIdle) / dTotal) * 1000) / 10  // one decimal
+    return Math.round(((dTotal - dIdle) / dTotal) * 1000) / 10
   } catch {
     return -1
   }
@@ -118,6 +126,66 @@ async function getDiskStats(disks: DiskConfig[]): Promise<DiskStats[]> {
   }))
 }
 
+// ── AdGuard Home helpers ───────────────────────────────────────────────────────
+
+interface AdGuardStatsResult {
+  total_queries: number
+  blocked_queries: number
+  blocked_percent: number
+  protection_enabled: boolean
+}
+
+async function getAdGuardStats(url: string, username: string, password: string): Promise<AdGuardStatsResult> {
+  const errResult: AdGuardStatsResult = {
+    total_queries: -1, blocked_queries: -1, blocked_percent: -1, protection_enabled: false,
+  }
+  if (!url) return errResult
+
+  const auth = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64')
+  const headers = { Authorization: auth }
+  const base = url.replace(/\/$/, '')
+
+  try {
+    const [statsRes, statusRes] = await Promise.all([
+      fetch(`${base}/control/stats`, { headers }),
+      fetch(`${base}/control/status`, { headers }),
+    ])
+    if (!statsRes.ok || !statusRes.ok) return errResult
+
+    const statsData = await statsRes.json() as Record<string, unknown>
+    const statusData = await statusRes.json() as Record<string, unknown>
+
+    const total = typeof statsData.num_dns_queries === 'number' ? statsData.num_dns_queries : 0
+    const blocked = typeof statsData.num_blocked_filtering === 'number' ? statsData.num_blocked_filtering : 0
+    const blocked_percent = total > 0 ? Math.round((blocked / total) * 1000) / 10 : 0
+
+    return {
+      total_queries: total,
+      blocked_queries: blocked,
+      blocked_percent,
+      protection_enabled: statusData.protection_enabled === true,
+    }
+  } catch {
+    return errResult
+  }
+}
+
+async function setAdGuardProtection(url: string, username: string, password: string, enabled: boolean): Promise<boolean> {
+  if (!url) return false
+  const auth = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64')
+  const base = url.replace(/\/$/, '')
+  try {
+    const res = await fetch(`${base}/control/protection`, {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 export async function widgetsRoutes(app: FastifyInstance) {
   const db = getDb()
@@ -137,7 +205,7 @@ export async function widgetsRoutes(app: FastifyInstance) {
   // POST /api/widgets — create (admin only)
   app.post('/api/widgets', { preHandler: [app.requireAdmin] }, async (req, reply) => {
     const { type, name, config = {}, show_in_topbar = false } = req.body as CreateWidgetBody
-    if (!['server_status'].includes(type)) {
+    if (!['server_status', 'adguard_home'].includes(type)) {
       return reply.status(400).send({ error: 'Invalid widget type' })
     }
     if (!name?.trim()) return reply.status(400).send({ error: 'name is required' })
@@ -158,6 +226,21 @@ export async function widgetsRoutes(app: FastifyInstance) {
     const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined
     if (!row) return reply.status(404).send({ error: 'Not found' })
     const { name, config, show_in_topbar, position } = req.body as PatchWidgetBody
+
+    // For adguard_home: if password is empty in the patch, merge with existing config to preserve it
+    let configToStore: string | null = null
+    if (config !== undefined) {
+      if (row.type === 'adguard_home') {
+        const existing = JSON.parse(row.config ?? '{}')
+        const merged = { ...existing, ...config }
+        // If new password is empty string, keep existing password
+        if (!merged.password) merged.password = existing.password ?? ''
+        configToStore = JSON.stringify(merged)
+      } else {
+        configToStore = JSON.stringify(config)
+      }
+    }
+
     db.prepare(`
       UPDATE widgets SET
         name           = COALESCE(?, name),
@@ -168,7 +251,7 @@ export async function widgetsRoutes(app: FastifyInstance) {
       WHERE id = ?
     `).run(
       name?.trim() ?? null,
-      config !== undefined ? JSON.stringify(config) : null,
+      configToStore,
       show_in_topbar !== undefined ? (show_in_topbar ? 1 : 0) : null,
       position ?? null,
       id
@@ -189,21 +272,41 @@ export async function widgetsRoutes(app: FastifyInstance) {
     return reply.status(204).send()
   })
 
-  // GET /api/widgets/:id/stats — live system stats (visibility not required for stats)
+  // GET /api/widgets/:id/stats — live stats, branched by widget type
   app.get('/api/widgets/:id/stats', async (req, reply) => {
     const { id } = req.params as { id: string }
     const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined
     if (!row) return reply.status(404).send({ error: 'Not found' })
 
     const config = JSON.parse(row.config ?? '{}')
-    const disks: DiskConfig[] = Array.isArray(config.disks) ? config.disks : []
 
+    if (row.type === 'adguard_home') {
+      return getAdGuardStats(config.url ?? '', config.username ?? '', config.password ?? '')
+    }
+
+    // server_status (default)
+    const disks: DiskConfig[] = Array.isArray(config.disks) ? config.disks : []
     const [cpu, ram, diskStats] = await Promise.all([
       getCpuLoad(),
       getRam(),
       getDiskStats(disks),
     ])
-
     return { cpu: { load: cpu }, ram, disks: diskStats }
+  })
+
+  // POST /api/widgets/:id/adguard/protection — toggle AdGuard protection (admin only)
+  app.post('/api/widgets/:id/adguard/protection', { preHandler: [app.requireAdmin] }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined
+    if (!row) return reply.status(404).send({ error: 'Not found' })
+    if (row.type !== 'adguard_home') return reply.status(400).send({ error: 'Not an AdGuard Home widget' })
+
+    const { enabled } = req.body as AdGuardProtectionBody
+    if (typeof enabled !== 'boolean') return reply.status(400).send({ error: 'enabled must be boolean' })
+
+    const config = JSON.parse(row.config ?? '{}')
+    const ok = await setAdGuardProtection(config.url ?? '', config.username ?? '', config.password ?? '', enabled)
+    if (!ok) return reply.status(502).send({ error: 'Failed to reach AdGuard Home' })
+    return { ok: true }
   })
 }
