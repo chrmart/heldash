@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Sun, Moon, RefreshCw, Plus, LogIn, LogOut, Pencil, LayoutGrid, LayoutList, Minus, Users } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
@@ -88,71 +88,92 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
       {/* Center zone — topbar widget stats */}
       <div className="topbar-center">
         {topbarWidgets.map(w => {
-          let parts: (string | null)[] = []
+          const pillStyle: React.CSSProperties = {
+            display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
+            border: '1px solid rgba(var(--accent-rgb), 0.35)',
+            borderRadius: 'var(--radius-md)',
+            padding: '4px 12px',
+            background: 'rgba(var(--accent-rgb), 0.06)',
+            boxShadow: '0 0 10px rgba(var(--accent-rgb), 0.1)',
+            fontSize: 12,
+          }
+          const label = (text: string) => (
+            <span style={{ color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.3px', marginRight: 2 }}>{text}</span>
+          )
+          const sep = <span style={{ color: 'var(--glass-border)', userSelect: 'none' }}>·</span>
+          const val = (text: string, color?: string) => (
+            <span style={{ color: color ?? 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontWeight: 600, whiteSpace: 'nowrap' }}>{text}</span>
+          )
+          const muted = (text: string) => (
+            <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{text}</span>
+          )
+          const pctColor = (pct: number) =>
+            pct >= 90 ? 'var(--status-offline)' : pct >= 70 ? '#f59e0b' : 'var(--status-online)'
 
           if (w.type === 'docker_overview') {
             const running    = containers.filter(c => c.state === 'running').length
             const stopped    = containers.filter(c => c.state === 'exited' || c.state === 'dead' || c.state === 'created').length
             const restarting = containers.filter(c => c.state === 'restarting').length
-            parts = [
-              `${containers.length} total`,
-              `${running} running`,
-              stopped > 0    ? `${stopped} stopped`    : null,
-              restarting > 0 ? `${restarting} restarting` : null,
-            ]
-          } else if (w.type === 'adguard_home') {
-            const s = stats[w.id] as AdGuardStats | undefined
-            if (!s) return null
-            if (s.total_queries === -1) {
-              parts = ['DNS —']
-            } else {
-              const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
-              parts = [
-                `DNS ${fmt(s.total_queries)} req`,
-                `${fmt(s.blocked_queries)} blocked (${s.blocked_percent}%)`,
-                s.protection_enabled ? 'Protected' : 'Paused',
-              ]
-            }
-          } else {
-            // server_status
-            const s = stats[w.id] as ServerStats | undefined
-            if (!s) return null
-            const ramUsedGb = (s.ram.used / 1024).toFixed(1)
-            const ramTotalGb = (s.ram.total / 1024).toFixed(1)
-            const diskParts = s.disks
-              .filter(d => d.total > 0)
-              .map(d => {
-                const pct = Math.round((d.used / d.total) * 100)
-                const usedGb = (d.used / 1024).toFixed(0)
-                const totalGb = (d.total / 1024).toFixed(0)
-                return `${d.name} ${pct}% · ${usedGb}/${totalGb} GB`
-              })
-            parts = [
-              s.cpu.load >= 0 ? `CPU ${s.cpu.load}%` : null,
-              s.ram.total > 0 ? `RAM ${ramUsedGb}/${ramTotalGb} GB` : null,
-              ...diskParts,
-            ]
+            return (
+              <div key={w.id} style={pillStyle}>
+                {label('Docker:')}
+                {val(String(containers.length))} {muted('total')}
+                {sep}
+                {val(String(running), 'var(--status-online)')} {muted('running')}
+                {stopped > 0 && <>{sep}{val(String(stopped), 'var(--text-muted)')} {muted('stopped')}</>}
+                {restarting > 0 && <>{sep}{val(String(restarting), '#f59e0b')} {muted('restarting')}</>}
+              </div>
+            )
           }
 
-          const filtered = parts.filter(Boolean) as string[]
+          if (w.type === 'adguard_home') {
+            const s = stats[w.id] as AdGuardStats | undefined
+            if (!s) return null
+            const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+            const isErr = s.total_queries === -1
+            return (
+              <div key={w.id} style={pillStyle}>
+                {label('AdGuard:')}
+                {isErr
+                  ? muted('unreachable')
+                  : <>
+                      {val(fmt(s.total_queries))} {muted('req')}
+                      {sep}
+                      {val(fmt(s.blocked_queries), 'var(--status-offline)')} {muted(`blocked (${s.blocked_percent}%)`)}
+                      {sep}
+                      <span style={{ color: s.protection_enabled ? 'var(--status-online)' : '#f59e0b', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {s.protection_enabled ? '● Protected' : '● Paused'}
+                      </span>
+                    </>
+                }
+              </div>
+            )
+          }
+
+          // server_status
+          const s = stats[w.id] as ServerStats | undefined
+          if (!s) return null
           return (
-            <div
-              key={w.id}
-              style={{
-                display: 'flex',
-                gap: 12,
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                justifyContent: 'center',
-                border: '1px solid var(--accent)',
-                borderRadius: 'var(--radius-md)',
-                padding: '3px 12px',
-                boxShadow: '0 0 8px rgba(var(--accent-rgb), 0.15)',
-              }}
-            >
-              {filtered.map((p, i) => (
-                <span key={i} style={{ whiteSpace: 'nowrap' }}>{p}</span>
-              ))}
+            <div key={w.id} style={pillStyle}>
+              {label(`${w.name}:`)}
+              {s.cpu.load >= 0 && <>
+                {muted('CPU')} {val(`${s.cpu.load}%`, pctColor(s.cpu.load))}
+              </>}
+              {s.ram.total > 0 && <>
+                {sep}
+                {muted('RAM')} {val(`${(s.ram.used / 1024).toFixed(1)}`, pctColor(Math.round(s.ram.used / s.ram.total * 100)))}
+                <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>/{(s.ram.total / 1024).toFixed(1)} GB</span>
+              </>}
+              {s.disks.filter(d => d.total > 0).map(d => {
+                const pct = Math.round((d.used / d.total) * 100)
+                return (
+                  <React.Fragment key={d.path}>
+                    {sep}
+                    {muted(d.name)} {val(`${pct}%`, pctColor(pct))}
+                    <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>· {(d.used / 1024).toFixed(0)}/{(d.total / 1024).toFixed(0)} GB</span>
+                  </React.Fragment>
+                )
+              })}
             </div>
           )
         })}
