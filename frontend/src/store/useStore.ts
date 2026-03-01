@@ -320,7 +320,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   createUserGroup: async (data) => {
     const group = await api.userGroups.create(data)
-    set(state => ({ userGroups: [...state.userGroups, { ...group, hidden_arr_ids: [] }] }))
+    set(state => ({ userGroups: [...state.userGroups, { ...group, hidden_arr_ids: [], hidden_widget_ids: [] }] }))
   },
 
   deleteUserGroup: async (id) => {

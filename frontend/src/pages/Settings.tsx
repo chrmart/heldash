@@ -490,7 +490,7 @@ export function SettingsPage() {
                       style={{ fontSize: 11, gap: 4, padding: '4px 8px' }}
                     >
                       <Eye size={11} />
-                      {expandedGroupId === g.id ? 'Close' : 'App Visibility'}
+                      {expandedGroupId === g.id ? 'Close' : 'Visibility'}
                     </button>
                   )}
                   {!g.is_system && (
