@@ -342,6 +342,7 @@ All routes prefixed `/api`. Frontend uses relative paths.
 - **SABnzbd API** — Single `/api` endpoint, `mode=X&apikey=KEY&output=json`. `SabnzbdClient` does NOT extend `ArrBaseClient`.
 - **Healthcheck** — Uses `127.0.0.1` not `localhost` to avoid IPv6 resolution issues in Docker.
 - **docker_overview widget access** — Bypasses `group_widget_visibility` table. Controlled by `user_groups.docker_widget_access` column. Dashboard route and widget list route both enforce this separately.
+- **Topbar widget visibility** — `loadWidgets()` in `Topbar.tsx` depends on `[isAuthenticated, authUser?.id]` so the permission-filtered widget list is always refreshed after login/logout. Without this, a user's stale widget list would persist in the Zustand store across auth state changes, potentially showing topbar widgets that the new user's group cannot access.
 - **AdGuard password** — Stripped by `sanitize()` in widgets.ts before any response. Never leaves the backend.
 
 ---

@@ -52,10 +52,10 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
 
   const serverNow = new Date(now.getTime() + serverOffset)
 
-  // Load widgets on mount, then poll stats every 15s for topbar widgets
+  // Re-load widgets whenever auth state changes so backend permission filtering is applied
   useEffect(() => {
     loadWidgets().catch(() => {})
-  }, [])
+  }, [isAuthenticated, authUser?.id])
 
   // Poll stats for server_status + adguard_home topbar widgets
   useEffect(() => {
