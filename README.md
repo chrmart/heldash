@@ -6,19 +6,30 @@ Coded by Claude.ai because iam to stupid to code but can wirte prompts lol
 
 ## Bug reports, improvements, and feature requests are welcome via issues. :)
 
+---
+
 ## Features
 
 **Dashboard**
-- 🔗 Service/app link management with live online/offline status monitoring
-- 🗂️ Groups / categories for organizing apps
-- 🖱️ Drag & Drop reordering for apps and groups
-- 🖼️ Custom icons (PNG/JPG/SVG upload or emoji)
+- 🗂️ Modular overview grid — freely arrange apps and media instances independent of group structure
+- ✅ Per-app and per-instance toggle to show on dashboard ("Show on Dashboard")
+- 🖱️ Edit mode — drag & drop reordering of all dashboard items
+- 📐 Placeholder cards (App / Instance / Row) — reserve space and structure rows in edit mode
+- 🔗 App cards link directly to the service URL
+- 🔴 Live online/offline status dots on every app card
+
+**Apps**
+- 📋 Full app list grouped by category with group headers
+- ➕ Add, edit, delete apps with icon (PNG/JPG/SVG upload or emoji)
+- 🔁 Automatic and manual health checks via HTTP
+- 🏷️ Tags and description per app
 
 **Media**
 - 🎬 Radarr — movie stats, download queue, upcoming calendar
 - 📺 Sonarr — series stats, download queue, upcoming calendar
 - 🔍 Prowlarr — indexer list and 24h grab stats
 - ⬇️ SABnzbd — queue with progress bars, download history
+- 🖼️ Media cards inherit the icon from a matching app (matched by URL)
 - 🔒 API keys stored server-side only — never exposed to the browser
 
 **Auth & Access**
@@ -42,7 +53,8 @@ docker run -d \
   --name heldash \
   -p 8282:8282 \
   -v /mnt/cache/appdata/heldash:/data \
-  -e SECRET_KEY=your_random_secret_here \
+  -e SECRET_KEY=$(openssl rand -hex 32) \
+  -e SECURE_COOKIES=false \
   ghcr.io/kreuzbube88/heldash:latest
 ```
 
@@ -71,29 +83,36 @@ On first launch you will be prompted to create an admin account.
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `8282` | Listening port |
-| `DATA_DIR` | `/data` | Data directory (mount here) |
-| `SECRET_KEY` | — | **Required.** Secret for JWT signing. Uses insecure default if unset. |
-| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-| `NODE_ENV` | `production` | Environment |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `SECRET_KEY` | **Yes** | insecure fallback | Secret for JWT signing. Generate with: `openssl rand -hex 32` |
+| `SECURE_COOKIES` | **Yes** | `false` | `false` = HTTP (direct LAN), `true` = HTTPS (behind nginx-proxy-manager with SSL) |
+| `LOG_LEVEL` | No | `info` | `debug` · `info` · `warn` · `error` |
+
+---
+
+## Unraid
+
+A ready-to-use Community Applications template is included: **`heldash.xml`**
+
+Import it via Community Applications → Import to get a pre-filled container setup with all fields and descriptions.
 
 ---
 
 ## Building
 
-The Docker image is built manually via GitHub Actions:
+Two GitHub Actions workflows are available (both manual trigger only):
 
-1. Go to **Actions → Build & Push Docker Image**
-2. Click **Run workflow**
-3. Enter a tag (e.g. `latest` or `1.0.0`)
+| Workflow | Tags pushed | Use case |
+|---|---|---|
+| **Release Latest** | `:latest` + `:1.0.0` (version input) | Production release |
+| **Build & Push Docker Image** | Custom tag only (e.g. `:test-feature`) | Testing & development builds |
 
 ---
 
 ## Data Structure
 
-All data is stored under `DATA_DIR`:
+All data is stored under `/data` (mount a host path here):
 
 ```
 /data
@@ -130,6 +149,9 @@ Frontend dev server runs on :5173 and proxies `/api` and `/icons` calls to :8282
 - [x] Per-group app and media visibility
 - [x] Radarr / Sonarr / Prowlarr integration
 - [x] SABnzbd integration
+- [x] Modular dashboard (free arrangement, independent of groups)
+- [x] Edit mode with drag & drop and placeholder cards
+- [x] "Show on Dashboard" toggle per app and instance
 - [ ] OIDC via voidauth
 - [ ] Notification webhooks (Gotify / ntfy)
 - [ ] More integrations (Immich, Jellyfin, Unraid system stats, ...)
