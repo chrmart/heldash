@@ -125,6 +125,9 @@ async function start() {
     uptime: process.uptime(),
   }))
 
+  // Server time endpoint (used by frontend clock to avoid timezone config)
+  app.get('/api/time', async () => ({ iso: new Date().toISOString() }))
+
   // API routes
   await app.register(authRoutes)
   await app.register(usersRoutes)

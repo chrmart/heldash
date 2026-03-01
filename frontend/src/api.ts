@@ -129,4 +129,5 @@ export const api = {
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),
+  serverTime: () => req<{ iso: string }>('/time'),
 }

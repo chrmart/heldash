@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Sun, Moon, RefreshCw, Plus, LogIn, LogOut, Pencil, LayoutGrid, LayoutList, Minus } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { useWidgetStore } from '../store/useWidgetStore'
+import { api } from '../api'
 import type { ThemeAccent } from '../types'
 
 interface Props {
@@ -30,6 +31,20 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
 
   const topbarWidgets = widgets.filter(w => w.show_in_topbar)
 
+  // Server clock: fetch server time once, compute offset, tick every second
+  const [serverOffset, setServerOffset] = useState(0)
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    api.serverTime().then(({ iso }) => {
+      setServerOffset(new Date(iso).getTime() - Date.now())
+    }).catch(() => {})
+    const tick = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(tick)
+  }, [])
+
+  const serverNow = new Date(now.getTime() + serverOffset)
+
   // Load widgets on mount, then poll stats every 15s for topbar widgets
   useEffect(() => {
     loadWidgets().catch(() => {})
@@ -47,7 +62,10 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
   return (
     <header className="topbar">
       <div className="topbar-title">
-        {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
+        <span>{serverNow.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+        <span style={{ marginLeft: 10, fontVariantNumeric: 'tabular-nums' }}>
+          {serverNow.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        </span>
       </div>
 
       {/* Center zone — topbar widget stats */}
@@ -57,21 +75,38 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
           if (!s) return null
           const ramUsedGb = (s.ram.used / 1024).toFixed(1)
           const ramTotalGb = (s.ram.total / 1024).toFixed(1)
-          const diskParts = s.disks.map(d => {
-            const pct = d.total > 0 ? Math.round((d.used / d.total) * 100) : 0
-            return `${d.name} ${pct}%`
-          })
+          const diskParts = s.disks
+            .filter(d => d.total > 0)
+            .map(d => {
+              const pct = Math.round((d.used / d.total) * 100)
+              const freeGb = (d.free / 1024).toFixed(0)
+              const totalGb = (d.total / 1024).toFixed(0)
+              return `${d.name} ${pct}% · ${freeGb}/${totalGb} GB`
+            })
           const parts = [
             s.cpu.load >= 0 ? `CPU ${s.cpu.load}%` : null,
             s.ram.total > 0 ? `RAM ${ramUsedGb}/${ramTotalGb} GB` : null,
             ...diskParts,
           ].filter(Boolean)
           return (
-            <span key={w.id} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div
+              key={w.id}
+              style={{
+                display: 'flex',
+                gap: 12,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                justifyContent: 'center',
+                border: '1px solid var(--accent)',
+                borderRadius: 'var(--radius-md)',
+                padding: '3px 12px',
+                boxShadow: '0 0 8px rgba(var(--accent-rgb), 0.15)',
+              }}
+            >
               {parts.map((p, i) => (
                 <span key={i} style={{ whiteSpace: 'nowrap' }}>{p}</span>
               ))}
-            </span>
+            </div>
           )
         })}
       </div>
