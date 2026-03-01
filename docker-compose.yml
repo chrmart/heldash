@@ -8,26 +8,9 @@ services:
     volumes:
       - /mnt/cache/appdata/heldash:/data
     environment:
-      # ── Core ──────────────────────────────────────────────
-      - NODE_ENV=production
-      - PORT=8282
-      - DATA_DIR=/data
-      - LOG_LEVEL=info         # debug | info | warn | error
-
-      # ── Security ─────────────────────────────────────────
       # Required for JWT signing. Generate with: openssl rand -hex 32
-      # If omitted or empty, a built-in fallback is used (not recommended for production).
       - SECRET_KEY=CHANGE_ME_GENERATE_A_RANDOM_SECRET
-      # Set to 'true' only if accessed via HTTPS (e.g. behind nginx-proxy-manager with SSL).
-      # Leave unset/false for plain HTTP access (e.g. direct Unraid LAN access).
+      # false = HTTP (direct LAN access), true = HTTPS (behind nginx-proxy-manager with SSL)
       - SECURE_COOKIES=false
-
-      # ── Auth (Phase 2 - leave empty for now) ─────────────
-      # - OIDC_ISSUER=https://auth.yourdomain.com
-      # - OIDC_CLIENT_ID=heldash
-      # - OIDC_CLIENT_SECRET=your_secret
-      # - OIDC_REDIRECT_URI=https://heldash.yourdomain.com/auth/callback
-
-      # ── Proxy / Network ───────────────────────────────────
-      # - TRUST_PROXY=true     # Enable when behind nginx-proxy-manager
-      # - BASE_URL=https://heldash.yourdomain.com
+      # debug | info | warn | error
+      - LOG_LEVEL=info

@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>heldash</Name>
+  <Repository>ghcr.io/kreuzbube88/heldash:latest</Repository>
+  <Registry>https://ghcr.io/kreuzbube88/heldash</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Overview>Persönliches Homelab-Dashboard. Zeigt Service-Kacheln mit Live-Status-Indikatoren, unterstützt Drag-and-Drop-Layout, Gruppen, Media-Server-Integration (Radarr, Sonarr, Prowlarr, SABnzbd) und Benutzerverwaltung.</Overview>
+  <Category>Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8282]/</WebUI>
+
+  <!-- Port -->
+  <Config
+    Name="WebUI Port"
+    Target="8282"
+    Default="8282"
+    Mode="tcp"
+    Description="Port auf dem HELDASH erreichbar ist."
+    Type="Port"
+    Display="always"
+    Required="true"
+    Mask="false">8282</Config>
+
+  <!-- Volume -->
+  <Config
+    Name="Datenpfad"
+    Target="/data"
+    Default="/mnt/user/appdata/heldash"
+    Mode="rw"
+    Description="Speicherpfad auf dem Host für Datenbank und hochgeladene Icons."
+    Type="Path"
+    Display="always"
+    Required="true"
+    Mask="false">/mnt/user/appdata/heldash</Config>
+
+  <!-- Env: SECRET_KEY -->
+  <Config
+    Name="SECRET_KEY"
+    Target="SECRET_KEY"
+    Default=""
+    Mode=""
+    Description="Pflichtfeld. Schlüssel für die JWT-Signierung (Anmeldung/Sessions). Generieren mit: openssl rand -hex 32"
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="true"></Config>
+
+  <!-- Env: SECURE_COOKIES -->
+  <Config
+    Name="SECURE_COOKIES"
+    Target="SECURE_COOKIES"
+    Default="false"
+    Mode=""
+    Description="false = HTTP (direkter LAN-Zugriff ohne SSL). true = HTTPS (hinter nginx-proxy-manager mit aktiviertem SSL)."
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="false">false</Config>
+
+  <!-- Env: LOG_LEVEL -->
+  <Config
+    Name="LOG_LEVEL"
+    Target="LOG_LEVEL"
+    Default="info"
+    Mode=""
+    Description="Log-Level des Servers. Mögliche Werte: debug | info | warn | error"
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false">info</Config>
+
+</Container>
