@@ -132,7 +132,8 @@ export async function dashboardRoutes(app: FastifyInstance) {
     if (!['service', 'arr_instance', 'placeholder', 'placeholder_app', 'placeholder_instance'].includes(type)) {
       return reply.status(400).send({ error: 'Invalid type' })
     }
-    if (type !== 'placeholder' && !ref_id) {
+    const isPlaceholderType = type === 'placeholder' || type === 'placeholder_app' || type === 'placeholder_instance'
+    if (!isPlaceholderType && !ref_id) {
       return reply.status(400).send({ error: 'ref_id required for service and arr_instance' })
     }
 

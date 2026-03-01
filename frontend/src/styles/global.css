@@ -491,8 +491,8 @@ body {
 /* ─── Grid Layout ─────────────────────────────────────────────────────────── */
 .services-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
 }
 
 /* ─── Buttons ─────────────────────────────────────────────────────────────── */
@@ -781,7 +781,7 @@ select.form-input option {
     display: none;
   }
   .services-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   }
 }
 

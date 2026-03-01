@@ -117,20 +117,10 @@ function DashboardArrCard({ item, editMode }: {
   editMode: boolean
 }) {
   const { removeItem } = useDashboardStore()
-  const { services } = useStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id, disabled: !editMode,
   })
   const [showHandle, setShowHandle] = useState(false)
-
-  // Find matching service by URL to inherit its icon
-  const normalizeUrl = (u: string) => u.replace(/\/$/, '').toLowerCase()
-  const instUrl = normalizeUrl(item.instance.url)
-  const matchingService = services.find(s =>
-    normalizeUrl(s.url) === instUrl || (s.check_url && normalizeUrl(s.check_url) === instUrl)
-  )
-  const iconUrl = matchingService?.icon_url ?? null
-  const iconEmoji = matchingService?.icon ?? null
 
   return (
     <div
@@ -147,8 +137,8 @@ function DashboardArrCard({ item, editMode }: {
     >
       <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {item.instance.type === 'sabnzbd'
-          ? <SabnzbdCardContent instance={item.instance} iconUrl={iconUrl} iconEmoji={iconEmoji} />
-          : <ArrCardContent instance={item.instance} iconUrl={iconUrl} iconEmoji={iconEmoji} />
+          ? <SabnzbdCardContent instance={item.instance} />
+          : <ArrCardContent instance={item.instance} />
         }
       </div>
       {editMode && (

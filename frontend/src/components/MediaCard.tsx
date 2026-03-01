@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useArrStore } from '../store/useArrStore'
+import { useStore } from '../store/useStore'
 import type { ArrStatus, ArrStats, ArrQueueItem, ArrCalendarItem, SonarrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData } from '../types/arr'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
@@ -202,12 +203,19 @@ function InstanceIcon({ iconUrl, iconEmoji }: { iconUrl?: string | null; iconEmo
 
 // ── Arr card content (radarr / sonarr / prowlarr) ─────────────────────────────
 
-export function ArrCardContent({ instance, iconUrl, iconEmoji }: {
+const normalizeUrl = (u: string) => u.replace(/\/$/, '').toLowerCase()
+
+export function ArrCardContent({ instance }: {
   instance: ArrInstanceBase
-  iconUrl?: string | null
-  iconEmoji?: string | null
 }) {
   const { stats, statuses, queues, calendars, indexers, loadQueue, loadCalendar, loadIndexers } = useArrStore()
+  const { services } = useStore()
+  const instUrl = normalizeUrl(instance.url)
+  const matchingSvc = services.find(s =>
+    normalizeUrl(s.url) === instUrl || (s.check_url && normalizeUrl(s.check_url) === instUrl)
+  )
+  const iconUrl = matchingSvc?.icon_url ?? null
+  const iconEmoji = matchingSvc?.icon ?? null
   const [expanded, setExpanded] = useState<'queue' | 'calendar' | 'indexers' | null>(null)
   const [loadingExpand, setLoadingExpand] = useState(false)
 
@@ -315,12 +323,17 @@ export function ArrCardContent({ instance, iconUrl, iconEmoji }: {
 
 // ── SABnzbd card content ──────────────────────────────────────────────────────
 
-export function SabnzbdCardContent({ instance, iconUrl, iconEmoji }: {
+export function SabnzbdCardContent({ instance }: {
   instance: ArrInstanceBase
-  iconUrl?: string | null
-  iconEmoji?: string | null
 }) {
   const { stats, statuses, sabQueues, histories, loadSabQueue, loadHistory } = useArrStore()
+  const { services } = useStore()
+  const instUrl = normalizeUrl(instance.url)
+  const matchingSvc = services.find(s =>
+    normalizeUrl(s.url) === instUrl || (s.check_url && normalizeUrl(s.check_url) === instUrl)
+  )
+  const iconUrl = matchingSvc?.icon_url ?? null
+  const iconEmoji = matchingSvc?.icon ?? null
   const [expanded, setExpanded] = useState<'queue' | 'history' | null>(null)
   const [loadingExpand, setLoadingExpand] = useState(false)
 
