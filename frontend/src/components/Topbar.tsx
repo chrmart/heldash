@@ -90,11 +90,11 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
         {topbarWidgets.map(w => {
           const pillStyle: React.CSSProperties = {
             display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
-            border: '1px solid rgba(var(--accent-rgb), 0.35)',
+            border: '1px solid var(--accent)',
             borderRadius: 'var(--radius-md)',
             padding: '4px 12px',
             background: 'rgba(var(--accent-rgb), 0.06)',
-            boxShadow: '0 0 10px rgba(var(--accent-rgb), 0.1)',
+            boxShadow: '0 0 8px rgba(var(--accent-rgb), 0.25)',
             fontSize: 12,
           }
           const label = (text: string) => (
