@@ -64,7 +64,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
   const db = getDb()
 
   // GET /api/dashboard — ordered items with embedded data, filtered by group visibility
-  app.get('/dashboard', async (req) => {
+  app.get('/api/dashboard', async (req) => {
     const groupId = await callerGroupId(req)
     const items = db.prepare('SELECT * FROM dashboard_items ORDER BY position').all() as DashboardItemRow[]
     const result = []
@@ -126,7 +126,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
   })
 
   // POST /api/dashboard/items — add item (admin only)
-  app.post('/dashboard/items', { preHandler: app.requireAdmin }, async (req, reply) => {
+  app.post('/api/dashboard/items', { preHandler: app.requireAdmin }, async (req, reply) => {
     const { type, ref_id } = req.body as AddItemBody
 
     if (!['service', 'arr_instance', 'placeholder'].includes(type)) {
@@ -157,14 +157,14 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
   // DELETE /api/dashboard/items/by-ref — remove by ref_id + type (admin only)
   // Registered BEFORE :id to avoid parametric route capturing "by-ref"
-  app.delete('/dashboard/items/by-ref', { preHandler: app.requireAdmin }, async (req, reply) => {
+  app.delete('/api/dashboard/items/by-ref', { preHandler: app.requireAdmin }, async (req, reply) => {
     const { type, ref_id } = req.body as { type: string; ref_id: string }
     db.prepare('DELETE FROM dashboard_items WHERE type = ? AND ref_id = ?').run(type, ref_id)
     return reply.status(204).send()
   })
 
   // DELETE /api/dashboard/items/:id — remove item (admin only)
-  app.delete('/dashboard/items/:id', { preHandler: app.requireAdmin }, async (req, reply) => {
+  app.delete('/api/dashboard/items/:id', { preHandler: app.requireAdmin }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const item = db.prepare('SELECT id FROM dashboard_items WHERE id = ?').get(id)
     if (!item) return reply.status(404).send({ error: 'Not found' })
@@ -173,7 +173,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
   })
 
   // PATCH /api/dashboard/reorder — bulk position update (admin only)
-  app.patch('/dashboard/reorder', { preHandler: app.requireAdmin }, async (req, reply) => {
+  app.patch('/api/dashboard/reorder', { preHandler: app.requireAdmin }, async (req, reply) => {
     const { ids } = req.body as ReorderBody
     if (!Array.isArray(ids)) return reply.status(400).send({ error: 'ids must be an array' })
     const update = db.prepare('UPDATE dashboard_items SET position = ? WHERE id = ?')
