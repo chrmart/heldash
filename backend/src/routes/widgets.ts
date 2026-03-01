@@ -218,7 +218,7 @@ export async function widgetsRoutes(app: FastifyInstance) {
   // POST /api/widgets — create (admin only)
   app.post('/api/widgets', { preHandler: [app.requireAdmin] }, async (req, reply) => {
     const { type, name, config = {}, show_in_topbar = false } = req.body as CreateWidgetBody
-    if (!['server_status', 'adguard_home'].includes(type)) {
+    if (!['server_status', 'adguard_home', 'docker_overview'].includes(type)) {
       return reply.status(400).send({ error: 'Invalid widget type' })
     }
     if (!name?.trim()) return reply.status(400).send({ error: 'name is required' })
