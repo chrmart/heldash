@@ -297,6 +297,17 @@ export function SettingsPage() {
   const [groupError, setGroupError] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const [autoTheme, setAutoTheme] = useState(settings?.auto_theme_enabled ?? false)
+  const [lightStart, setLightStart] = useState(settings?.auto_theme_light_start ?? '08:00')
+  const [darkStart, setDarkStart] = useState(settings?.auto_theme_dark_start ?? '20:00')
+  const [autoThemeSaving, setAutoThemeSaving] = useState(false)
+
+  const saveAutoTheme = async (enabled: boolean, ls: string, ds: string) => {
+    setAutoThemeSaving(true)
+    try { await updateSettings({ auto_theme_enabled: enabled, auto_theme_light_start: ls, auto_theme_dark_start: ds }) }
+    finally { setAutoThemeSaving(false) }
+  }
+
   const [newUser, setNewUser] = useState({ username: '', first_name: '', last_name: '', email: '', password: '', user_group_id: 'grp_guest' })
   const [userError, setUserError] = useState('')
   const [addingUser, setAddingUser] = useState(false)
@@ -431,6 +442,59 @@ export function SettingsPage() {
               <span className="glass" style={{ padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
                 {settings.theme_mode} / {settings.theme_accent}
               </span>
+            </div>
+
+            <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--glass-border)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Auto Theme Schedule</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none', marginBottom: 14 }}>
+                <input
+                  type="checkbox"
+                  checked={autoTheme}
+                  onChange={e => {
+                    setAutoTheme(e.target.checked)
+                    saveAutoTheme(e.target.checked, lightStart, darkStart)
+                  }}
+                  style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+                />
+                <span style={{ fontSize: 13 }}>Automatically switch dark/light mode by time of day</span>
+              </label>
+              {autoTheme && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)', width: 80 }}>☀ Light from</span>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={lightStart}
+                        onChange={e => setLightStart(e.target.value)}
+                        style={{ width: 110, fontSize: 13, padding: '4px 8px' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)', width: 80 }}>🌙 Dark from</span>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={darkStart}
+                        onChange={e => setDarkStart(e.target.value)}
+                        style={{ width: 110, fontSize: 13, padding: '4px 8px' }}
+                      />
+                    </div>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => saveAutoTheme(autoTheme, lightStart, darkStart)}
+                      disabled={autoThemeSaving}
+                      style={{ fontSize: 12 }}
+                    >
+                      {autoThemeSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                    Theme switches automatically every minute. The manual toggle in the topbar still works but will be overridden on the next tick.
+                  </p>
+                </div>
+              )}
             </div>
           </section>
 

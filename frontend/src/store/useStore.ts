@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Service, Group, Settings, ThemeMode, ThemeAccent, AuthUser, UserRecord, UserGroup, Background } from '../types'
 import { api } from '../api'
+import { calcAutoTheme } from '../utils'
 
 interface AppState {
   // App data
@@ -432,6 +433,9 @@ export const useStore = create<AppState>((set, get) => ({
 
 function applyTheme(settings: Settings) {
   const root = document.documentElement
-  root.setAttribute('data-theme', settings.theme_mode)
+  const mode = settings.auto_theme_enabled
+    ? calcAutoTheme(settings.auto_theme_light_start ?? '08:00', settings.auto_theme_dark_start ?? '20:00')
+    : settings.theme_mode
+  root.setAttribute('data-theme', mode)
   root.setAttribute('data-accent', settings.theme_accent)
 }

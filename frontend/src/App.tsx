@@ -13,6 +13,7 @@ import { SetupPage } from './pages/SetupPage'
 import { ServiceModal } from './components/ServiceModal'
 import { LoginModal } from './components/LoginModal'
 import type { Service } from './types'
+import { calcAutoTheme } from './utils'
 
 export default function App() {
   const { loadAll, checkAllServices, checkAuth, settings, authReady, needsSetup, isAdmin, authUser, userGroups, myBackground, loadMyBackground } = useStore()
@@ -72,6 +73,16 @@ export default function App() {
     }, 60_000)
     return () => clearInterval(interval)
   }, [])
+
+  // Auto theme: re-apply every 60s so switches happen on time
+  useEffect(() => {
+    if (!settings?.auto_theme_enabled) return
+    const interval = setInterval(() => {
+      const mode = calcAutoTheme(settings.auto_theme_light_start ?? '08:00', settings.auto_theme_dark_start ?? '20:00')
+      document.documentElement.setAttribute('data-theme', mode)
+    }, 60_000)
+    return () => clearInterval(interval)
+  }, [settings?.auto_theme_enabled, settings?.auto_theme_light_start, settings?.auto_theme_dark_start])
 
   const handleCheckAll = async () => {
     setChecking(true)
