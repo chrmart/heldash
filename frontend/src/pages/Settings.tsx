@@ -142,15 +142,20 @@ function VisibilityChecklist({
 
   useEffect(() => { setHidden(new Set(hiddenIds)) }, [hiddenIds.join(',')])
 
-  const toggle = (id: string) => setHidden(prev => {
-    const next = new Set(prev)
+  const toggle = (id: string) => {
+    const next = new Set(hidden)
     next.has(id) ? next.delete(id) : next.add(id)
-    return next
-  })
+    setHidden(next)
+    setSaving(true)
+    onSave([...next]).finally(() => setSaving(false))
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>{label}</div>
+        {saving && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Saving…</span>}
+      </div>
       {items.length === 0
         ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>None configured yet.</span>
         : (
@@ -159,7 +164,7 @@ function VisibilityChecklist({
               const visible = !hidden.has(item.id)
               return (
                 <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
-                  <input type="checkbox" checked={visible} onChange={() => toggle(item.id)} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
+                  <input type="checkbox" checked={visible} onChange={() => toggle(item.id)} disabled={saving} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
                   {item.icon_url
                     ? <img src={item.icon_url} alt="" style={{ width: 16, height: 16, objectFit: 'contain', borderRadius: 3, flexShrink: 0 }} />
                     : item.icon ? <span style={{ fontSize: 14, lineHeight: 1 }}>{item.icon}</span> : null
@@ -175,9 +180,6 @@ function VisibilityChecklist({
           </div>
         )
       }
-      <button className="btn btn-primary btn-sm" onClick={async () => { setSaving(true); try { await onSave([...hidden]) } finally { setSaving(false) } }} disabled={saving} style={{ alignSelf: 'flex-start', fontSize: 12, marginTop: 2 }}>
-        <Check size={12} /> {saving ? 'Saving…' : 'Save'}
-      </button>
     </div>
   )
 }
