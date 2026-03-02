@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useArrStore } from '../store/useArrStore'
 import { useStore } from '../store/useStore'
-import type { ArrStatus, ArrStats, ArrQueueItem, ArrCalendarItem, SonarrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData } from '../types/arr'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import type { ArrStatus, ArrStats, ArrQueueItem, ArrCalendarItem, SonarrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest } from '../types/arr'
+import { ChevronDown, ChevronUp, Check, X, Trash2 } from 'lucide-react'
 
 // Minimal instance shape — works for both ArrInstance and dashboard partial
 export interface ArrInstanceBase {
@@ -38,6 +38,7 @@ export const TYPE_LABELS: Record<string, string> = {
   sonarr: 'Sonarr',
   prowlarr: 'Prowlarr',
   sabnzbd: 'SABnzbd',
+  seerr: 'Seerr',
 }
 
 export const TYPE_COLORS: Record<string, string> = {
@@ -45,6 +46,7 @@ export const TYPE_COLORS: Record<string, string> = {
   sonarr: '#3b82f6',
   prowlarr: '#8b5cf6',
   sabnzbd: '#22c55e',
+  seerr: '#6366f1',
 }
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
@@ -399,6 +401,243 @@ export function SabnzbdCardContent({ instance }: {
                 ? <SabnzbdHistoryList history={histories[instance.id]!} />
                 : null
           }
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Seerr card content ────────────────────────────────────────────────────────
+
+const SEERR_REQUEST_STATUS: Record<number, { label: string; color: string }> = {
+  1: { label: 'Pending',  color: 'var(--accent)' },
+  2: { label: 'Approved', color: 'var(--status-online)' },
+  3: { label: 'Declined', color: 'var(--status-offline)' },
+}
+
+function SeerrRequestList({
+  requests,
+  controlling,
+  isAdmin,
+  onApprove,
+  onDecline,
+  onDelete,
+}: {
+  requests: SeerrRequest[]
+  controlling: number | null
+  isAdmin: boolean
+  onApprove: (id: number) => void
+  onDecline: (id: number) => void
+  onDelete: (id: number) => void
+}) {
+  if (requests.length === 0) {
+    return <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>No requests.</p>
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {requests.map(req => {
+        const st = SEERR_REQUEST_STATUS[req.status] ?? { label: 'Unknown', color: 'var(--text-muted)' }
+        const who = req.requestedBy.displayName ?? req.requestedBy.username ?? req.requestedBy.email
+        const isBusy = controlling === req.id
+        return (
+          <div key={req.id} className="glass" style={{ padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 'var(--radius-sm)',
+                background: req.media.mediaType === 'movie' ? '#f59e0b22' : '#3b82f622',
+                color: req.media.mediaType === 'movie' ? '#f59e0b' : '#3b82f6',
+                border: `1px solid ${req.media.mediaType === 'movie' ? '#f59e0b44' : '#3b82f644'}`,
+                textTransform: 'uppercase', flexShrink: 0,
+              }}>
+                {req.media.mediaType === 'movie' ? 'Movie' : 'TV'}
+              </span>
+              <span style={{ color: 'var(--text-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                TMDB #{req.media.tmdbId}
+              </span>
+              <span style={{ fontSize: 10, color: st.color, flexShrink: 0, fontWeight: 600 }}>{st.label}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)' }}>
+              <span style={{ flex: 1 }}>by {who}</span>
+              {isAdmin && (
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  {req.status === 1 && (
+                    <>
+                      <button
+                        className="btn btn-ghost btn-icon btn-sm"
+                        disabled={isBusy}
+                        onClick={() => onApprove(req.id)}
+                        data-tooltip="Approve"
+                        style={{ width: 22, height: 22, padding: 3, color: 'var(--status-online)' }}
+                      >
+                        {isBusy ? <div className="spinner" style={{ width: 10, height: 10, borderWidth: 1 }} /> : <Check size={10} />}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-icon btn-sm"
+                        disabled={isBusy}
+                        onClick={() => onDecline(req.id)}
+                        data-tooltip="Decline"
+                        style={{ width: 22, height: 22, padding: 3, color: 'var(--status-offline)' }}
+                      >
+                        <X size={10} />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    className="btn btn-ghost btn-icon btn-sm"
+                    disabled={isBusy}
+                    onClick={() => onDelete(req.id)}
+                    data-tooltip="Delete"
+                    style={{ width: 22, height: 22, padding: 3, color: 'var(--text-muted)' }}
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+export function SeerrCardContent({ instance }: { instance: ArrInstanceBase }) {
+  const { stats, statuses, seerrRequests, loadSeerrRequests, seerrApprove, seerrDecline, seerrDelete } = useArrStore()
+  const { isAdmin } = useStore()
+  const { services } = useStore()
+  const instUrl = normalizeUrl(instance.url)
+  const matchingSvc = services.find(s =>
+    normalizeUrl(s.url) === instUrl || (s.check_url && normalizeUrl(s.check_url) === instUrl)
+  )
+  const iconUrl = matchingSvc?.icon_url ?? null
+  const iconEmoji = matchingSvc?.icon ?? null
+
+  const [expanded, setExpanded] = useState(false)
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'declined'>('pending')
+  const [loadingExpand, setLoadingExpand] = useState(false)
+  const [controlling, setControlling] = useState<number | null>(null)
+
+  const status: ArrStatus | undefined = statuses[instance.id]
+  const stat: ArrStats | undefined = stats[instance.id]
+  const seerrStat = stat?.type === 'seerr' ? stat : undefined
+  const online = status?.online ?? null
+  const reqData = seerrRequests[instance.id]
+
+  const handleExpand = async () => {
+    const next = !expanded
+    setExpanded(next)
+    if (next && !reqData) {
+      setLoadingExpand(true)
+      await loadSeerrRequests(instance.id, filter)
+      setLoadingExpand(false)
+    }
+  }
+
+  const handleFilter = async (f: typeof filter) => {
+    setFilter(f)
+    setLoadingExpand(true)
+    await loadSeerrRequests(instance.id, f)
+    setLoadingExpand(false)
+  }
+
+  const handleApprove = async (requestId: number) => {
+    setControlling(requestId)
+    try {
+      await seerrApprove(instance.id, requestId)
+      await loadSeerrRequests(instance.id, filter)
+    } catch { /* ignore */ } finally { setControlling(null) }
+  }
+
+  const handleDecline = async (requestId: number) => {
+    setControlling(requestId)
+    try {
+      await seerrDecline(instance.id, requestId)
+      await loadSeerrRequests(instance.id, filter)
+    } catch { /* ignore */ } finally { setControlling(null) }
+  }
+
+  const handleDelete = async (requestId: number) => {
+    if (!confirm('Delete this request?')) return
+    setControlling(requestId)
+    try {
+      await seerrDelete(instance.id, requestId)
+      await loadSeerrRequests(instance.id, filter)
+    } catch { /* ignore */ } finally { setControlling(null) }
+  }
+
+  const seerrColor = TYPE_COLORS['seerr']
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <InstanceIcon iconUrl={iconUrl} iconEmoji={iconEmoji} />
+        <span style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: 1, padding: '2px 8px',
+          borderRadius: 'var(--radius-sm)', background: `${seerrColor}22`,
+          color: seerrColor, border: `1px solid ${seerrColor}44`,
+          textTransform: 'uppercase', flexShrink: 0,
+        }}>Seerr</span>
+        <span style={{ fontWeight: 600, fontSize: 15, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{instance.name}</span>
+        <span style={{
+          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+          background: online === null ? 'var(--text-muted)' : online ? 'var(--status-online)' : 'var(--status-offline)',
+          boxShadow: online ? '0 0 6px var(--status-online)' : 'none',
+        }} />
+      </div>
+
+      {status?.online && status.version && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Seerr v{status.version}</div>
+      )}
+
+      {seerrStat && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <Stat label="Total" value={seerrStat.total} />
+          <Stat label="Pending" value={seerrStat.pending} />
+          <Stat label="Approved" value={seerrStat.approved} />
+          <Stat label="Declined" value={seerrStat.declined} />
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 6 }}>
+        <ExpandBtn label="Requests" active={expanded} onClick={handleExpand} />
+      </div>
+
+      {expanded && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {(['all', 'pending', 'approved', 'declined'] as const).map(f => (
+              <button
+                key={f}
+                className="btn btn-ghost btn-sm"
+                onClick={() => handleFilter(f)}
+                style={{
+                  fontSize: 11, padding: '3px 8px', textTransform: 'capitalize',
+                  color: filter === f ? 'var(--accent)' : 'var(--text-secondary)',
+                  borderColor: filter === f ? 'var(--accent)' : 'transparent',
+                }}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          {loadingExpand
+            ? <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+            : reqData
+              ? <SeerrRequestList
+                  requests={reqData.results}
+                  controlling={controlling}
+                  isAdmin={isAdmin}
+                  onApprove={handleApprove}
+                  onDecline={handleDecline}
+                  onDelete={handleDelete}
+                />
+              : <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>Could not load requests.</p>
+          }
+          {reqData && reqData.pageInfo.results > reqData.results.length && (
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
+              +{reqData.pageInfo.results - reqData.results.length} more
+            </p>
+          )}
         </div>
       )}
     </>

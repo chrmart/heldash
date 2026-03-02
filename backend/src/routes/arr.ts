@@ -5,6 +5,7 @@ import { RadarrClient } from '../arr/radarr'
 import { SonarrClient } from '../arr/sonarr'
 import { ProwlarrClient } from '../arr/prowlarr'
 import { SabnzbdClient } from '../arr/sabnzbd'
+import { SeerrClient } from '../arr/seerr'
 
 // ── DB row type ───────────────────────────────────────────────────────────────
 interface ArrInstanceRow {
@@ -134,8 +135,8 @@ export async function arrRoutes(app: FastifyInstance) {
     { preHandler: [app.requireAdmin] },
     async (req, reply) => {
       const { type, name, url, api_key, enabled = true, position = 0 } = req.body
-      if (!['radarr', 'sonarr', 'prowlarr', 'sabnzbd'].includes(type)) {
-        return reply.status(400).send({ error: 'type must be radarr, sonarr, prowlarr or sabnzbd' })
+      if (!['radarr', 'sonarr', 'prowlarr', 'sabnzbd', 'seerr'].includes(type)) {
+        return reply.status(400).send({ error: 'type must be radarr, sonarr, prowlarr, sabnzbd or seerr' })
       }
       if (!name?.trim() || !url?.trim() || !api_key?.trim()) {
         return reply.status(400).send({ error: 'name, url and api_key are required' })
@@ -223,6 +224,10 @@ export async function arrRoutes(app: FastifyInstance) {
         const { version } = await new SabnzbdClient(row.url, row.api_key).getVersion()
         return { online: true, type: 'sabnzbd', version }
       }
+      if (row.type === 'seerr') {
+        const status = await new SeerrClient(row.url, row.api_key).getStatus()
+        return { online: true, type: 'seerr', version: status.version }
+      }
       const status = await makeClient(row).getSystemStatus()
       return { online: true, type: row.type, ...status }
     } catch {
@@ -235,6 +240,16 @@ export async function arrRoutes(app: FastifyInstance) {
     const row = await resolveInstance(req, reply, req.params.id)
     if (!row) return
     try {
+      if (row.type === 'seerr') {
+        const count = await new SeerrClient(row.url, row.api_key).getRequestCount()
+        return {
+          type: 'seerr',
+          pending: count.pending,
+          approved: count.approved,
+          declined: count.declined,
+          total: count.total,
+        }
+      }
       if (row.type === 'sabnzbd') {
         // limit=1 to minimise payload; noofslots always reflects total count
         const { queue } = await new SabnzbdClient(row.url, row.api_key).getQueue(0, 1)
@@ -294,7 +309,7 @@ export async function arrRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/arr/:id/queue', async (req, reply) => {
     const row = await resolveInstance(req, reply, req.params.id)
     if (!row) return
-    if (row.type === 'prowlarr') return reply.status(400).send({ error: 'Prowlarr has no queue' })
+    if (row.type === 'prowlarr' || row.type === 'seerr') return reply.status(400).send({ error: 'Not available for this instance type' })
     try {
       if (row.type === 'sabnzbd') {
         const { queue } = await new SabnzbdClient(row.url, row.api_key).getQueue(0, 20)
@@ -313,7 +328,7 @@ export async function arrRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/arr/:id/history', async (req, reply) => {
     const row = await resolveInstance(req, reply, req.params.id)
     if (!row) return
-    if (row.type !== 'sabnzbd') return reply.status(400).send({ error: 'Only available for SABnzbd' })
+    if (row.type !== 'sabnzbd') return reply.status(400).send({ error: 'Only available for SABnzbd instances' })
     try {
       const { history } = await new SabnzbdClient(row.url, row.api_key).getHistory(0, 10)
       return history
@@ -326,7 +341,7 @@ export async function arrRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/arr/:id/calendar', async (req, reply) => {
     const row = await resolveInstance(req, reply, req.params.id)
     if (!row) return
-    if (row.type === 'prowlarr' || row.type === 'sabnzbd') return reply.status(400).send({ error: 'Not supported for this instance type' })
+    if (row.type === 'prowlarr' || row.type === 'sabnzbd' || row.type === 'seerr') return reply.status(400).send({ error: 'Not supported for this instance type' })
     try {
       const { start, end } = calendarRange()
       const client = row.type === 'radarr'
@@ -349,4 +364,71 @@ export async function arrRoutes(app: FastifyInstance) {
       return reply.status(502).send({ error: 'Upstream error', detail: e.message })
     }
   })
+
+  // ── Seerr routes ────────────────────────────────────────────────────────────
+
+  // GET /api/arr/:id/requests?page=1&filter=pending
+  app.get<{ Params: { id: string }; Querystring: { page?: string; filter?: string } }>(
+    '/api/arr/:id/requests',
+    async (req, reply) => {
+      const row = await resolveInstance(req, reply, req.params.id)
+      if (!row) return
+      if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
+      try {
+        const page = Math.max(1, parseInt(req.query.page ?? '1', 10))
+        return await new SeerrClient(row.url, row.api_key).getRequests(page, req.query.filter)
+      } catch (e: any) {
+        return reply.status(502).send({ error: 'Upstream error', detail: e.message })
+      }
+    }
+  )
+
+  // POST /api/arr/:id/requests/:requestId/approve
+  app.post<{ Params: { id: string; requestId: string } }>(
+    '/api/arr/:id/requests/:requestId/approve',
+    { preHandler: [app.requireAdmin] },
+    async (req, reply) => {
+      const row = await resolveInstance(req, reply, req.params.id)
+      if (!row) return
+      if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
+      try {
+        return await new SeerrClient(row.url, row.api_key).approveRequest(parseInt(req.params.requestId, 10))
+      } catch (e: any) {
+        return reply.status(502).send({ error: 'Upstream error', detail: e.message })
+      }
+    }
+  )
+
+  // POST /api/arr/:id/requests/:requestId/decline
+  app.post<{ Params: { id: string; requestId: string } }>(
+    '/api/arr/:id/requests/:requestId/decline',
+    { preHandler: [app.requireAdmin] },
+    async (req, reply) => {
+      const row = await resolveInstance(req, reply, req.params.id)
+      if (!row) return
+      if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
+      try {
+        return await new SeerrClient(row.url, row.api_key).declineRequest(parseInt(req.params.requestId, 10))
+      } catch (e: any) {
+        return reply.status(502).send({ error: 'Upstream error', detail: e.message })
+      }
+    }
+  )
+
+  // DELETE /api/arr/:id/requests/:requestId
+  app.delete<{ Params: { id: string; requestId: string } }>(
+    '/api/arr/:id/requests/:requestId',
+    { preHandler: [app.requireAdmin] },
+    async (req, reply) => {
+      const row = await resolveInstance(req, reply, req.params.id)
+      if (!row) return
+      if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
+      try {
+        await new SeerrClient(row.url, row.api_key).deleteRequest(parseInt(req.params.requestId, 10))
+        return reply.status(204).send()
+      } catch (e: any) {
+        return reply.status(502).send({ error: 'Upstream error', detail: e.message })
+      }
+    }
+  )
 }

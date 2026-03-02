@@ -9,7 +9,7 @@ import { arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Pencil, Trash2, Check, X, RefreshCw, GripVertical } from 'lucide-react'
 import type { ArrInstance } from '../types/arr'
-import { ArrCardContent, SabnzbdCardContent } from '../components/MediaCard'
+import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
 
 // ── Sortable card wrapper ─────────────────────────────────────────────────────
 
@@ -53,7 +53,9 @@ function SortableInstanceCard({
         <div style={{ paddingLeft: isAdmin ? 16 : 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {instance.type === 'sabnzbd'
             ? <SabnzbdCardContent instance={instance} />
-            : <ArrCardContent instance={instance} />
+            : instance.type === 'seerr'
+              ? <SeerrCardContent instance={instance} />
+              : <ArrCardContent instance={instance} />
           }
         </div>
 
@@ -120,6 +122,7 @@ function InstanceForm({
           <option value="sonarr">Sonarr</option>
           <option value="prowlarr">Prowlarr</option>
           <option value="sabnzbd">SABnzbd</option>
+          <option value="seerr">Seerr</option>
         </select>
         <input className="form-input" placeholder="Name *" value={name} onChange={e => setName(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
       </div>

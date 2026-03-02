@@ -42,6 +42,41 @@ export class ArrBaseClient {
     return JSON.parse(chunks.length ? Buffer.concat(chunks).toString('utf-8') : 'null') as T
   }
 
+  protected async post<T>(endpoint: string, body?: unknown): Promise<T> {
+    const url = `${this.apiBase}/${endpoint}`
+    const res = await request(url, {
+      method: 'POST',
+      headers: {
+        'X-Api-Key': this.apiKey,
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      dispatcher: agent,
+    })
+    if (res.statusCode >= 400) {
+      for await (const _ of res.body) { /* drain */ }
+      throw new Error(`HTTP ${res.statusCode} from ${url}`)
+    }
+    const chunks: Buffer[] = []
+    for await (const chunk of res.body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    }
+    return JSON.parse(chunks.length ? Buffer.concat(chunks).toString('utf-8') : 'null') as T
+  }
+
+  protected async del(endpoint: string): Promise<void> {
+    const url = `${this.apiBase}/${endpoint}`
+    const res = await request(url, {
+      method: 'DELETE',
+      headers: { 'X-Api-Key': this.apiKey },
+      dispatcher: agent,
+    })
+    for await (const _ of res.body) { /* drain */ }
+    if (res.statusCode >= 400) {
+      throw new Error(`HTTP ${res.statusCode} from ${url}`)
+    }
+  }
+
   /** Quick reachability check — returns true if /system/status responds */
   async ping(): Promise<boolean> {
     try {

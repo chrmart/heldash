@@ -1,5 +1,5 @@
 import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, Widget, WidgetStats, DockerContainer, ContainerStats, Background } from './types'
-import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData } from './types/arr'
+import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse } from './types/arr'
 
 const BASE = '/api'
 
@@ -113,6 +113,17 @@ export const api = {
     calendar: (id: string) => req<ArrCalendarItem[]>(`/arr/${id}/calendar`),
     indexers: (id: string) => req<ProwlarrIndexer[]>(`/arr/${id}/indexers`),
     history: (id: string) => req<SabnzbdHistoryData>(`/arr/${id}/history`),
+    seerrRequests: (id: string, page = 1, filter?: string) => {
+      const params = new URLSearchParams({ page: String(page) })
+      if (filter && filter !== 'all') params.set('filter', filter)
+      return req<SeerrRequestsResponse>(`/arr/${id}/requests?${params}`)
+    },
+    seerrApprove: (id: string, requestId: number) =>
+      req<SeerrRequest>(`/arr/${id}/requests/${requestId}/approve`, { method: 'POST', body: JSON.stringify({}) }),
+    seerrDecline: (id: string, requestId: number) =>
+      req<SeerrRequest>(`/arr/${id}/requests/${requestId}/decline`, { method: 'POST', body: JSON.stringify({}) }),
+    seerrDelete: (id: string, requestId: number) =>
+      req<void>(`/arr/${id}/requests/${requestId}`, { method: 'DELETE' }),
   },
 
   widgets: {

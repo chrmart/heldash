@@ -1,4 +1,4 @@
-export type ArrType = 'radarr' | 'sonarr' | 'prowlarr' | 'sabnzbd'
+export type ArrType = 'radarr' | 'sonarr' | 'prowlarr' | 'sabnzbd' | 'seerr'
 
 export interface ArrInstance {
   id: string
@@ -52,7 +52,39 @@ export interface SabnzbdStats {
   diskspaceFreeGb: number
 }
 
-export type ArrStats = RadarrStats | SonarrStats | ProwlarrStats | SabnzbdStats
+export interface SeerrStats {
+  type: 'seerr'
+  pending: number
+  approved: number
+  declined: number
+  total: number
+}
+
+export type ArrStats = RadarrStats | SonarrStats | ProwlarrStats | SabnzbdStats | SeerrStats
+
+// ── Seerr requests ────────────────────────────────────────────────────────────
+
+export interface SeerrMedia {
+  id: number
+  mediaType: 'movie' | 'tv'
+  tmdbId: number
+  tvdbId?: number | null
+  status: number  // 1=unknown, 2=pending, 3=processing, 4=partially_available, 5=available
+}
+
+export interface SeerrRequest {
+  id: number
+  status: number  // 1=pending, 2=approved, 3=declined
+  createdAt: string
+  requestedBy: { id: number; displayName?: string; username?: string; email: string }
+  media: SeerrMedia
+  seasons?: { seasonNumber: number }[]
+}
+
+export interface SeerrRequestsResponse {
+  pageInfo: { pages: number; pageSize: number; results: number; page: number }
+  results: SeerrRequest[]
+}
 
 // ── SABnzbd queue / history ───────────────────────────────────────────────────
 export interface SabnzbdQueueSlot {

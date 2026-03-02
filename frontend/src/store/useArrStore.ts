@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { api } from '../api'
-import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData } from '../types/arr'
+import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequestsResponse } from '../types/arr'
 
 interface ArrState {
   instances: ArrInstance[]
@@ -11,6 +11,7 @@ interface ArrState {
   indexers: Record<string, ProwlarrIndexer[]>
   sabQueues: Record<string, SabnzbdQueueData>
   histories: Record<string, SabnzbdHistoryData>
+  seerrRequests: Record<string, SeerrRequestsResponse>
 
   loadInstances: () => Promise<void>
   loadAllStats: () => Promise<void>
@@ -21,6 +22,10 @@ interface ArrState {
   loadIndexers: (id: string) => Promise<void>
   loadSabQueue: (id: string) => Promise<void>
   loadHistory: (id: string) => Promise<void>
+  loadSeerrRequests: (id: string, filter?: string, page?: number) => Promise<void>
+  seerrApprove: (id: string, requestId: number) => Promise<void>
+  seerrDecline: (id: string, requestId: number) => Promise<void>
+  seerrDelete: (id: string, requestId: number) => Promise<void>
 
   createInstance: (data: { type: string; name: string; url: string; api_key: string }) => Promise<string>
   updateInstance: (id: string, data: { name?: string; url?: string; api_key?: string; enabled?: boolean; position?: number }) => Promise<void>
@@ -37,6 +42,7 @@ export const useArrStore = create<ArrState>((set, get) => ({
   indexers: {},
   sabQueues: {},
   histories: {},
+  seerrRequests: {},
 
   loadInstances: async () => {
     const instances = await api.arr.instances.list()
@@ -96,6 +102,25 @@ export const useArrStore = create<ArrState>((set, get) => ({
     set(state => ({ histories: { ...state.histories, [id]: history } }))
   },
 
+  loadSeerrRequests: async (id, filter, page = 1) => {
+    try {
+      const result = await api.arr.seerrRequests(id, page, filter)
+      set(state => ({ seerrRequests: { ...state.seerrRequests, [id]: result } }))
+    } catch { /* keep previous state on error — API independent */ }
+  },
+
+  seerrApprove: async (id, requestId) => {
+    await api.arr.seerrApprove(id, requestId)
+  },
+
+  seerrDecline: async (id, requestId) => {
+    await api.arr.seerrDecline(id, requestId)
+  },
+
+  seerrDelete: async (id, requestId) => {
+    await api.arr.seerrDelete(id, requestId)
+  },
+
   createInstance: async (data) => {
     const instance = await api.arr.instances.create(data)
     set(state => ({ instances: [...state.instances, instance] }))
@@ -133,6 +158,7 @@ export const useArrStore = create<ArrState>((set, get) => ({
       calendars: Object.fromEntries(Object.entries(state.calendars).filter(([k]) => k !== id)),
       sabQueues: Object.fromEntries(Object.entries(state.sabQueues).filter(([k]) => k !== id)),
       histories: Object.fromEntries(Object.entries(state.histories).filter(([k]) => k !== id)),
+      seerrRequests: Object.fromEntries(Object.entries(state.seerrRequests).filter(([k]) => k !== id)),
     }))
   },
 }))
