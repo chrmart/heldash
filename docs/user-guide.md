@@ -268,7 +268,7 @@ Gruppen steuern, was ein Benutzer sehen und nutzen darf. Jeder Benutzer gehört 
 | **Docker** | Docker-Seite freigeben · Docker-Overview-Widget freigeben |
 | **Background** | Hintergrundbild für diese Gruppe auswählen (Dropdown mit allen hochgeladenen Bildern, oder „Kein Hintergrund") |
 
-Änderungen im Background-Tab werden sofort gespeichert. Änderungen in den anderen Tabs müssen mit dem **Speichern**-Button bestätigt werden.
+Alle Änderungen in den Tabs (Apps, Media, Widgets, Docker, Background) werden sofort gespeichert — es gibt keinen separaten Speichern-Button.
 
 ### Tab: OIDC / SSO
 
