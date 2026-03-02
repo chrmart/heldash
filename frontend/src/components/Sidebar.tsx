@@ -8,21 +8,6 @@ interface Props {
   onNavigate: (page: string) => void
 }
 
-function PrismaIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M11 2L21 19.5H1L11 2Z"
-        stroke="var(--accent)"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        fill="var(--accent)"
-        fillOpacity="0.12"
-      />
-    </svg>
-  )
-}
-
 export function Sidebar({ page, onNavigate }: Props) {
   const { settings, services, isAdmin, isAuthenticated, authUser, userGroups } = useStore()
   const { instances } = useArrStore()
@@ -38,7 +23,7 @@ export function Sidebar({ page, onNavigate }: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        <div className="sidebar-logo-icon"><PrismaIcon /></div>
+        <img src="/favicon.png" alt="" className="sidebar-logo-icon" style={{ width: 22, height: 22, objectFit: 'contain' }} />
         <span className="sidebar-logo-text">{title}</span>
       </div>
 

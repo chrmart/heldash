@@ -25,6 +25,7 @@ interface UserGroupRow {
   is_system: number
   docker_access: number
   docker_widget_access: number
+  background_id: string | null
   created_at: string
 }
 
@@ -190,7 +191,7 @@ export async function usersRoutes(app: FastifyInstance) {
     db.prepare('INSERT INTO user_groups (id, name, description, is_system) VALUES (?, ?, ?, 0)')
       .run(id, name.trim(), description?.trim() ?? null)
     const group = db.prepare('SELECT * FROM user_groups WHERE id = ?').get(id) as UserGroupRow
-    return reply.status(201).send({ ...group, is_system: false, docker_access: false, docker_widget_access: false, hidden_service_ids: [], hidden_arr_ids: [], hidden_widget_ids: [] })
+    return reply.status(201).send({ ...group, is_system: false, docker_access: false, docker_widget_access: false, background_id: null, hidden_service_ids: [], hidden_arr_ids: [], hidden_widget_ids: [] })
   })
 
   // PUT /api/user-groups/:id/visibility — set hidden app list for a group

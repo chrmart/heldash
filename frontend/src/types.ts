@@ -143,10 +143,17 @@ export interface UserGroup {
   is_system: boolean
   docker_access: boolean
   docker_widget_access: boolean
+  background_id: string | null
   created_at: string
   hidden_service_ids: string[]
   hidden_arr_ids: string[]
   hidden_widget_ids: string[]
+}
+
+export interface Background {
+  id: string
+  name: string
+  file_path: string
 }
 
 export interface DockerContainer {

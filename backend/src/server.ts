@@ -16,6 +16,7 @@ import { arrRoutes } from './routes/arr'
 import { dashboardRoutes } from './routes/dashboard'
 import { widgetsRoutes } from './routes/widgets'
 import { dockerRoutes } from './routes/docker'
+import { backgroundsRoutes } from './routes/backgrounds'
 
 const PORT = parseInt(process.env.PORT ?? '8282', 10)
 const DATA_DIR = process.env.DATA_DIR ?? '/data'
@@ -148,6 +149,23 @@ async function start() {
     prefix: '/',
   })
 
+  // ── Serve uploaded background images ─────────────────────────────────────────
+  app.get<{ Params: { filename: string } }>('/backgrounds/:filename', async (req, reply) => {
+    const bgDir = path.join(DATA_DIR, 'backgrounds')
+    const filePath = path.join(bgDir, path.basename(req.params.filename))
+    if (!fs.existsSync(filePath)) return reply.status(404).send({ error: 'Not found' })
+    const mimeTypes: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.svg': 'image/svg+xml',
+      '.webp': 'image/webp',
+    }
+    const ext = path.extname(filePath).toLowerCase()
+    reply.header('Content-Type', mimeTypes[ext] ?? 'application/octet-stream')
+    reply.header('Cache-Control', 'public, max-age=3600')
+    return reply.send(fs.createReadStream(filePath))
+  })
+
   // ── Serve uploaded service icons ─────────────────────────────────────────────
   app.get<{ Params: { filename: string } }>('/icons/:filename', async (req, reply) => {
     const iconsDir = path.join(DATA_DIR, 'icons')
@@ -184,6 +202,7 @@ async function start() {
   await app.register(dashboardRoutes)
   await app.register(widgetsRoutes)
   await app.register(dockerRoutes)
+  await app.register(backgroundsRoutes)
   await app.register(settingsRoutes)
 
   // ── SPA fallback – serve index.html for all non-API routes ───────────────────

@@ -46,6 +46,8 @@ function runMigrations(db: Database.Database): number {
     'ALTER TABLE user_groups ADD COLUMN docker_access INTEGER NOT NULL DEFAULT 0',
     // Docker widget visibility per user group
     'ALTER TABLE user_groups ADD COLUMN docker_widget_access INTEGER NOT NULL DEFAULT 0',
+    // Background image assigned to each user group
+    'ALTER TABLE user_groups ADD COLUMN background_id TEXT',
   ]
   for (const sql of migrations) {
     try {
@@ -197,6 +199,14 @@ function applySchema(db: Database.Database) {
       group_id  TEXT NOT NULL,
       widget_id TEXT NOT NULL,
       PRIMARY KEY (group_id, widget_id)
+    );
+
+    -- Dashboard background images
+    CREATE TABLE IF NOT EXISTS backgrounds (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      file_path  TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     -- Insert default settings if not exist

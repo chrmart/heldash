@@ -47,7 +47,7 @@ export function SetupPage() {
     <div className="setup-page">
       <div className="setup-card glass">
         <div className="setup-logo">
-          <span className="setup-logo-icon">⬡</span>
+          <img src="/favicon.png" alt="" className="setup-logo-icon" style={{ width: 36, height: 36, objectFit: 'contain' }} />
           <span className="setup-logo-text">HELDASH</span>
         </div>
         <h2 className="setup-title">Welcome — Create Admin Account</h2>

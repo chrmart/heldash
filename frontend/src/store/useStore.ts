@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Service, Group, Settings, ThemeMode, ThemeAccent, AuthUser, UserRecord, UserGroup } from '../types'
+import type { Service, Group, Settings, ThemeMode, ThemeAccent, AuthUser, UserRecord, UserGroup, Background } from '../types'
 import { api } from '../api'
 
 interface AppState {
@@ -62,6 +62,15 @@ interface AppState {
   updateWidgetVisibility: (groupId: string, hiddenWidgetIds: string[]) => Promise<void>
   updateDockerAccess: (groupId: string, enabled: boolean) => Promise<void>
   updateDockerWidgetAccess: (groupId: string, enabled: boolean) => Promise<void>
+
+  // Background images
+  backgrounds: Background[]
+  myBackground: string | null  // URL of the background assigned to the current user's group
+  loadBackgrounds: () => Promise<void>
+  loadMyBackground: () => Promise<void>
+  uploadBackground: (name: string, file: File) => Promise<void>
+  deleteBackground: (id: string) => Promise<void>
+  setGroupBackground: (groupId: string, backgroundId: string | null) => Promise<void>
 }
 
 function parseService<T extends { tags: string | string[] }>(s: T): T {
@@ -83,6 +92,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   users: [],
   userGroups: [],
+
+  backgrounds: [],
+  myBackground: null,
 
   // ── App data ────────────────────────────────────────────────────────────────
 
@@ -118,7 +130,7 @@ export const useStore = create<AppState>((set, get) => ({
   createService: async (data) => {
     const parsed = parseService(await api.services.create(data))
     set(state => ({ services: [...state.services, parsed] }))
-    if (svc.check_enabled) {
+    if (parsed.check_enabled) {
       get().checkService(parsed.id).catch(() => { /* ignore */ })
     }
     return parsed.id
@@ -369,6 +381,50 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({
       userGroups: state.userGroups.map(g =>
         g.id === groupId ? { ...g, docker_widget_access: enabled } : g
+      ),
+    }))
+  },
+
+  // ── Background images ────────────────────────────────────────────────────────
+
+  loadBackgrounds: async () => {
+    const backgrounds = await api.backgrounds.list()
+    set({ backgrounds })
+  },
+
+  loadMyBackground: async () => {
+    try {
+      const result = await api.backgrounds.mine()
+      set({ myBackground: result?.url ?? null })
+    } catch {
+      set({ myBackground: null })
+    }
+  },
+
+  uploadBackground: async (name, file) => {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve((reader.result as string).split(',')[1])
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    const bg = await api.backgrounds.upload(name, base64, file.type)
+    set(state => ({ backgrounds: [bg, ...state.backgrounds] }))
+  },
+
+  deleteBackground: async (id) => {
+    await api.backgrounds.delete(id)
+    set(state => ({
+      backgrounds: state.backgrounds.filter(b => b.id !== id),
+      userGroups: state.userGroups.map(g => g.background_id === id ? { ...g, background_id: null } : g),
+    }))
+  },
+
+  setGroupBackground: async (groupId, backgroundId) => {
+    await api.backgrounds.setGroupBackground(groupId, backgroundId)
+    set(state => ({
+      userGroups: state.userGroups.map(g =>
+        g.id === groupId ? { ...g, background_id: backgroundId } : g
       ),
     }))
   },

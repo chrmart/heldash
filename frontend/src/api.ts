@@ -1,4 +1,4 @@
-import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, Widget, WidgetStats, DockerContainer, ContainerStats } from './types'
+import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, Widget, WidgetStats, DockerContainer, ContainerStats, Background } from './types'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData } from './types/arr'
 
 const BASE = '/api'
@@ -150,6 +150,19 @@ export const api = {
     allStats: () => req<Record<string, ContainerStats>>('/docker/stats'),
     control: (id: string, action: 'start' | 'stop' | 'restart') =>
       req<{ ok: boolean }>(`/docker/containers/${id}/${action}`, { method: 'POST', body: JSON.stringify({}) }),
+  },
+
+  backgrounds: {
+    list: () => req<Background[]>('/backgrounds'),
+    mine: () => req<{ id: string; name: string; url: string } | null>('/backgrounds/mine'),
+    upload: (name: string, data: string, content_type: string) =>
+      req<Background>('/backgrounds', { method: 'POST', body: JSON.stringify({ name, data, content_type }) }),
+    delete: (id: string) => req<void>(`/backgrounds/${id}`, { method: 'DELETE' }),
+    setGroupBackground: (groupId: string, background_id: string | null) =>
+      req<{ ok: boolean }>(`/user-groups/${groupId}/background`, {
+        method: 'PUT',
+        body: JSON.stringify({ background_id }),
+      }),
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),

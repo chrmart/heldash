@@ -15,7 +15,7 @@ import { LoginModal } from './components/LoginModal'
 import type { Service } from './types'
 
 export default function App() {
-  const { loadAll, checkAllServices, checkAuth, settings, authReady, needsSetup, isAdmin, authUser, userGroups } = useStore()
+  const { loadAll, checkAllServices, checkAuth, settings, authReady, needsSetup, isAdmin, authUser, userGroups, myBackground, loadMyBackground } = useStore()
   const { loadDashboard } = useDashboardStore()
   const [page, setPage] = useState('dashboard')
   const [showModal, setShowModal] = useState(false)
@@ -26,7 +26,7 @@ export default function App() {
   const [showAddWidget, setShowAddWidget] = useState(false)
 
   useEffect(() => {
-    checkAuth().then(() => Promise.all([loadAll(), loadDashboard()]))
+    checkAuth().then(() => Promise.all([loadAll(), loadDashboard(), loadMyBackground()]))
   }, [])
 
   // Apply theme from settings
@@ -36,6 +36,19 @@ export default function App() {
       document.documentElement.setAttribute('data-accent', settings.theme_accent)
     }
   }, [settings])
+
+  // Reload background after login/logout, apply as CSS variable
+  useEffect(() => {
+    loadMyBackground()
+  }, [authUser?.sub])
+
+  useEffect(() => {
+    if (myBackground) {
+      document.documentElement.style.setProperty('--user-bg-url', `url(${myBackground})`)
+    } else {
+      document.documentElement.style.removeProperty('--user-bg-url')
+    }
+  }, [myBackground])
 
   // Kick non-admins off settings page (e.g. after logout while on settings)
   useEffect(() => {
@@ -92,6 +105,11 @@ export default function App() {
 
   return (
     <>
+      {/* User-assigned background image */}
+      {myBackground && (
+        <div className="bg-user-image" style={{ backgroundImage: `url(${myBackground})` }} />
+      )}
+
       {/* Ambient background orbs */}
       <div className="bg-orbs">
         <div className="bg-orb bg-orb-1" />

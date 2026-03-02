@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
 import { useWidgetStore } from '../store/useWidgetStore'
-import { Plus, Trash2, Users, Shield, Pencil, X, Check, Eye, EyeOff, Settings, KeyRound } from 'lucide-react'
-import type { UserRecord, UserGroup, Service } from '../types'
+import { Plus, Trash2, Users, Shield, Pencil, X, Check, Eye, EyeOff, Settings, KeyRound, Upload, ImageIcon } from 'lucide-react'
+import type { UserRecord, UserGroup, Service, Background } from '../types'
 import type { ArrInstance } from '../types/arr'
 
 type SettingsTab = 'general' | 'users' | 'groups' | 'oidc'
@@ -184,34 +184,37 @@ function VisibilityChecklist({
 
 // ── Per-group visibility editor ───────────────────────────────────────────────
 function GroupVisibilityEditor({
-  group, services, arrInstances, widgets,
+  group, services, arrInstances, widgets, backgrounds,
   onSaveApps, onSaveArr, onSaveWidgets,
   onToggleDockerAccess, onToggleDockerWidgetAccess,
+  onSetBackground,
 }: {
   group: UserGroup
   services: Service[]
   arrInstances: ArrInstance[]
   widgets: { id: string; name: string; type: string }[]
+  backgrounds: Background[]
   onSaveApps: (hiddenIds: string[]) => Promise<void>
   onSaveArr: (hiddenIds: string[]) => Promise<void>
   onSaveWidgets: (hiddenIds: string[]) => Promise<void>
   onToggleDockerAccess: (enabled: boolean) => void
   onToggleDockerWidgetAccess: (enabled: boolean) => void
+  onSetBackground: (backgroundId: string | null) => void
 }) {
-  const [tab, setTab] = useState<'apps' | 'media' | 'widgets' | 'docker'>('apps')
+  const [tab, setTab] = useState<'apps' | 'media' | 'widgets' | 'docker' | 'background'>('apps')
   // Non-docker widgets only in the widgets tab (docker_overview is managed via the Docker tab)
   const nonDockerWidgets = widgets.filter(w => w.type !== 'docker_overview')
   return (
     <div style={{ padding: '10px 14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', gap: 4 }}>
-        {(['apps', 'media', 'widgets', 'docker'] as const).map(t => (
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {(['apps', 'media', 'widgets', 'docker', 'background'] as const).map(t => (
           <button
             key={t}
             className="btn btn-ghost btn-sm"
             onClick={() => setTab(t)}
             style={{ fontSize: 11, padding: '3px 10px', textTransform: 'capitalize', color: tab === t ? 'var(--accent)' : 'var(--text-muted)', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', borderRadius: 0 }}
           >
-            {t === 'apps' ? 'Apps' : t === 'media' ? 'Media' : t === 'widgets' ? 'Widgets' : 'Docker'}
+            {t === 'apps' ? 'Apps' : t === 'media' ? 'Media' : t === 'widgets' ? 'Widgets' : t === 'docker' ? 'Docker' : 'Background'}
           </button>
         ))}
       </div>
@@ -247,6 +250,25 @@ function GroupVisibilityEditor({
           </label>
         </div>
       )}
+      {tab === 'background' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Dashboard Background</div>
+          <select
+            className="form-input"
+            value={group.background_id ?? ''}
+            onChange={e => onSetBackground(e.target.value || null)}
+            style={{ fontSize: 13 }}
+          >
+            <option value="">— No background —</option>
+            {backgrounds.map(b => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          {backgrounds.length === 0 && (
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No backgrounds uploaded yet. Add them in Settings → General.</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -261,6 +283,7 @@ export function SettingsPage() {
     userGroups, loadUserGroups, createUserGroup, deleteUserGroup,
     updateGroupVisibility, updateArrVisibility, updateWidgetVisibility,
     updateDockerAccess, updateDockerWidgetAccess,
+    backgrounds, loadBackgrounds, uploadBackground, deleteBackground, setGroupBackground,
   } = useStore()
   const { instances: arrInstances, loadInstances } = useArrStore()
   const { widgets, loadWidgets } = useWidgetStore()
@@ -282,9 +305,16 @@ export function SettingsPage() {
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
 
+  // Background upload state
+  const [bgName, setBgName] = useState('')
+  const [bgFile, setBgFile] = useState<File | null>(null)
+  const [bgUploading, setBgUploading] = useState(false)
+  const [bgError, setBgError] = useState('')
+  const bgFileRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     if (isAdmin) {
-      Promise.all([loadUsers(), loadUserGroups(), loadInstances(), loadWidgets()]).catch(() => {})
+      Promise.all([loadUsers(), loadUserGroups(), loadInstances(), loadWidgets(), loadBackgrounds()]).catch(() => {})
     }
   }, [isAdmin])
 
@@ -347,6 +377,23 @@ export function SettingsPage() {
 
   const isAdminGroup = (id: string | null) => id === 'grp_admin'
 
+  const handleBgUpload = async () => {
+    if (!bgName.trim()) return setBgError('Name required')
+    if (!bgFile) return setBgError('Please select an image')
+    setBgError('')
+    setBgUploading(true)
+    try {
+      await uploadBackground(bgName.trim(), bgFile)
+      setBgName('')
+      setBgFile(null)
+      if (bgFileRef.current) bgFileRef.current.value = ''
+    } catch (e: any) {
+      setBgError(e.message ?? 'Upload failed')
+    } finally {
+      setBgUploading(false)
+    }
+  }
+
   return (
     <div style={{ maxWidth: 700, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -382,6 +429,72 @@ export function SettingsPage() {
               <span className="glass" style={{ padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
                 {settings.theme_mode} / {settings.theme_accent}
               </span>
+            </div>
+          </section>
+
+          {/* Background Images */}
+          <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
+            <h3 style={{ marginBottom: 4, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <ImageIcon size={15} /> Background Images
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              Upload background images and assign them to user groups via Settings → Groups.
+            </p>
+
+            {/* Existing backgrounds list */}
+            {backgrounds.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                {backgrounds.map(bg => (
+                  <div key={bg.id} className="glass" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
+                    <img
+                      src={bg.file_path}
+                      alt={bg.name}
+                      style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 'var(--radius-sm)', flexShrink: 0, border: '1px solid var(--glass-border)' }}
+                    />
+                    <span style={{ flex: 1, fontSize: 13 }}>{bg.name}</span>
+                    <button
+                      className="btn btn-danger btn-icon btn-sm"
+                      onClick={() => { if (confirm(`Delete background "${bg.name}"?`)) deleteBackground(bg.id) }}
+                      style={{ padding: '4px', width: 28, height: 28, flexShrink: 0 }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload new background */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="form-input"
+                  placeholder="Background name"
+                  value={bgName}
+                  onChange={e => setBgName(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  <Upload size={13} />
+                  {bgFile ? bgFile.name : 'Choose image'}
+                  <input
+                    ref={bgFileRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={e => {
+                      const f = e.target.files?.[0]
+                      if (f && f.size > 5 * 1024 * 1024) { setBgError('Max 5 MB'); return }
+                      setBgError('')
+                      setBgFile(f ?? null)
+                    }}
+                  />
+                </label>
+                <button className="btn btn-primary" onClick={handleBgUpload} disabled={bgUploading} style={{ flexShrink: 0 }}>
+                  <Plus size={14} /> {bgUploading ? '…' : 'Upload'}
+                </button>
+              </div>
+              {bgError && <div style={{ fontSize: 12, color: 'var(--status-offline)' }}>{bgError}</div>}
             </div>
           </section>
 
@@ -535,11 +648,13 @@ export function SettingsPage() {
                       services={services}
                       arrInstances={arrInstances}
                       widgets={widgets.map(w => ({ id: w.id, name: w.name, type: w.type }))}
+                      backgrounds={backgrounds}
                       onSaveApps={(hiddenIds) => updateGroupVisibility(g.id, hiddenIds)}
                       onSaveArr={(hiddenIds) => updateArrVisibility(g.id, hiddenIds)}
                       onSaveWidgets={(hiddenIds) => updateWidgetVisibility(g.id, hiddenIds)}
                       onToggleDockerAccess={(enabled) => updateDockerAccess(g.id, enabled)}
                       onToggleDockerWidgetAccess={(enabled) => updateDockerWidgetAccess(g.id, enabled)}
+                      onSetBackground={(bgId) => setGroupBackground(g.id, bgId)}
                     />
                   </div>
                 )}

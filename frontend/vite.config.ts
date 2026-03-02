@@ -20,6 +20,10 @@ export default defineConfig({
         target: 'http://localhost:8282',
         changeOrigin: true,
       },
+      '/backgrounds': {
+        target: 'http://localhost:8282',
+        changeOrigin: true,
+      },
     },
   },
   build: {
