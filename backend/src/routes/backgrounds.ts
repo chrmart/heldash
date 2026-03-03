@@ -72,7 +72,7 @@ export async function backgroundsRoutes(app: FastifyInstance) {
     if (!ext) return reply.status(415).send({ error: 'Unsupported type (png/jpg/svg/webp only)' })
 
     const buf = Buffer.from(data, 'base64')
-    if (buf.length > 5 * 1024 * 1024) return reply.status(413).send({ error: 'Image too large (max 5 MB)' })
+    if (buf.length > 10 * 1024 * 1024) return reply.status(413).send({ error: 'Image too large (max 10 MB)' })
 
     const id = nanoid()
     const bgDir = path.join(DATA_DIR, 'backgrounds')
