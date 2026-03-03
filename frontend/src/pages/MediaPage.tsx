@@ -7,8 +7,8 @@ import type { DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, BarChart2, Compass, Database } from 'lucide-react'
-import type { ArrInstance } from '../types/arr'
+import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, BarChart2, Compass, Database, Tv2 } from 'lucide-react'
+import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem } from '../types/arr'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
 
 // ── Tab type ──────────────────────────────────────────────────────────────────
@@ -302,6 +302,215 @@ function InstancesTab({ showAddForm: showFromParent, onFormClose }: { showAddFor
   )
 }
 
+// ── Calendar tab ──────────────────────────────────────────────────────────────
+
+function CalendarTab() {
+  const { instances, calendars, loadCalendar } = useArrStore()
+  const [loading, setLoading] = useState(false)
+
+  const radarrSonarrInstances = instances.filter(i => (i.type === 'radarr' || i.type === 'sonarr') && i.enabled)
+
+  useEffect(() => {
+    if (radarrSonarrInstances.length === 0) return
+    const loadAll = async () => {
+      setLoading(true)
+      await Promise.allSettled(radarrSonarrInstances.map(i => loadCalendar(i.id)))
+      setLoading(false)
+    }
+    loadAll()
+  }, [radarrSonarrInstances.map(i => i.id).join(',')])
+
+  // Build unified calendar: group events by date
+  const events: Array<{ date: string; items: Array<{ title: string; type: 'movie' | 'episode'; instanceId: string; instanceName: string; hasFile: boolean }> }> = []
+
+  radarrSonarrInstances.forEach(inst => {
+    const items = calendars[inst.id] ?? []
+    items.forEach(item => {
+      let dateStr: string | undefined
+      let type: 'movie' | 'episode'
+      let title: string
+
+      if (inst.type === 'radarr') {
+        const radarrItem = item as RadarrCalendarItem
+        dateStr = radarrItem.inCinemas || radarrItem.digitalRelease
+        type = 'movie'
+        title = radarrItem.title
+      } else {
+        const sonarrItem = item as SonarrCalendarItem
+        dateStr = sonarrItem.airDateUtc?.split('T')[0]
+        type = 'episode'
+        title = `${sonarrItem.series.title} S${String(sonarrItem.seasonNumber).padStart(2, '0')}E${String(sonarrItem.episodeNumber).padStart(2, '0')}`
+      }
+
+      if (!dateStr) return
+
+      let event = events.find(e => e.date === dateStr)
+      if (!event) {
+        event = { date: dateStr, items: [] }
+        events.push(event)
+      }
+      event.items.push({
+        title,
+        type,
+        instanceId: inst.id,
+        instanceName: inst.name,
+        hasFile: 'hasFile' in item ? item.hasFile : false,
+      })
+    })
+  })
+
+  events.sort((a, b) => a.date.localeCompare(b.date))
+
+  if (radarrSonarrInstances.length === 0) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No Radarr/Sonarr instances configured.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {loading && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Loading calendar…</span>
+        </div>
+      )}
+
+      {events.length === 0 && !loading && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No upcoming releases.</p>
+        </div>
+      )}
+
+      {events.map(event => (
+        <div key={event.date} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <h4 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+            {new Date(event.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {event.items.map((item, idx) => (
+              <div key={`${event.date}-${idx}`} className="glass" style={{ borderRadius: 'var(--radius-lg)', padding: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ fontSize: 18 }}>
+                  {item.type === 'movie' ? '🎬' : '📺'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.title}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    {item.instanceName}
+                  </div>
+                </div>
+                {item.hasFile && (
+                  <div style={{ fontSize: 11, background: 'rgba(var(--accent-rgb), 0.15)', color: 'var(--accent)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
+                    Downloaded
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Indexers tab ──────────────────────────────────────────────────────────────
+
+function IndexersTab() {
+  const { instances, indexers, loadIndexers } = useArrStore()
+  const [loading, setLoading] = useState(false)
+
+  const prowlarrInstances = instances.filter(i => i.type === 'prowlarr' && i.enabled)
+
+  useEffect(() => {
+    if (prowlarrInstances.length === 0) return
+    const loadAll = async () => {
+      setLoading(true)
+      await Promise.allSettled(prowlarrInstances.map(i => loadIndexers(i.id)))
+      setLoading(false)
+    }
+    loadAll()
+  }, [prowlarrInstances.map(i => i.id).join(',')])
+
+  if (prowlarrInstances.length === 0) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No Prowlarr instances configured.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {loading && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Loading indexers…</span>
+        </div>
+      )}
+
+      {prowlarrInstances.map(inst => {
+        const instIndexers = indexers[inst.id] ?? []
+        const enabledCount = instIndexers.filter(i => i.enable).length
+
+        return (
+          <div key={inst.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>
+              {inst.name}
+              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 8 }}>
+                ({enabledCount} enabled)
+              </span>
+            </h3>
+
+            {instIndexers.length === 0 && !loading && (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No indexers configured.</div>
+            )}
+
+            {instIndexers.length > 0 && (
+              <div className="glass" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(var(--text-rgb), 0.1)' }}>
+                      <th style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Name</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Protocol</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Privacy</th>
+                      <th style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {instIndexers.map((indexer, idx) => (
+                      <tr key={indexer.id} style={{ borderTop: idx > 0 ? '1px solid rgba(var(--text-rgb), 0.05)' : 'none' }}>
+                        <td style={{ padding: '12px 14px' }}>{indexer.name}</td>
+                        <td style={{ padding: '12px 14px', color: 'var(--text-secondary)' }}>{indexer.protocol}</td>
+                        <td style={{ padding: '12px 14px', color: 'var(--text-secondary)' }}>{indexer.privacy}</td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <div style={{
+                            display: 'inline-block',
+                            padding: '2px 8px',
+                            borderRadius: 'var(--radius-sm)',
+                            fontSize: 12,
+                            background: indexer.enable ? 'rgba(34, 197, 94, 0.15)' : 'rgba(var(--text-rgb), 0.08)',
+                            color: indexer.enable ? '#22c55e' : 'var(--text-secondary)',
+                          }}>
+                            {indexer.enable ? 'Enabled' : 'Disabled'}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Stub tab ──────────────────────────────────────────────────────────────────
 
 function ComingSoonTab({ label }: { label: string }) {
@@ -344,8 +553,8 @@ export function MediaPage({ showAddForm: showFromParent, onFormClose }: Props) {
         <InstancesTab showAddForm={showFromParent} onFormClose={onFormClose} />
       )}
       {activeTab === 'library' && <ComingSoonTab label="Library" />}
-      {activeTab === 'calendar' && <ComingSoonTab label="Calendar" />}
-      {activeTab === 'indexers' && <ComingSoonTab label="Indexers" />}
+      {activeTab === 'calendar' && <CalendarTab />}
+      {activeTab === 'indexers' && <IndexersTab />}
       {activeTab === 'statistics' && <ComingSoonTab label="Statistics" />}
       {activeTab === 'discover' && <ComingSoonTab label="Discover" />}
     </div>
