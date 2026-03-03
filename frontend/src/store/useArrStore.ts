@@ -17,6 +17,7 @@ interface ArrState {
   discoverMovies: Record<string, any>
   discoverTv: Record<string, any>
   discoverTrending: Record<string, any>
+  discoverSearch: Record<string, any>
 
   loadInstances: () => Promise<void>
   loadAllStats: () => Promise<void>
@@ -33,6 +34,7 @@ interface ArrState {
   loadDiscoverMovies: (id: string, page?: number, sortBy?: string) => Promise<void>
   loadDiscoverTv: (id: string, page?: number, sortBy?: string) => Promise<void>
   loadDiscoverTrending: (id: string) => Promise<void>
+  loadDiscoverSearch: (id: string, query: string) => Promise<void>
   discoverRequest: (id: string, mediaType: 'movie' | 'tv', tmdbId: number) => Promise<void>
   seerrApprove: (id: string, requestId: number) => Promise<void>
   seerrDecline: (id: string, requestId: number) => Promise<void>
@@ -59,6 +61,7 @@ export const useArrStore = create<ArrState>((set, get) => ({
   discoverMovies: {},
   discoverTv: {},
   discoverTrending: {},
+  discoverSearch: {},
 
   loadInstances: async () => {
     const instances = await api.arr.instances.list()
@@ -169,6 +172,13 @@ export const useArrStore = create<ArrState>((set, get) => ({
     try {
       const data = await api.arr.discoverTrending(id)
       set(state => ({ discoverTrending: { ...state.discoverTrending, [id]: data } }))
+    } catch { /* keep previous state on error */ }
+  },
+
+  loadDiscoverSearch: async (id, query) => {
+    try {
+      const data = await api.arr.discoverSearch(id, query)
+      set(state => ({ discoverSearch: { ...state.discoverSearch, [id]: data } }))
     } catch { /* keep previous state on error */ }
   },
 

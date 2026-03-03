@@ -549,6 +549,22 @@ export async function arrRoutes(app: FastifyInstance) {
     }
   )
 
+  // GET /api/arr/:id/discover/search?query=<search-term>
+  app.get<{ Params: { id: string }; Querystring: { query: string } }>(
+    '/api/arr/:id/discover/search',
+    async (req, reply) => {
+      const row = await resolveInstance(req, reply, req.params.id)
+      if (!row) return
+      if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
+      if (!req.query.query?.trim()) return reply.status(400).send({ error: 'Query required' })
+      try {
+        return await new SeerrClient(row.url, row.api_key).search(req.query.query)
+      } catch (e: any) {
+        return reply.status(502).send({ error: 'Upstream error', detail: e.message })
+      }
+    }
+  )
+
   // POST /api/arr/:id/discover/request
   app.post<{ Params: { id: string }; Body: { mediaType: 'movie' | 'tv'; tmdbId: number } }>(
     '/api/arr/:id/discover/request',

@@ -1026,11 +1026,12 @@ function LibraryTab() {
 // ── Discover tab (Seerr) ───────────────────────────────────────────────────────
 
 function DiscoverTab() {
-  const { instances, discoverMovies, discoverTv, discoverTrending, loadDiscoverMovies, loadDiscoverTv, loadDiscoverTrending, discoverRequest } = useArrStore()
+  const { instances, discoverMovies, discoverTv, discoverTrending, discoverSearch, loadDiscoverMovies, loadDiscoverTv, loadDiscoverTrending, loadDiscoverSearch, discoverRequest } = useArrStore()
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState<'trending' | 'movies' | 'tv'>('trending')
+  const [tab, setTab] = useState<'trending' | 'movies' | 'tv' | 'search'>('trending')
   const [page, setPage] = useState(1)
-  const [search, setSearch] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [requesting, setRequesting] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState('popularity.desc')
 
@@ -1062,6 +1063,17 @@ function DiscoverTab() {
     load()
   }, [tab, page, selected?.id, sortBy])
 
+  // Handle search: trigger API call when search query changes
+  useEffect(() => {
+    if (tab !== 'search' || !selected || !searchQuery.trim()) return
+    const timer = setTimeout(async () => {
+      setLoading(true)
+      await loadDiscoverSearch(selected.id, searchQuery)
+      setLoading(false)
+    }, 300) // Debounce
+    return () => clearTimeout(timer)
+  }, [searchQuery, selected?.id, tab])
+
   if (!selected) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
@@ -1070,22 +1082,35 @@ function DiscoverTab() {
     )
   }
 
-  const data = tab === 'trending' ? discoverTrending[selected.id] : (tab === 'movies' ? discoverMovies[selected.id] : discoverTv[selected.id])
-  const allResults = data?.results ?? []
+  // Get data based on active tab
+  let data: any
+  if (tab === 'search') {
+    data = discoverSearch[selected.id]
+  } else if (tab === 'trending') {
+    data = discoverTrending[selected.id]
+  } else if (tab === 'movies') {
+    data = discoverMovies[selected.id]
+  } else {
+    data = discoverTv[selected.id]
+  }
 
-  const results = allResults.filter((item: any) => {
-    const title = (item.title || item.name || '').toLowerCase()
-    return title.includes(search.toLowerCase())
-  })
+  const allResults = data?.results ?? []
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2 }}>
-          {(['trending', 'movies', 'tv'] as const).map(t => (
+          {(['trending', 'movies', 'tv', 'search'] as const).map(t => (
             <button
               key={t}
-              onClick={() => { setTab(t); setPage(1); setSearch('') }}
+              onClick={() => {
+                setTab(t)
+                setPage(1)
+                if (t !== 'search') {
+                  setSearchInput('')
+                  setSearchQuery('')
+                }
+              }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '7px 14px',
@@ -1100,12 +1125,14 @@ function DiscoverTab() {
                 fontFamily: 'var(--font-sans)',
               }}
             >
+              {t === 'search' && '🔍'}
+              {t !== 'search' && ' '}
               {t}
             </button>
           ))}
         </div>
 
-        {tab !== 'trending' && (
+        {tab !== 'trending' && tab !== 'search' && (
           <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2 }}>
             {[
               { label: 'Popular', value: 'popularity.desc' },
@@ -1136,23 +1163,31 @@ function DiscoverTab() {
 
         <input
           type="text"
-          placeholder="Search…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
+          placeholder={tab === 'search' ? 'Search for movies and TV shows…' : 'Filter results…'}
+          value={tab === 'search' ? searchInput : ''}
+          onChange={e => {
+            if (tab === 'search') {
+              setSearchInput(e.target.value)
+              setSearchQuery(e.target.value)
+            }
+          }}
           className="form-input"
           style={{ flex: 1, minWidth: 150, fontSize: 13, padding: '5px 8px' }}
+          disabled={tab !== 'search'}
         />
         {loading && <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />}
       </div>
 
-      {results.length === 0 && !loading && (
+      {allResults.length === 0 && !loading && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No results found.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            {tab === 'search' ? (searchQuery ? 'No results found.' : 'Enter a search term…') : 'No results found.'}
+          </p>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 }}>
-        {results.map((item: any) => {
+        {allResults.map((item: any) => {
           const posterUrl = item.posterPath ? `https://image.tmdb.org/t/p/w300${item.posterPath}` : null
           const backdropUrl = item.backdropPath ? `https://image.tmdb.org/t/p/w500${item.backdropPath}` : null
           const title = item.title || item.name || 'Unknown'

@@ -118,6 +118,10 @@ export class SeerrClient extends ArrBaseClient {
     return this.get<SeerrDiscoverResponse>('discover/trending')
   }
 
+  search(query: string): Promise<SeerrDiscoverResponse> {
+    return this.get<SeerrDiscoverResponse>('search', { query })
+  }
+
   requestMedia(mediaType: 'movie' | 'tv', tmdbId: number): Promise<any> {
     return this.post<any>('request', { mediaType, tmdbId })
   }
