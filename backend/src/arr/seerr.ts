@@ -117,4 +117,8 @@ export class SeerrClient extends ArrBaseClient {
   getTrending(): Promise<SeerrDiscoverResponse> {
     return this.get<SeerrDiscoverResponse>('discover/trending')
   }
+
+  requestMedia(mediaType: 'movie' | 'tv', tmdbId: number): Promise<any> {
+    return this.post<any>('request', { mediaType, tmdbId })
+  }
 }

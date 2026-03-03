@@ -625,11 +625,12 @@ function LibraryTab() {
 // ── Discover tab (Seerr) ───────────────────────────────────────────────────────
 
 function DiscoverTab() {
-  const { instances, discoverMovies, discoverTv, discoverTrending, loadDiscoverMovies, loadDiscoverTv, loadDiscoverTrending } = useArrStore()
+  const { instances, discoverMovies, discoverTv, discoverTrending, loadDiscoverMovies, loadDiscoverTv, loadDiscoverTrending, discoverRequest } = useArrStore()
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<'trending' | 'movies' | 'tv'>('trending')
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [requesting, setRequesting] = useState<string | null>(null)
 
   const seerrInstances = instances.filter(i => i.type === 'seerr' && i.enabled)
   const selected = seerrInstances[0]
@@ -747,11 +748,24 @@ function DiscoverTab() {
                   {title}
                 </div>
                 <button
-                  onClick={() => alert('Request functionality coming soon')}
+                  onClick={async () => {
+                    if (!selected) return
+                    const key = `${item.mediaType}-${item.id}`
+                    setRequesting(key)
+                    try {
+                      await discoverRequest(selected.id, item.mediaType, item.tmdbId)
+                      alert('✓ Request sent!')
+                    } catch (e: any) {
+                      alert(`Error: ${e.message}`)
+                    } finally {
+                      setRequesting(null)
+                    }
+                  }}
+                  disabled={requesting === `${item.mediaType}-${item.id}`}
                   className="btn btn-primary btn-sm"
                   style={{ fontSize: 11, padding: '4px 8px' }}
                 >
-                  Request
+                  {requesting === `${item.mediaType}-${item.id}` ? '...' : 'Request'}
                 </button>
               </div>
             </div>

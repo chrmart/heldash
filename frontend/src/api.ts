@@ -135,6 +135,8 @@ export const api = {
       return req<any>(`/arr/${id}/discover/tv?${params}`)
     },
     discoverTrending: (id: string) => req<any>(`/arr/${id}/discover/trending`),
+    discoverRequest: (id: string, mediaType: 'movie' | 'tv', tmdbId: number) =>
+      req<any>(`/arr/${id}/discover/request`, { method: 'POST', body: JSON.stringify({ mediaType, tmdbId }) }),
   },
 
   widgets: {

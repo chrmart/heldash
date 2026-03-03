@@ -33,6 +33,7 @@ interface ArrState {
   loadDiscoverMovies: (id: string, page?: number) => Promise<void>
   loadDiscoverTv: (id: string, page?: number) => Promise<void>
   loadDiscoverTrending: (id: string) => Promise<void>
+  discoverRequest: (id: string, mediaType: 'movie' | 'tv', tmdbId: number) => Promise<void>
   seerrApprove: (id: string, requestId: number) => Promise<void>
   seerrDecline: (id: string, requestId: number) => Promise<void>
   seerrDelete: (id: string, requestId: number) => Promise<void>
@@ -169,6 +170,12 @@ export const useArrStore = create<ArrState>((set, get) => ({
       const data = await api.arr.discoverTrending(id)
       set(state => ({ discoverTrending: { ...state.discoverTrending, [id]: data } }))
     } catch { /* keep previous state on error */ }
+  },
+
+  discoverRequest: async (id, mediaType, tmdbId) => {
+    try {
+      await api.arr.discoverRequest(id, mediaType, tmdbId)
+    } catch { /* error handled by component */ }
   },
 
   createInstance: async (data) => {
