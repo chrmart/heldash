@@ -884,7 +884,7 @@ function LibraryTab() {
 
   const isMissing = (item: any): boolean => {
     if (isRadarr) return item.monitored && !item.hasFile
-    return item.monitored && (item.statistics?.episodeFileCount ?? 0) < (item.statistics?.totalEpisodeCount ?? 0)
+    return item.monitored && (item.statistics?.episodeFileCount ?? 0) < (item.statistics?.episodeCount ?? 0)
   }
 
   const filtered = items
@@ -1003,19 +1003,19 @@ function LibraryTab() {
           const title: string = item.title ?? 'Unknown'
           const missing = isMissing(item)
 
-          // Radarr: hasFile boolean. Sonarr: episodeFileCount / totalEpisodeCount
+          // Radarr: hasFile boolean. Sonarr: episodeFileCount / episodeCount (aired, no specials/unaired)
           const fileLabel = isRadarr
             ? (item.hasFile ? 'Downloaded' : 'Missing')
             : (() => {
                 const got = item.statistics?.episodeFileCount ?? 0
-                const total = item.statistics?.totalEpisodeCount ?? 0
+                const total = item.statistics?.episodeCount ?? 0
                 return total > 0 ? `${got} / ${total} ep` : '—'
               })()
           const fileColor = isRadarr
             ? (item.hasFile ? '#22c55e' : (item.monitored ? '#ef4444' : 'var(--text-muted)'))
             : (() => {
                 const got = item.statistics?.episodeFileCount ?? 0
-                const total = item.statistics?.totalEpisodeCount ?? 0
+                const total = item.statistics?.episodeCount ?? 0
                 if (total === 0) return 'var(--text-muted)'
                 return got >= total ? '#22c55e' : (item.monitored ? '#ef4444' : '#f59e0b')
               })()
