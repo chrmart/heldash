@@ -4,7 +4,7 @@ import { useDockerStore } from '../store/useDockerStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { useStore } from '../store/useStore'
 import { Trash2, Pencil, X, Check, Plus, Minus, LayoutDashboard, Shield, ShieldOff, Upload, Container, Play, Square, RotateCcw, Zap } from 'lucide-react'
-import type { Widget, ServerStatusConfig, AdGuardHomeConfig, CustomButtonConfig, HomeAssistantConfig, NginxPMConfig, ServerStats, AdGuardStats, HaEntityState } from '../types'
+import type { Widget, ServerStatusConfig, AdGuardHomeConfig, CustomButtonConfig, HomeAssistantConfig, NginxPMConfig, ServerStats, AdGuardStats, HaEntityState, NpmStats } from '../types'
 import { normalizeUrl, containerCounts } from '../utils'
 
 // ── Widget icon — URL-matched service icon or custom icon_url ─────────────────
@@ -205,7 +205,7 @@ function EntityRow({
 }
 
 // ── Home Assistant entity state view ─────────────────────────────────────────
-function HaStatsView({
+export function HaStatsView({
   entities,
   widgetId,
   isAdmin,
@@ -268,7 +268,7 @@ function HaStatsView({
 }
 
 // ── Custom buttons view ───────────────────────────────────────────────────────
-function CustomButtonsView({ widget }: { widget: Widget }) {
+export function CustomButtonsView({ widget }: { widget: Widget }) {
   const { triggerButton } = useWidgetStore()
   const config = widget.config as CustomButtonConfig
   const [triggering, setTriggering] = useState<string | null>(null)
@@ -862,6 +862,12 @@ function WidgetCard({
         ) : (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>Loading states…</div>
         )
+      ) : widget.type === 'nginx_pm' ? (
+        s ? (
+          <NginxPMStatsView stats={s as NpmStats & { error?: string }} />
+        ) : (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>Loading stats…</div>
+        )
       ) : (
         // adguard_home
         s ? (
@@ -955,7 +961,7 @@ function AdGuardStat({ label, value, highlight }: { label: string; value: string
   )
 }
 
-function StatBar({ label, value, unit, extra }: { label: string; value: number | null; unit: string; extra?: string }) {
+export function StatBar({ label, value, unit, extra }: { label: string; value: number | null; unit: string; extra?: string }) {
   const pct = value ?? 0
   const color = pct >= 90 ? 'var(--status-offline)' : pct >= 70 ? '#f59e0b' : 'var(--accent)'
   return (
@@ -970,6 +976,32 @@ function StatBar({ label, value, unit, extra }: { label: string; value: number |
       <div style={{ height: 4, borderRadius: 2, background: 'var(--glass-border)', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: color, borderRadius: 2, transition: 'width 0.4s ease' }} />
       </div>
+    </div>
+  )
+}
+
+// ── Nginx Proxy Manager stats view ───────────────────────────────────────────
+export function NginxPMStatsView({ stats }: { stats: NpmStats & { error?: string } }) {
+  if (stats.error) {
+    return <div style={{ fontSize: 12, color: 'var(--status-offline)', textAlign: 'center', padding: '8px 0' }}>Error: {stats.error}</div>
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{stats.proxyCount}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Proxies</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color: stats.totalExpiredCerts > 0 ? 'var(--status-offline)' : 'var(--accent)' }}>{stats.certificateCount}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Certs</div>
+        </div>
+      </div>
+      {stats.totalExpiredCerts > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--status-offline)', textAlign: 'center' }}>
+          {stats.totalExpiredCerts} expired · {stats.totalExpiringCertificates} expiring soon
+        </div>
+      )}
     </div>
   )
 }

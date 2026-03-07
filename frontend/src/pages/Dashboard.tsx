@@ -5,8 +5,8 @@ import { useDashboardStore } from '../store/useDashboardStore'
 import { useWidgetStore } from '../store/useWidgetStore'
 import { ServiceCard } from '../components/ServiceCard'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
-import { AdGuardStatsView, DockerOverviewContent } from './WidgetsPage'
-import type { Service, DashboardItem, DashboardServiceItem, DashboardArrItem, DashboardPlaceholderItem, DashboardWidgetItem, DashboardGroup, ServerStats, AdGuardStats, NpmStats, HaEntityState, AdGuardHomeConfig } from '../types'
+import { AdGuardStatsView, DockerOverviewContent, HaStatsView, CustomButtonsView, StatBar, NginxPMStatsView } from './WidgetsPage'
+import type { Service, DashboardItem, DashboardServiceItem, DashboardArrItem, DashboardPlaceholderItem, DashboardWidgetItem, DashboardGroup, ServerStats, AdGuardStats, NpmStats, HaEntityState, AdGuardHomeConfig, Widget } from '../types'
 import { normalizeUrl } from '../utils'
 
 function DashboardWidgetIcon({ widget }: { widget: DashboardWidgetItem['widget'] }) {
@@ -233,7 +233,7 @@ function DashboardWidgetCard({ item, editMode, groups }: {
 }) {
   const { isAdmin } = useStore()
   const { removeItem, moveItemToGroup } = useDashboardStore()
-  const { stats, loadStats, setAdGuardProtection } = useWidgetStore()
+  const { stats, loadStats, setAdGuardProtection, setPiholeProtection } = useWidgetStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id, disabled: !editMode,
   })
@@ -242,22 +242,27 @@ function DashboardWidgetCard({ item, editMode, groups }: {
   const s = stats[item.widget.id]
 
   useEffect(() => {
-    if (item.widget.type === 'docker_overview') return  // DockerOverviewContent handles its own loading
+    if (item.widget.type === 'docker_overview' || item.widget.type === 'custom_button') return
     loadStats(item.widget.id).catch(() => {})
     const ms = item.widget.type === 'home_assistant' ? 10_000 : 30_000
     const interval = setInterval(() => loadStats(item.widget.id).catch(() => {}), ms)
     return () => clearInterval(interval)
   }, [item.widget.id])
 
-  const handleProtectionToggle = async () => {
+  const handleAdGuardToggle = async () => {
     if (!isAdmin || item.widget.type !== 'adguard_home' || !s) return
     const ag = s as AdGuardStats
     setToggling(true)
-    try {
-      await setAdGuardProtection(item.widget.id, !ag.protection_enabled)
-    } finally {
-      setToggling(false)
-    }
+    try { await setAdGuardProtection(item.widget.id, !ag.protection_enabled) }
+    finally { setToggling(false) }
+  }
+
+  const handlePiholeToggle = async () => {
+    if (!isAdmin || item.widget.type !== 'pihole' || !s) return
+    const ph = s as AdGuardStats
+    setToggling(true)
+    try { await setPiholeProtection(item.widget.id, !ph.protection_enabled) }
+    finally { setToggling(false) }
   }
 
   return (
@@ -281,89 +286,33 @@ function DashboardWidgetCard({ item, editMode, groups }: {
 
         {item.widget.type === 'docker_overview' ? (
           <DockerOverviewContent isAdmin={isAdmin} />
-        ) : item.widget.type === 'adguard_home' ? (
-          s ? (
-            <AdGuardStatsView
-              stats={s as AdGuardStats}
-              isAdmin={isAdmin}
-              toggling={toggling}
-              onToggle={handleProtectionToggle}
-            />
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</div>
-          )
-        ) : item.widget.type === 'nginx_pm' ? (
-          s ? (
-            (() => {
-              const npm = s as NpmStats | any
-              if (npm.error) {
-                return <div style={{ fontSize: 12, color: 'var(--status-offline)' }}>Error: {npm.error}</div>
-              }
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <DashStatBar label="Active Proxies" value={null} extra={`${npm.proxyCount}`} />
-                  <DashStatBar label="Certificates" value={null} extra={`${npm.certificateCount}`} />
-                  {npm.totalExpiredCerts > 0 && <DashStatBar label="Expired Certs" value={null} extra={String(npm.totalExpiredCerts)} />}
-                  {npm.totalExpiringCertificates > 0 && <DashStatBar label="Expiring Soon" value={null} extra={String(npm.totalExpiringCertificates)} />}
-                </div>
-              )
-            })()
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</div>
-          )
-        ) : item.widget.type === 'home_assistant' ? (
-          s && Array.isArray(s) ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(s as HaEntityState[]).map(e => (
-                <div key={e.entity_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>{e.label || e.entity_id}</span>
-                  <span style={{
-                    color: e.state === 'on' ? 'var(--status-online)' : e.state === 'off' ? 'var(--text-muted)' : 'var(--accent)',
-                    fontFamily: 'var(--font-mono)', fontWeight: 500,
-                  }}>
-                    {e.state}{e.unit ? ` ${e.unit}` : ''}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</div>
-          )
-        ) : item.widget.type === 'pihole' ? (
-          s && 'total_queries' in (s as object) ? (
-            (() => {
-              const p = s as AdGuardStats
-              const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
-              if (p.total_queries === -1) return <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Unreachable</div>
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <DashStatBar label="Queries" value={null} extra={fmt(p.total_queries)} />
-                  <DashStatBar label="Blocked" value={p.blocked_percent} extra={`${p.blocked_percent}%`} />
-                </div>
-              )
-            })()
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</div>
-          )
+        ) : item.widget.type === 'custom_button' ? (
+          <CustomButtonsView widget={item.widget as unknown as Widget} />
         ) : item.widget.type === 'server_status' ? (
-          s ? (
-            (() => {
-              const ss = s as ServerStats
-              const ramUsedGb = (ss.ram.used / 1024).toFixed(1)
-              const ramTotalGb = (ss.ram.total / 1024).toFixed(1)
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <DashStatBar label="CPU" value={ss.cpu.load >= 0 ? ss.cpu.load : null} extra={ss.cpu.load >= 0 ? `${ss.cpu.load}%` : '—'} />
-                  <DashStatBar label="RAM" value={ss.ram.total > 0 ? Math.round((ss.ram.used / ss.ram.total) * 100) : null} extra={ss.ram.total > 0 ? `${ramUsedGb}/${ramTotalGb} GB` : '—'} />
-                  {ss.disks.map(d => (
-                    <DashStatBar key={d.path} label={d.name} value={d.total > 0 ? Math.round((d.used / d.total) * 100) : null} extra={d.total > 0 ? `${Math.round(d.used / 1024)}/${Math.round(d.total / 1024)} GB` : '—'} />
-                  ))}
-                </div>
-              )
-            })()
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</div>
-          )
+          s ? (() => {
+            const ss = s as ServerStats
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <StatBar label="CPU" value={ss.cpu.load >= 0 ? ss.cpu.load : null} unit="%" />
+                <StatBar label="RAM" value={ss.ram.total > 0 ? Math.round((ss.ram.used / ss.ram.total) * 100) : null} unit="%" extra={ss.ram.total > 0 ? `${(ss.ram.used / 1024).toFixed(1)} / ${(ss.ram.total / 1024).toFixed(1)} GB` : undefined} />
+                {ss.disks.map(d => (
+                  <StatBar key={d.path} label={d.name} value={d.total > 0 ? Math.round((d.used / d.total) * 100) : null} unit="%" extra={d.total > 0 ? `${(d.used / 1024).toFixed(0)} / ${(d.total / 1024).toFixed(0)} GB` : undefined} />
+                ))}
+              </div>
+            )
+          })() : <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>Loading stats…</div>
+        ) : item.widget.type === 'adguard_home' ? (
+          s ? <AdGuardStatsView stats={s as AdGuardStats} isAdmin={isAdmin} toggling={toggling} onToggle={handleAdGuardToggle} />
+            : <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>Loading stats…</div>
+        ) : item.widget.type === 'pihole' ? (
+          s ? <AdGuardStatsView stats={s as AdGuardStats} isAdmin={isAdmin} toggling={toggling} onToggle={handlePiholeToggle} />
+            : <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>Loading stats…</div>
+        ) : item.widget.type === 'home_assistant' ? (
+          s ? <HaStatsView entities={s as HaEntityState[]} widgetId={item.widget.id} isAdmin={isAdmin} />
+            : <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>Loading states…</div>
+        ) : item.widget.type === 'nginx_pm' ? (
+          s ? <NginxPMStatsView stats={s as NpmStats & { error?: string }} />
+            : <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>Loading stats…</div>
         ) : null}
       </div>
       {editMode && (
@@ -380,21 +329,6 @@ function DashboardWidgetCard({ item, editMode, groups }: {
   )
 }
 
-function DashStatBar({ label, value, extra }: { label: string; value: number | null; extra: string }) {
-  const pct = value ?? 0
-  const color = pct >= 90 ? 'var(--status-offline)' : pct >= 70 ? '#f59e0b' : 'var(--accent)'
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-        <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
-        <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{extra}</span>
-      </div>
-      <div style={{ height: 3, borderRadius: 2, background: 'var(--glass-border)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: color, borderRadius: 2, transition: 'width 0.4s ease' }} />
-      </div>
-    </div>
-  )
-}
 
 // ── Placeholder card ──────────────────────────────────────────────────────────
 function DashboardPlaceholderCard({ item, editMode }: { item: DashboardPlaceholderItem; editMode: boolean }) {
