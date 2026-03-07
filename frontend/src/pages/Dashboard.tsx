@@ -448,6 +448,10 @@ function SortableGroup({ group, editMode, onEdit }: {
   onEdit: (s: Service) => void
 }) {
   const { updateGroup, deleteGroup, reorderGroupItems, groups: allGroups } = useDashboardStore()
+  // Columns proportional to 8 (the fixed standard) based on group's share of the 12-column outer grid
+  const innerCols = Math.max(1, Math.round(8 * group.col_span / 12))
+  // Minimum group width to always fit innerCols × 160px columns (+ gaps + horizontal padding)
+  const groupMinWidth = innerCols * 160 + (innerCols - 1) * 16 + 2 * 32
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: group.id, disabled: !editMode,
   })
@@ -476,6 +480,7 @@ function SortableGroup({ group, editMode, onEdit }: {
         opacity: isDragging ? 0.4 : 1,
         gridColumn: `span ${group.col_span}`,
         position: 'relative',
+        minWidth: groupMinWidth,
       }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
@@ -548,7 +553,7 @@ function SortableGroup({ group, editMode, onEdit }: {
         {group.items.length > 0 || editMode ? (
           <DndContext sensors={groupSensors} collisionDetection={closestCenter} onDragEnd={handleInnerDragEnd}>
             <SortableContext items={group.items.map(i => i.id)} strategy={rectSortingStrategy}>
-              <div className="services-grid" style={{ gridAutoFlow: 'dense', gridTemplateColumns: 'repeat(auto-fill, 160px)', justifyContent: 'start' } as React.CSSProperties}>
+              <div className="services-grid" style={{ gridAutoFlow: 'dense', gridTemplateColumns: `repeat(${innerCols}, 160px)`, justifyContent: 'start' } as React.CSSProperties}>
                 {group.items.map(item => {
                   // For items inside groups, don't show the group selector (already in a group)
                   if (item.type === 'service') {
