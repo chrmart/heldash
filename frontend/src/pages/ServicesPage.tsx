@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { Service } from '../types'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
-import { Pencil, Trash2, Plus, GripVertical, Download, Upload } from 'lucide-react'
+import { Pencil, Trash2, Plus, GripVertical, Download, Upload, LayoutDashboard, Shield, ShieldOff } from 'lucide-react'
 import { api } from '../api'
 import {
   DndContext,
@@ -38,7 +38,9 @@ function SortableGroupSection({
   isDragging: boolean
   isAdmin: boolean
 }) {
-  const { addItem } = useDashboardStore()
+  const { addItem, removeItem, isOnDashboard } = useDashboardStore()
+  const { updateService } = useStore()
+  const { items: dashboardItems } = useDashboardStore()
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: section.id || section.label,
     disabled: !editMode,
@@ -95,11 +97,12 @@ function SortableGroupSection({
       <div className="glass" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: '28%' }} />
-            <col style={{ width: isAdmin ? '35%' : '40%' }} />
+            <col style={{ width: '24%' }} />
+            <col style={{ width: isAdmin ? '30%' : '35%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '10%' }} />
-            {isAdmin && <col style={{ width: '15%' }} />}
+            <col style={{ width: '10%' }} />
+            {isAdmin && <col style={{ width: '14%' }} />}
           </colgroup>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
@@ -107,6 +110,7 @@ function SortableGroupSection({
               <th style={thStyle}>URL</th>
               <th style={thStyle}>Status</th>
               <th style={thStyle}>Check</th>
+              <th style={thStyle}>Dashboard</th>
               {isAdmin && <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>}
             </tr>
           </thead>
@@ -169,7 +173,10 @@ function SortableGroupSection({
                   </div>
                 </td>
                 <td style={tdStyle}>
-                  <span
+                  <button
+                    onClick={async () => {
+                      await updateService(s.id, { check_enabled: !s.check_enabled })
+                    }}
                     style={{
                       fontSize: 11,
                       fontWeight: 600,
@@ -178,24 +185,66 @@ function SortableGroupSection({
                       background: s.check_enabled ? 'rgba(34,197,94,0.12)' : 'var(--glass-bg)',
                       color: s.check_enabled ? 'var(--status-online)' : 'var(--text-muted)',
                       border: `1px solid ${s.check_enabled ? 'rgba(34,197,94,0.25)' : 'var(--glass-border)'}`,
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-fast)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'scale(1.05)'
+                      e.currentTarget.style.boxShadow = `0 2px 8px ${s.check_enabled ? 'rgba(16,185,129,0.2)' : 'rgba(0,0,0,0.1)'}`
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)'
+                      e.currentTarget.style.boxShadow = 'none'
                     }}
                   >
+                    {s.check_enabled ? <Shield size={10} /> : <ShieldOff size={10} />}
                     {s.check_enabled ? 'On' : 'Off'}
-                  </span>
+                  </button>
+                </td>
+                <td style={tdStyle}>
+                  <button
+                    onClick={async () => {
+                      if (isOnDashboard('service', s.id)) {
+                        const dashItem = dashboardItems.find(di => di.type === 'service' && di.ref_id === s.id)
+                        if (dashItem) await removeItem(dashItem.id)
+                      } else {
+                        await addItem('service', s.id)
+                      }
+                    }}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '3px 8px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: isOnDashboard('service', s.id) ? 'rgba(var(--accent-rgb), 0.12)' : 'var(--glass-bg)',
+                      color: isOnDashboard('service', s.id) ? 'var(--accent)' : 'var(--text-muted)',
+                      border: `1px solid ${isOnDashboard('service', s.id) ? 'rgba(var(--accent-rgb), 0.25)' : 'var(--glass-border)'}`,
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-fast)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'scale(1.05)'
+                      e.currentTarget.style.boxShadow = `0 2px 8px rgba(var(--accent-rgb), 0.2)`
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)'
+                      e.currentTarget.style.boxShadow = 'none'
+                    }}
+                  >
+                    <LayoutDashboard size={10} />
+                    {isOnDashboard('service', s.id) ? 'Yes' : 'No'}
+                  </button>
                 </td>
                 {isAdmin && (
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                      <button
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={() => {
-                          addItem('service', s.id)
-                        }}
-                        data-tooltip="Add to Dashboard"
-                        style={{ padding: '4px', width: 28, height: 28 }}
-                      >
-                        <Plus size={12} />
-                      </button>
+                      {/* Old Plus button removed - now a toggle in Dashboard column */}
                       <button
                         className="btn btn-ghost btn-icon btn-sm"
                         onClick={() => onEdit(s)}
