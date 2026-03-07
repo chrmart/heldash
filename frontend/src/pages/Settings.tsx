@@ -444,31 +444,40 @@ export function SettingsPage() {
           <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
             <h3 style={{ marginBottom: 20, fontSize: 15, fontWeight: 600 }}>Dashboard Layout</h3>
             <div className="form-group">
-              <label className="form-label">Grid Item Width</label>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-                Adjust the minimum width of dashboard items. 2 apps = 1 widget width.
+              <label className="form-label">Items Per Row</label>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                How many apps and widgets should be displayed side-by-side in each row?
               </p>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <input
-                  type="range"
-                  min="80"
-                  max="200"
-                  step="5"
-                  value={gridSize}
-                  onChange={e => setGridSize(Number(e.target.value))}
-                  style={{ flex: 1, cursor: 'pointer', accentColor: 'var(--accent)' }}
-                />
-                <span className="glass" style={{ padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontSize: 13, fontFamily: 'var(--font-mono)', minWidth: 50, textAlign: 'center' }}>
-                  {gridSize}px
-                </span>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => saveGridSize(gridSize)}
-                  disabled={gridSaving || gridSize === (settings?.dashboard_grid_size ?? 130)}
-                  style={{ flexShrink: 0 }}
-                >
-                  {gridSaving ? '...' : 'Apply'}
-                </button>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8 }}>
+                {[
+                  { cols: 2, label: '2 Cols', px: 200 },
+                  { cols: 3, label: '3 Cols', px: 133 },
+                  { cols: 4, label: '4 Cols', px: 100 },
+                  { cols: 5, label: '5 Cols', px: 80 },
+                  { cols: 6, label: '6 Cols', px: 66 },
+                ].map(({ cols, label, px }) => (
+                  <button
+                    key={cols}
+                    onClick={() => {
+                      setGridSize(px)
+                      saveGridSize(px)
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 'var(--radius-md)',
+                      fontSize: 13,
+                      fontWeight: gridSize === px ? 600 : 500,
+                      cursor: 'pointer',
+                      border: gridSize === px ? '2px solid var(--accent)' : '1px solid var(--glass-border)',
+                      background: gridSize === px ? 'rgba(var(--accent-rgb), 0.12)' : 'var(--glass-bg)',
+                      color: gridSize === px ? 'var(--accent)' : 'var(--text-primary)',
+                      transition: 'all 150ms ease',
+                    }}
+                    disabled={gridSaving}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
           </section>
