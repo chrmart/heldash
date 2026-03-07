@@ -80,7 +80,14 @@ export interface SeerrStats {
   pending: number
   approved: number
   declined: number
+  processing: number
+  available: number
   total: number
+  movie: number
+  tv: number
+  updateAvailable: boolean
+  commitsBehind: number
+  restartRequired: boolean
 }
 
 export type ArrStats = RadarrStats | SonarrStats | ProwlarrStats | SabnzbdStats | SeerrStats

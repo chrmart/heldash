@@ -693,15 +693,48 @@ export function SeerrCardContent({ instance }: { instance: ArrInstanceBase }) {
       </div>
 
       {status?.online && status.version && (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Seerr v{status.version}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Seerr v{status.version}</span>
+          {seerrStat?.updateAvailable && (
+            <span style={{
+              display: 'flex', alignItems: 'center', gap: 3,
+              fontSize: 10, fontWeight: 600, padding: '1px 6px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'rgba(245,158,11,0.15)', color: '#f59e0b',
+              border: '1px solid rgba(245,158,11,0.3)',
+            }}>
+              <AlertTriangle size={9} />
+              Update{seerrStat.commitsBehind > 0 ? ` (${seerrStat.commitsBehind} behind)` : ''}
+            </span>
+          )}
+          {seerrStat?.restartRequired && (
+            <span style={{
+              fontSize: 10, fontWeight: 600, padding: '1px 6px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'rgba(239,68,68,0.15)', color: 'var(--status-offline)',
+              border: '1px solid rgba(239,68,68,0.3)',
+            }}>Restart required</span>
+          )}
+        </div>
       )}
 
       {seerrStat && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <Stat label="Total" value={seerrStat.total} />
           <Stat label="Pending" value={seerrStat.pending} />
+          {seerrStat.processing > 0 && <Stat label="Processing" value={seerrStat.processing} />}
           <Stat label="Approved" value={seerrStat.approved} />
-          <Stat label="Declined" value={seerrStat.declined} />
+          {seerrStat.declined > 0 && <Stat label="Declined" value={seerrStat.declined} />}
+        </div>
+      )}
+      {seerrStat && seerrStat.total > 0 && (
+        <div style={{ display: 'flex', gap: 10 }}>
+          {seerrStat.movie > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>🎬 {seerrStat.movie} movie{seerrStat.movie !== 1 ? 's' : ''}</span>
+          )}
+          {seerrStat.tv > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>📺 {seerrStat.tv} show{seerrStat.tv !== 1 ? 's' : ''}</span>
+          )}
         </div>
       )}
 

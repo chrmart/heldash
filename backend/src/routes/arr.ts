@@ -240,13 +240,24 @@ export async function arrRoutes(app: FastifyInstance) {
     if (!row) return
     try {
       if (row.type === 'seerr') {
-        const count = await new SeerrClient(row.url, row.api_key).getRequestCount()
+        const client = new SeerrClient(row.url, row.api_key)
+        const [count, seerrStatus] = await Promise.all([
+          client.getRequestCount(),
+          client.getStatus().catch(() => null),
+        ])
         return {
           type: 'seerr',
           pending: count.pending,
           approved: count.approved,
           declined: count.declined,
+          processing: count.processing,
+          available: count.available,
           total: count.total,
+          movie: count.movie,
+          tv: count.tv,
+          updateAvailable: seerrStatus?.updateAvailable ?? false,
+          commitsBehind: seerrStatus?.commitsBehind ?? 0,
+          restartRequired: seerrStatus?.restartRequired ?? false,
         }
       }
       if (row.type === 'sabnzbd') {

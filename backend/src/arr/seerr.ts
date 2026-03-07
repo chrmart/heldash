@@ -36,6 +36,7 @@ interface SeerrStatus {
   version: string
   commitTag?: string
   updateAvailable?: boolean
+  commitsBehind?: number
   restartRequired?: boolean
 }
 
