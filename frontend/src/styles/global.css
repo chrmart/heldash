@@ -676,7 +676,7 @@ h4 { font-size: 15px; line-height: 1.5; }
 
 .dashboard-group {
   border-radius: var(--radius-xl);
-  padding: var(--spacing-2xl) var(--spacing-3xl);
+  padding: var(--spacing-2xl) var(--spacing-lg);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);

@@ -549,7 +549,7 @@ function SortableGroup({ group, editMode, onEdit }: {
         {group.items.length > 0 || editMode ? (
           <DndContext sensors={groupSensors} collisionDetection={closestCenter} onDragEnd={handleInnerDragEnd}>
             <SortableContext items={group.items.map(i => i.id)} strategy={rectSortingStrategy}>
-              <div className="services-grid" style={{ gridAutoFlow: 'dense', gridTemplateColumns: 'repeat(auto-fill, 160px)', justifyContent: 'start' } as React.CSSProperties}>
+              <div className="services-grid" style={{ gridAutoFlow: 'dense', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 160px))', justifyContent: 'start' } as React.CSSProperties}>
                 {group.items.map(item => {
                   // For items inside groups, don't show the group selector (already in a group)
                   if (item.type === 'service') {
