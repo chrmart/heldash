@@ -61,8 +61,9 @@ function sanitize(r: ArrInstanceRow) {
 
 function calendarRange() {
   const start = new Date()
-  const end = new Date(start)
-  end.setDate(end.getDate() + 7)
+  start.setDate(start.getDate() - 7)
+  const end = new Date()
+  end.setDate(end.getDate() + 60)
   return {
     start: start.toISOString().slice(0, 10),
     end: end.toISOString().slice(0, 10),
@@ -416,6 +417,7 @@ export async function arrRoutes(app: FastifyInstance) {
         await Promise.allSettled(
           results
             .filter(r => {
+              if (!r.media) return false
               const key = `${r.media.mediaType}:${r.media.tmdbId}`
               if (seen.has(key)) return false
               seen.add(key)

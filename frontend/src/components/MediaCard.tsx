@@ -232,7 +232,7 @@ export function ArrCardContent({ instance }: {
     if (section === 'queue' && !queues[instance.id]) {
       setLoadingExpand(true); await loadQueue(instance.id).catch(() => {}); setLoadingExpand(false)
     }
-    if (section === 'calendar' && !calendars[instance.id]) {
+    if (section === 'calendar') {
       setLoadingExpand(true); await loadCalendar(instance.id).catch(() => {}); setLoadingExpand(false)
     }
     if (section === 'indexers' && !indexers[instance.id]) {
@@ -416,6 +416,12 @@ const SEERR_REQUEST_STATUS: Record<number, { label: string; color: string }> = {
   3: { label: 'Declined', color: 'var(--status-offline)' },
 }
 
+const SEERR_MEDIA_STATUS: Record<number, { label: string; color: string }> = {
+  3: { label: 'Processing',  color: '#f59e0b' },
+  4: { label: 'Partial',     color: '#6366f1' },
+  5: { label: 'Available',   color: 'var(--status-online)' },
+}
+
 function SeerrRequestList({
   requests,
   controlling,
@@ -456,7 +462,14 @@ function SeerrRequestList({
               <span style={{ fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {title}
               </span>
-              <span style={{ fontSize: 10, color: st.color, flexShrink: 0, fontWeight: 600 }}>{st.label}</span>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                {SEERR_MEDIA_STATUS[req.media.status] && (
+                  <span style={{ fontSize: 10, color: SEERR_MEDIA_STATUS[req.media.status].color, fontWeight: 600 }}>
+                    {SEERR_MEDIA_STATUS[req.media.status].label}
+                  </span>
+                )}
+                <span style={{ fontSize: 10, color: st.color, fontWeight: 600 }}>{st.label}</span>
+              </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)' }}>
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>by {who}</span>
