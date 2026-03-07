@@ -127,8 +127,8 @@ export interface HaEntityState {
 
 export interface NginxPMConfig {
   url: string
-  api_key: string
-  // api_key intentionally omitted from frontend — never sent to browser
+  username: string
+  // password intentionally omitted — never sent to frontend
 }
 
 export interface Widget {

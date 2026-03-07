@@ -32,12 +32,16 @@ interface NpmStatus {
 
 export class NginxPMClient {
   private baseUrl: string
-  private apiKey: string
+  private username: string
+  private password: string
+  private token: string | null = null
+  private tokenExpiry: number = 0
   private agent: Agent
 
-  constructor(url: string, apiKey: string) {
+  constructor(url: string, username: string, password: string) {
     this.baseUrl = url.replace(/\/$/, '')
-    this.apiKey = apiKey
+    this.username = username
+    this.password = password
     this.agent = new Agent({
       headersTimeout: 5_000,
       bodyTimeout: 5_000,
@@ -45,19 +49,56 @@ export class NginxPMClient {
     })
   }
 
+  private async getToken(): Promise<string> {
+    // Token noch gültig? (cached für 6 Stunden)
+    if (this.token && this.tokenExpiry > Date.now()) {
+      return this.token
+    }
+
+    // Neuen Token holen
+    const url = `${this.baseUrl}/api/tokens`
+    const res = await request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        identity: this.username,
+        secret: this.password,
+      }),
+      dispatcher: this.agent,
+    })
+
+    let body = ''
+    for await (const chunk of res.body) {
+      body += chunk
+    }
+
+    if (res.statusCode === 401) throw new Error('NPM: Invalid credentials')
+    if (res.statusCode === 403) throw new Error('NPM: Access denied')
+    if (res.statusCode >= 500) throw new Error('NPM: Server error')
+    if (res.statusCode >= 400) throw new Error('NPM: Auth failed')
+
+    const data = JSON.parse(body)
+    this.token = data.token
+    // Token gültig für 6 Stunden
+    this.tokenExpiry = Date.now() + (6 * 60 * 60 * 1000)
+    return this.token
+  }
+
   private async fetchApi<T>(path: string, options?: Record<string, any>): Promise<T> {
     const url = `${this.baseUrl}/api${path}`
+    const token = await this.getToken()
+
     const res = await request(url, {
       method: 'GET',
       ...options,
       headers: {
-        'X-API-Key': this.apiKey,
+        'Authorization': `Bearer ${token}`,
         ...options?.headers,
       },
       dispatcher: this.agent,
     })
 
-    if (res.statusCode === 401) throw new Error('NPM: Invalid API key')
+    if (res.statusCode === 401) throw new Error('NPM: Invalid credentials or token expired')
     if (res.statusCode === 403) throw new Error('NPM: Access denied')
     if (res.statusCode >= 500) throw new Error('NPM: Server error')
     if (res.statusCode >= 400) throw new Error('NPM: Not found')

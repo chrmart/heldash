@@ -55,7 +55,7 @@ function sanitize(r: WidgetRow) {
     const { password: _p, ...safe } = rawConfig as Record<string, unknown>
     config = safe
   } else if (r.type === 'nginx_pm') {
-    const { api_key: _k, ...safe } = rawConfig as Record<string, unknown>
+    const { password: _p, ...safe } = rawConfig as Record<string, unknown>
     config = safe
   } else {
     config = rawConfig as Record<string, unknown>
@@ -357,7 +357,7 @@ export async function widgetsRoutes(app: FastifyInstance) {
   // POST /api/widgets — create (admin only)
   app.post('/api/widgets', { preHandler: [app.requireAdmin] }, async (req, reply) => {
     const { type, name, config = {}, show_in_topbar = false } = req.body as CreateWidgetBody
-    if (!['server_status', 'adguard_home', 'docker_overview', 'custom_button', 'home_assistant', 'pihole'].includes(type)) {
+    if (!['server_status', 'adguard_home', 'docker_overview', 'custom_button', 'home_assistant', 'pihole', 'nginx_pm'].includes(type)) {
       return reply.status(400).send({ error: 'Invalid widget type' })
     }
     if (!name?.trim()) return reply.status(400).send({ error: 'name is required' })
@@ -398,6 +398,11 @@ export async function widgetsRoutes(app: FastifyInstance) {
         if (!merged.password) merged.password = existing.password ?? ''
         configToStore = JSON.stringify(merged)
         piholeSessionCache.delete(id)
+      } else if (row.type === 'nginx_pm') {
+        const existing = JSON.parse(row.config ?? '{}')
+        const merged = { ...existing, ...config }
+        if (!merged.password) merged.password = existing.password ?? ''
+        configToStore = JSON.stringify(merged)
       } else {
         configToStore = JSON.stringify(config)
       }
@@ -470,7 +475,7 @@ export async function widgetsRoutes(app: FastifyInstance) {
 
     if (row.type === 'nginx_pm') {
       const { NginxPMClient } = await import('../clients/nginx-pm-client')
-      const client = new NginxPMClient(config.url ?? '', config.api_key ?? '')
+      const client = new NginxPMClient(config.url ?? '', config.username ?? '', config.password ?? '')
       try {
         return await client.getStatus()
       } catch (err) {
