@@ -6,7 +6,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.get('/api/settings', async () => {
     const rows = db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[]
-    return Object.fromEntries(rows.map(r => [r.key, safeJson(r.value, null)]))
+    return Object.fromEntries(rows.map(r => [r.key, safeJson<unknown>(r.value, null)]))
   })
 
   app.patch<{ Body: Record<string, unknown> }>('/api/settings', { preHandler: [app.requireAdmin] }, async (req) => {
@@ -15,6 +15,6 @@ export async function settingsRoutes(app: FastifyInstance) {
       upsert.run(key, JSON.stringify(value))
     }
     const rows = db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[]
-    return Object.fromEntries(rows.map(r => [r.key, safeJson(r.value, null)]))
+    return Object.fromEntries(rows.map(r => [r.key, safeJson<unknown>(r.value, null)]))
   })
 }
