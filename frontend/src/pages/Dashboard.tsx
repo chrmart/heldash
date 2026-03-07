@@ -170,7 +170,7 @@ function DashboardServiceCard({ item, onEdit, editMode, groups }: {
           isDragging={isDragging}
           onRemove={() => removeItem(item.id)}
           groups={groups?.map(g => ({ id: g.id, name: g.name }))}
-          itemGroupId={item.ref_id && 'group_id' in item ? (item as any).group_id : undefined}
+          itemGroupId={item.group_id ?? undefined}
           onMoveToGroup={(groupId) => moveItemToGroup(item.id, groupId)}
         />
       )}

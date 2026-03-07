@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyRequest } from 'fastify'
 import { nanoid } from 'nanoid'
-import { getDb } from '../db/database'
+import { getDb, safeJson } from '../db/database'
 
 // ── DB row types ──────────────────────────────────────────────────────────────
 interface DashboardItemRow {
@@ -155,7 +155,7 @@ function buildItem(
         id: widget.id,
         type: widget.type,
         name: widget.name,
-        config: JSON.parse(widget.config ?? '{}'),
+        config: safeJson(widget.config, {} as Record<string, unknown>),
         show_in_topbar: widget.show_in_topbar === 1,
         icon_url: widget.icon_url ?? null,
       },
@@ -180,7 +180,7 @@ function buildItem(
       service: {
         ...svc,
         check_enabled: svc.check_enabled === 1,
-        tags: JSON.parse(svc.tags ?? '[]'),
+        tags: safeJson(svc.tags, [] as string[]),
       },
     }
   }

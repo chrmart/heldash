@@ -4,6 +4,7 @@ import helmet from '@fastify/helmet'
 import staticFiles from '@fastify/static'
 import fastifyCookie from '@fastify/cookie'
 import fastifyJwt from '@fastify/jwt'
+import rateLimit from '@fastify/rate-limit'
 import path from 'path'
 import fs from 'fs'
 import { initDb } from './db/database'
@@ -86,6 +87,9 @@ async function start() {
     }
     done()
   })
+
+  // ── Rate limiting (global: false — only applied to routes with config.rateLimit) ──
+  await app.register(rateLimit, { global: false })
 
   // ── Security headers ─────────────────────────────────────────────────────────
   await app.register(helmet, {

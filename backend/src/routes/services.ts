@@ -1,7 +1,9 @@
 import { FastifyInstance } from 'fastify'
-import { getDb } from '../db/database'
+import { getDb, safeJson } from '../db/database'
+import { isValidHttpUrl } from './_helpers'
 import { nanoid } from 'nanoid'
 import { request, Agent } from 'undici'
+import pLimit from 'p-limit'
 import fs from 'fs'
 import path from 'path'
 
@@ -105,6 +107,21 @@ export async function servicesRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/services/:id', async (req, reply) => {
     const row = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id) as ServiceRow | undefined
     if (!row) return reply.status(404).send({ error: 'Not found' })
+
+    // Visibility check — return 404 (not 403) to avoid leaking existence info
+    let groupId = 'grp_guest'
+    try {
+      await req.jwtVerify()
+      groupId = req.user.groupId ?? 'grp_guest'
+    } catch { /* unauthenticated */ }
+
+    if (groupId !== 'grp_admin') {
+      const hidden = db.prepare(
+        'SELECT 1 FROM group_service_visibility WHERE group_id = ? AND service_id = ?'
+      ).get(groupId, row.id)
+      if (hidden) return reply.status(404).send({ error: 'Not found' })
+    }
+
     return row
   })
 
@@ -112,6 +129,8 @@ export async function servicesRoutes(app: FastifyInstance) {
   app.post<{ Body: CreateServiceBody }>('/api/services', { preHandler: [app.authenticate] }, async (req, reply) => {
     const { name, url, icon, description, group_id, tags, check_enabled, check_url, check_interval, position_x, position_y, width, height } = req.body
     if (!name || !url) return reply.status(400).send({ error: 'name and url are required' })
+    if (!isValidHttpUrl(url)) return reply.status(400).send({ error: 'url must be a valid http or https URL' })
+    if (check_url && !isValidHttpUrl(check_url)) return reply.status(400).send({ error: 'check_url must be a valid http or https URL' })
 
     const id = nanoid()
     db.prepare(`
@@ -136,6 +155,13 @@ export async function servicesRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string }; Body: PatchServiceBody }>('/api/services/:id', { preHandler: [app.authenticate] }, async (req, reply) => {
     const existing = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id) as ServiceRow | undefined
     if (!existing) return reply.status(404).send({ error: 'Not found' })
+
+    if (req.body.url !== undefined && !isValidHttpUrl(req.body.url)) {
+      return reply.status(400).send({ error: 'url must be a valid http or https URL' })
+    }
+    if (req.body.check_url !== undefined && req.body.check_url !== null && !isValidHttpUrl(req.body.check_url)) {
+      return reply.status(400).send({ error: 'check_url must be a valid http or https URL' })
+    }
 
     const fields: (keyof PatchServiceBody)[] = ['name', 'url', 'icon', 'icon_url', 'description', 'group_id', 'tags', 'check_enabled', 'check_url', 'check_interval', 'position_x', 'position_y', 'width', 'height']
     const updates: string[] = ['updated_at = datetime(\'now\')']
@@ -201,8 +227,9 @@ export async function servicesRoutes(app: FastifyInstance) {
   // POST /api/services/check-all
   app.post('/api/services/check-all', async () => {
     const services = db.prepare('SELECT * FROM services WHERE check_enabled = 1').all() as ServiceRow[]
+    const limit = pLimit(5)
     const results = await Promise.all(
-      services.map(async (s) => {
+      services.map(s => limit(async () => {
         const checkUrl = s.check_url || s.url
         const oldStatus = s.last_status
         const status = await pingService(checkUrl)
@@ -218,7 +245,7 @@ export async function servicesRoutes(app: FastifyInstance) {
         db.prepare('UPDATE services SET last_status = ?, last_checked = datetime(\'now\') WHERE id = ?')
           .run(status, s.id)
         return { id: s.id, status }
-      })
+      }))
     )
     return results
   })
@@ -293,7 +320,7 @@ export async function servicesRoutes(app: FastifyInstance) {
           url: s.url,
           icon: s.icon,
           description: s.description,
-          tags: JSON.parse(s.tags ?? '[]'),
+          tags: safeJson(s.tags, [] as string[]),
           group_id: s.group_id,
           check_enabled: s.check_enabled === 1,
           check_url: s.check_url,

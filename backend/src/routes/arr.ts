@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { nanoid } from 'nanoid'
 import { getDb } from '../db/database'
+import { callerGroupId as _callerGroupId, isValidHttpUrl } from './_helpers'
 import { RadarrClient } from '../arr/radarr'
 import { SonarrClient } from '../arr/sonarr'
 import { ProwlarrClient } from '../arr/prowlarr'
@@ -58,16 +59,6 @@ function sanitize(r: ArrInstanceRow) {
   }
 }
 
-/** Attempt to extract the caller's groupId without requiring auth */
-async function callerGroupId(req: FastifyRequest): Promise<string> {
-  try {
-    await req.jwtVerify()
-    return req.user.groupId ?? 'grp_guest'
-  } catch {
-    return 'grp_guest'
-  }
-}
-
 function calendarRange() {
   const start = new Date()
   const end = new Date(start)
@@ -81,8 +72,8 @@ function calendarRange() {
 export async function arrRoutes(app: FastifyInstance) {
   const db = getDb()
 
-  function isVisibleToGroup(instanceId: string, groupId: string): boolean {
-    if (groupId === 'grp_admin') return true
+  function isVisibleToGroup(instanceId: string, groupId: string | null): boolean {
+    if (groupId === null || groupId === 'grp_admin') return true
     return !db.prepare(
       'SELECT 1 FROM group_arr_visibility WHERE group_id = ? AND instance_id = ?'
     ).get(groupId, instanceId)
@@ -94,7 +85,7 @@ export async function arrRoutes(app: FastifyInstance) {
     reply: FastifyReply,
     id: string,
   ): Promise<ArrInstanceRow | null> {
-    const groupId = await callerGroupId(req)
+    const groupId = await _callerGroupId(req)
     const row = db.prepare(
       'SELECT * FROM arr_instances WHERE id = ? AND enabled = 1'
     ).get(id) as ArrInstanceRow | undefined
@@ -115,12 +106,12 @@ export async function arrRoutes(app: FastifyInstance) {
 
   // GET /api/arr/instances — visible to caller's group; public (filtered)
   app.get('/api/arr/instances', async (req) => {
-    const groupId = await callerGroupId(req)
+    const groupId = await _callerGroupId(req)
     const all = db.prepare(
       'SELECT * FROM arr_instances ORDER BY position, type, name'
     ).all() as ArrInstanceRow[]
 
-    if (groupId === 'grp_admin') return all.map(sanitize)
+    if (groupId === null) return all.map(sanitize)  // admin sees all
 
     const hidden = new Set(
       (db.prepare(
@@ -141,6 +132,9 @@ export async function arrRoutes(app: FastifyInstance) {
       }
       if (!name?.trim() || !url?.trim() || !api_key?.trim()) {
         return reply.status(400).send({ error: 'name, url and api_key are required' })
+      }
+      if (!isValidHttpUrl(url.trim())) {
+        return reply.status(400).send({ error: 'url must be a valid http or https URL' })
       }
 
       const id = nanoid()
@@ -167,7 +161,10 @@ export async function arrRoutes(app: FastifyInstance) {
       const { name, url, api_key, enabled, position } = req.body
 
       if (name !== undefined) { updates.push('name = ?'); values.push(name.trim()) }
-      if (url !== undefined) { updates.push('url = ?'); values.push(url.trim().replace(/\/$/, '')) }
+      if (url !== undefined) {
+        if (!isValidHttpUrl(url.trim())) return reply.status(400).send({ error: 'url must be a valid http or https URL' })
+        updates.push('url = ?'); values.push(url.trim().replace(/\/$/, ''))
+      }
       if (api_key !== undefined) { updates.push('api_key = ?'); values.push(api_key.trim()) }
       if (enabled !== undefined) { updates.push('enabled = ?'); values.push(enabled ? 1 : 0) }
       if (position !== undefined) { updates.push('position = ?'); values.push(position) }

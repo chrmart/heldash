@@ -2,6 +2,7 @@ import { LayoutDashboard, Settings, AppWindow, Info, Tv2, BarChart2, Container }
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
 import { useWidgetStore } from '../store/useWidgetStore'
+import type { ServerStats, AdGuardStats } from '../types'
 
 interface Props {
   page: string
@@ -114,29 +115,39 @@ function SidebarWidget({ widget }: { widget: any }) {
 
       {widget.type === 'server_status' && widgetStats && 'cpu' in widgetStats && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>CPU</span>
-            <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{Math.round((widgetStats as any).cpu.load * 10) / 10}%</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>RAM</span>
-            <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
-              {Math.round((((widgetStats as any).ram?.used || 0) / ((widgetStats as any).ram?.total || 1)) * 100)}%
-            </span>
-          </div>
+          {(() => {
+            const s = widgetStats as ServerStats
+            return <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>CPU</span>
+                <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{Math.round(s.cpu.load * 10) / 10}%</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>RAM</span>
+                <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
+                  {Math.round(((s.ram.used || 0) / (s.ram.total || 1)) * 100)}%
+                </span>
+              </div>
+            </>
+          })()}
         </div>
       )}
 
       {widget.type === 'adguard_home' && widgetStats && 'total_queries' in widgetStats && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Queries</span>
-            <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{(widgetStats as any).total_queries}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Blocked</span>
-            <span style={{ color: 'var(--status-offline)', fontWeight: 500 }}>{(widgetStats as any).blocked_percent}%</span>
-          </div>
+          {(() => {
+            const s = widgetStats as AdGuardStats
+            return <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Queries</span>
+                <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{s.total_queries}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Blocked</span>
+                <span style={{ color: 'var(--status-offline)', fontWeight: 500 }}>{s.blocked_percent}%</span>
+              </div>
+            </>
+          })()}
         </div>
       )}
 

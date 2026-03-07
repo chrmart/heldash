@@ -32,7 +32,7 @@ interface LoginBody {
 
 const COOKIE_OPTS = {
   httpOnly: true,
-  sameSite: 'lax' as const,
+  sameSite: 'strict' as const,
   path: '/',
   maxAge: 86400, // 1 day
 } as const
@@ -69,7 +69,9 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   // POST /api/auth/setup — creates the first admin user (only if no users exist)
-  app.post<{ Body: SetupBody }>('/api/auth/setup', async (req, reply) => {
+  app.post<{ Body: SetupBody }>('/api/auth/setup', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const userCount = (db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number }).cnt
     if (userCount > 0) {
       return reply.status(409).send({ error: 'Setup already completed' })
@@ -103,7 +105,9 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   // POST /api/auth/login
-  app.post<{ Body: LoginBody }>('/api/auth/login', async (req, reply) => {
+  app.post<{ Body: LoginBody }>('/api/auth/login', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const { username, password } = req.body
     if (!username || !password) return reply.status(400).send({ error: 'username and password required' })
 

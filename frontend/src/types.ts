@@ -69,6 +69,7 @@ export interface DashboardServiceItem {
   type: 'service'
   position: number
   ref_id: string
+  group_id?: string | null
   service: Service
 }
 
@@ -77,6 +78,7 @@ export interface DashboardArrItem {
   type: 'arr_instance'
   position: number
   ref_id: string
+  group_id?: string | null
   instance: {
     id: string
     type: string
@@ -90,6 +92,7 @@ export interface DashboardPlaceholderItem {
   id: string
   type: 'placeholder' | 'placeholder_app' | 'placeholder_widget' | 'placeholder_row'
   position: number
+  group_id?: string | null
 }
 
 export interface ServerStatusConfig {
@@ -172,6 +175,7 @@ export interface DashboardWidgetItem {
   type: 'widget'
   position: number
   ref_id: string
+  group_id?: string | null
   widget: Pick<Widget, 'id' | 'type' | 'name' | 'config' | 'show_in_topbar' | 'icon_url'>
 }
 

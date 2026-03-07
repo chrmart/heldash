@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useArrStore } from '../store/useArrStore'
 import { useStore } from '../store/useStore'
-import type { ArrStatus, ArrStats, ArrQueueItem, ArrCalendarItem, SonarrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest } from '../types/arr'
+import type { ArrStatus, ArrStats, ArrQueueItem, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest } from '../types/arr'
 import { ChevronDown, ChevronUp, Check, X, Trash2 } from 'lucide-react'
 
 // Minimal instance shape — works for both ArrInstance and dashboard partial
@@ -101,10 +101,11 @@ export function CalendarList({ items, type }: { items: ArrCalendarItem[]; type: 
       {items.map(item => {
         const isSonarr = type === 'sonarr'
         const sonarrItem = item as SonarrCalendarItem
+        const radarrItem = item as RadarrCalendarItem
         const title = isSonarr
           ? `${sonarrItem.series?.title ?? 'Unknown'} — S${String(sonarrItem.seasonNumber).padStart(2, '0')}E${String(sonarrItem.episodeNumber).padStart(2, '0')}`
-          : (item as any).title
-        const date = isSonarr ? sonarrItem.airDateUtc : ((item as any).inCinemas ?? (item as any).digitalRelease)
+          : radarrItem.title
+        const date = isSonarr ? sonarrItem.airDateUtc : (radarrItem.inCinemas ?? radarrItem.digitalRelease)
         return (
           <div key={item.id} className="glass" style={{ padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 12, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>

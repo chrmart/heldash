@@ -164,7 +164,7 @@ export const useStore = create<AppState>((set, get) => ({
     const result = await api.services.check(id)
     set(state => ({
       services: state.services.map(s => s.id === id
-        ? { ...s, last_status: result.status as any, last_checked: result.checked_at }
+        ? { ...s, last_status: result.status as Service['last_status'], last_checked: result.checked_at }
         : s
       )
     }))
@@ -197,7 +197,7 @@ export const useStore = create<AppState>((set, get) => ({
     const map = Object.fromEntries(results.map(r => [r.id, r.status]))
     set(state => ({
       services: state.services.map(s => map[s.id]
-        ? { ...s, last_status: map[s.id] as any, last_checked: new Date().toISOString() }
+        ? { ...s, last_status: map[s.id] as Service['last_status'], last_checked: new Date().toISOString() }
         : s
       )
     }))

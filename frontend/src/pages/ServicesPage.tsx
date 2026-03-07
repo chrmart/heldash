@@ -342,6 +342,12 @@ export function ServicesPage({ onEdit }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ message, type })
+    setTimeout(() => setNotification(null), 4000)
+  }
 
   const handleExport = async () => {
     setExporting(true)
@@ -358,7 +364,7 @@ export function ServicesPage({ onEdit }: Props) {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (err) {
-      alert(`Export error: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      showNotification(`Export error: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error')
     } finally {
       setExporting(false)
     }
@@ -378,10 +384,13 @@ export function ServicesPage({ onEdit }: Props) {
       }
 
       const result = await api.services.import(data.services)
-      alert(`Imported: ${result.imported}, Skipped: ${result.skipped}${result.errors?.length ? ', Errors: ' + result.errors.length : ''}`)
+      showNotification(
+        `Imported: ${result.imported}, Skipped: ${result.skipped}${result.errors?.length ? `, Errors: ${result.errors.length}` : ''}`,
+        'success'
+      )
       await loadServices()
     } catch (err) {
-      alert(`Import error: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      showNotification(`Import error: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error')
     } finally {
       setImporting(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -390,6 +399,18 @@ export function ServicesPage({ onEdit }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {notification && (
+        <div style={{
+          padding: '10px 16px',
+          borderRadius: 'var(--radius-md)',
+          background: notification.type === 'success' ? 'var(--status-online)' : 'var(--status-offline)',
+          color: '#fff',
+          fontSize: 13,
+          fontWeight: 500,
+        }}>
+          {notification.message}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           onClick={() => setEditMode(!editMode)}

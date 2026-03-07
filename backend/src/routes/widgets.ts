@@ -1,9 +1,10 @@
-import { FastifyInstance, FastifyRequest } from 'fastify'
+import { FastifyInstance } from 'fastify'
 import { nanoid } from 'nanoid'
 import { promises as fsp } from 'fs'
 import fs from 'fs'
 import path from 'path'
-import { getDb } from '../db/database'
+import { getDb, safeJson } from '../db/database'
+import { callerGroupId } from './_helpers'
 
 const DATA_DIR = process.env.DATA_DIR ?? '/data'
 
@@ -42,7 +43,7 @@ interface AdGuardProtectionBody {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function sanitize(r: WidgetRow) {
-  const rawConfig = JSON.parse(r.config ?? '{}')
+  const rawConfig = safeJson(r.config, {} as Record<string, unknown>)
   // Strip credentials from configs — they never leave the backend
   let config: Record<string, unknown>
   if (r.type === 'adguard_home') {
@@ -70,16 +71,6 @@ function sanitize(r: WidgetRow) {
     icon_url: r.icon_url ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at,
-  }
-}
-
-async function callerGroupId(req: FastifyRequest): Promise<string | null> {
-  try {
-    await req.jwtVerify()
-    if (req.user.role === 'admin') return null
-    return req.user.groupId ?? 'grp_guest'
-  } catch {
-    return 'grp_guest'
   }
 }
 
@@ -383,23 +374,23 @@ export async function widgetsRoutes(app: FastifyInstance) {
     let configToStore: string | null = null
     if (config !== undefined) {
       if (row.type === 'adguard_home') {
-        const existing = JSON.parse(row.config ?? '{}')
+        const existing = safeJson(row.config, {} as Record<string, unknown>)
         const merged = { ...existing, ...config }
         if (!merged.password) merged.password = existing.password ?? ''
         configToStore = JSON.stringify(merged)
       } else if (row.type === 'home_assistant') {
-        const existing = JSON.parse(row.config ?? '{}')
+        const existing = safeJson(row.config, {} as Record<string, unknown>)
         const merged = { ...existing, ...config }
         if (!merged.token) merged.token = existing.token ?? ''
         configToStore = JSON.stringify(merged)
       } else if (row.type === 'pihole') {
-        const existing = JSON.parse(row.config ?? '{}')
+        const existing = safeJson(row.config, {} as Record<string, unknown>)
         const merged = { ...existing, ...config }
         if (!merged.password) merged.password = existing.password ?? ''
         configToStore = JSON.stringify(merged)
         piholeSessionCache.delete(id)
       } else if (row.type === 'nginx_pm') {
-        const existing = JSON.parse(row.config ?? '{}')
+        const existing = safeJson(row.config, {} as Record<string, unknown>)
         const merged = { ...existing, ...config }
         if (!merged.password) merged.password = existing.password ?? ''
         configToStore = JSON.stringify(merged)
@@ -450,7 +441,21 @@ export async function widgetsRoutes(app: FastifyInstance) {
     const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined
     if (!row) return reply.status(404).send({ error: 'Not found' })
 
-    const config = JSON.parse(row.config ?? '{}')
+    // Visibility check — return 404 to avoid leaking existence info
+    const groupId = await callerGroupId(req)
+    if (groupId !== null) {
+      if (row.type === 'docker_overview') {
+        const grp = db.prepare('SELECT docker_widget_access FROM user_groups WHERE id = ?').get(groupId) as { docker_widget_access: number } | undefined
+        if (!grp || grp.docker_widget_access !== 1) return reply.status(404).send({ error: 'Not found' })
+      } else {
+        const hidden = db.prepare(
+          'SELECT 1 FROM group_widget_visibility WHERE group_id = ? AND widget_id = ?'
+        ).get(groupId, id)
+        if (hidden) return reply.status(404).send({ error: 'Not found' })
+      }
+    }
+
+    const config = safeJson(row.config, {} as Record<string, unknown>)
 
     if (row.type === 'adguard_home') {
       return getAdGuardStats(config.url ?? '', config.username ?? '', config.password ?? '')
@@ -535,7 +540,7 @@ export async function widgetsRoutes(app: FastifyInstance) {
     const { enabled } = req.body as AdGuardProtectionBody
     if (typeof enabled !== 'boolean') return reply.status(400).send({ error: 'enabled must be boolean' })
 
-    const config = JSON.parse(row.config ?? '{}')
+    const config = safeJson(row.config, {} as Record<string, unknown>)
     const ok = await setAdGuardProtection(config.url ?? '', config.username ?? '', config.password ?? '', enabled)
     if (!ok) return reply.status(502).send({ error: 'Failed to reach AdGuard Home' })
     return { ok: true }
@@ -547,7 +552,7 @@ export async function widgetsRoutes(app: FastifyInstance) {
     const { button_id } = req.body as { button_id: string }
     const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined
     if (!row || row.type !== 'custom_button') return reply.status(404).send({ error: 'Not found' })
-    const config = JSON.parse(row.config ?? '{}')
+    const config = safeJson(row.config, {} as Record<string, unknown>)
     const buttons: { id: string; label: string; url: string; method?: string }[] = Array.isArray(config.buttons) ? config.buttons : []
     const button = buttons.find(b => b.id === button_id)
     if (!button) return reply.status(404).send({ error: 'Button not found' })
@@ -567,7 +572,7 @@ export async function widgetsRoutes(app: FastifyInstance) {
     const { entity_id, current_state } = req.body as HaToggleBody
     const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined
     if (!row || row.type !== 'home_assistant') return reply.status(404).send({ error: 'Not found' })
-    const config = JSON.parse(row.config ?? '{}')
+    const config = safeJson(row.config, {} as Record<string, unknown>)
     const ok = await toggleHaEntity(config.url ?? '', config.token ?? '', entity_id, current_state)
     if (!ok) return reply.status(502).send({ error: 'Failed to reach Home Assistant' })
     return { ok: true }
@@ -581,7 +586,7 @@ export async function widgetsRoutes(app: FastifyInstance) {
     if (typeof enabled !== 'boolean') return reply.status(400).send({ error: 'enabled must be boolean' })
     const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined
     if (!row || row.type !== 'pihole') return reply.status(404).send({ error: 'Not found' })
-    const config = JSON.parse(row.config ?? '{}')
+    const config = safeJson(row.config, {} as Record<string, unknown>)
     const ok = await togglePiholeProtection(config.url ?? '', config.password ?? '', id, enabled)
     if (!ok) return reply.status(502).send({ error: 'Failed to reach Pi-hole' })
     return { ok: true }

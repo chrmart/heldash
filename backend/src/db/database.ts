@@ -8,6 +8,12 @@ export function getDb(): Database.Database {
   return db
 }
 
+/** Safely parse a JSON string. Returns fallback if str is falsy or invalid JSON. */
+export function safeJson<T>(str: string | null | undefined, fallback: T): T {
+  if (!str) return fallback
+  try { return JSON.parse(str) as T } catch { return fallback }
+}
+
 // Returns the number of new migrations applied (0 if all already up-to-date)
 export function initDb(dataDir: string): number {
   const dbDir = path.join(dataDir, 'db')
