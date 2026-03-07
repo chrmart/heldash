@@ -8,8 +8,8 @@ interface WidgetState {
   loading: boolean
 
   loadWidgets: () => Promise<void>
-  createWidget: (data: { type: string; name: string; config: object; show_in_topbar?: boolean }) => Promise<string>
-  updateWidget: (id: string, data: Partial<{ name: string; config: object; show_in_topbar: boolean; position: number }>) => Promise<void>
+  createWidget: (data: { type: string; name: string; config: object; show_in_topbar?: boolean; display_location?: string }) => Promise<string>
+  updateWidget: (id: string, data: Partial<{ name: string; config: object; show_in_topbar: boolean; display_location: string; position: number }>) => Promise<void>
   deleteWidget: (id: string) => Promise<void>
   uploadWidgetIcon: (id: string, data: string, contentType: string) => Promise<void>
   loadStats: (id: string) => Promise<void>
@@ -80,6 +80,7 @@ export const useWidgetStore = create<WidgetState>((set, get) => ({
   haToggle: async (widgetId, entityId, currentState) => {
     await api.widgets.haToggle(widgetId, entityId, currentState)
     await get().loadStats(widgetId)
+    setTimeout(() => get().loadStats(widgetId).catch(() => {}), 2000)
   },
 
   setPiholeProtection: async (widgetId, enabled) => {

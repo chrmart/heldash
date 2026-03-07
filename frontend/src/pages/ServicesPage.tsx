@@ -38,7 +38,7 @@ function SortableGroupSection({
   isDragging: boolean
   isAdmin: boolean
 }) {
-  const { addItem, removeItem, isOnDashboard } = useDashboardStore()
+  const { addService, removeItem, isOnDashboard } = useDashboardStore()
   const { updateService } = useStore()
   const { items: dashboardItems } = useDashboardStore()
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
@@ -164,8 +164,8 @@ function SortableGroupSection({
                 </td>
                 <td style={tdStyle}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className={`service-status ${s.last_status ?? 'unknown'}`} style={{ flexShrink: 0 }} />
-                    {s.last_status && s.last_status !== 'unknown' && (
+                    <span className={`service-status ${s.check_enabled ? (s.last_status ?? 'unknown') : 'unknown'}`} style={{ flexShrink: 0 }} />
+                    {s.check_enabled && s.last_status && s.last_status !== 'unknown' && (
                       <span style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
                         {s.last_status}
                       </span>
@@ -211,7 +211,7 @@ function SortableGroupSection({
                         const dashItem = dashboardItems.find(di => di.type === 'service' && di.ref_id === s.id)
                         if (dashItem) await removeItem(dashItem.id)
                       } else {
-                        await addItem('service', s.id)
+                        await addService(s.id)
                       }
                     }}
                     style={{

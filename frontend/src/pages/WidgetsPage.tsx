@@ -768,7 +768,8 @@ function WidgetCard({
   useEffect(() => {
     if (widget.type === 'docker_overview' || widget.type === 'custom_button') return
     loadStats(widget.id).catch(() => {})
-    const interval = setInterval(() => loadStats(widget.id).catch(() => {}), 30_000)
+    const ms = widget.type === 'home_assistant' ? 10_000 : 30_000
+    const interval = setInterval(() => loadStats(widget.id).catch(() => {}), ms)
     return () => clearInterval(interval)
   }, [widget.id, widget.type])
 

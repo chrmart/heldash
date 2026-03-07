@@ -297,7 +297,7 @@ export function SettingsPage() {
   const [groupError, setGroupError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [gridSize, setGridSize] = useState(settings?.dashboard_grid_size ?? 130)
+  const [gridSize, setGridSize] = useState(settings?.dashboard_grid_size ?? 5)
   const [gridSaving, setGridSaving] = useState(false)
 
   const saveGridSize = async (size: number) => {

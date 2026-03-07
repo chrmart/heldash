@@ -16,6 +16,7 @@ interface WidgetRow {
   config: string
   position: number
   show_in_topbar: number
+  display_location: string
   icon_url: string | null
   created_at: string
   updated_at: string
@@ -27,12 +28,14 @@ interface CreateWidgetBody {
   name: string
   config?: Record<string, unknown>
   show_in_topbar?: boolean
+  display_location?: string
 }
 
 interface PatchWidgetBody {
   name?: string
   config?: Record<string, unknown>
   show_in_topbar?: boolean
+  display_location?: string
   position?: number
 }
 
@@ -68,6 +71,7 @@ function sanitize(r: WidgetRow) {
     config,
     position: r.position,
     show_in_topbar: r.show_in_topbar === 1,
+    display_location: (r.display_location ?? 'none') as 'topbar' | 'sidebar' | 'none',
     icon_url: r.icon_url ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at,
@@ -347,18 +351,20 @@ export async function widgetsRoutes(app: FastifyInstance) {
 
   // POST /api/widgets — create (admin only)
   app.post('/api/widgets', { preHandler: [app.requireAdmin] }, async (req, reply) => {
-    const { type, name, config = {}, show_in_topbar = false } = req.body as CreateWidgetBody
+    const { type, name, config = {}, show_in_topbar = false, display_location = 'none' } = req.body as CreateWidgetBody
     if (!['server_status', 'adguard_home', 'docker_overview', 'custom_button', 'home_assistant', 'pihole', 'nginx_pm'].includes(type)) {
       return reply.status(400).send({ error: 'Invalid widget type' })
     }
     if (!name?.trim()) return reply.status(400).send({ error: 'name is required' })
+    const validLocations = ['topbar', 'sidebar', 'none']
+    const resolvedLocation = validLocations.includes(display_location) ? display_location : (show_in_topbar ? 'topbar' : 'none')
     const maxRow = db.prepare('SELECT MAX(position) as m FROM widgets').get() as { m: number | null }
     const position = (maxRow.m ?? -1) + 1
     const id = nanoid()
     db.prepare(`
-      INSERT INTO widgets (id, type, name, config, position, show_in_topbar)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, type, name.trim(), JSON.stringify(config), position, show_in_topbar ? 1 : 0)
+      INSERT INTO widgets (id, type, name, config, position, show_in_topbar, display_location)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, type, name.trim(), JSON.stringify(config), position, resolvedLocation === 'topbar' ? 1 : 0, resolvedLocation)
     const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow
     return reply.status(201).send(sanitize(row))
   })
@@ -368,7 +374,11 @@ export async function widgetsRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }
     const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined
     if (!row) return reply.status(404).send({ error: 'Not found' })
-    const { name, config, show_in_topbar, position } = req.body as PatchWidgetBody
+    const { name, config, show_in_topbar, display_location, position } = req.body as PatchWidgetBody
+    const validLocations = ['topbar', 'sidebar', 'none']
+    const resolvedLocation = display_location !== undefined
+      ? (validLocations.includes(display_location) ? display_location : 'none')
+      : (show_in_topbar !== undefined ? (show_in_topbar ? 'topbar' : 'none') : undefined)
 
     // For adguard_home: if password is empty in the patch, merge with existing config to preserve it
     let configToStore: string | null = null
@@ -405,16 +415,18 @@ export async function widgetsRoutes(app: FastifyInstance) {
 
     db.prepare(`
       UPDATE widgets SET
-        name           = COALESCE(?, name),
-        config         = COALESCE(?, config),
-        show_in_topbar = COALESCE(?, show_in_topbar),
-        position       = COALESCE(?, position),
-        updated_at     = datetime('now')
+        name             = COALESCE(?, name),
+        config           = COALESCE(?, config),
+        show_in_topbar   = COALESCE(?, show_in_topbar),
+        display_location = COALESCE(?, display_location),
+        position         = COALESCE(?, position),
+        updated_at       = datetime('now')
       WHERE id = ?
     `).run(
       name?.trim() ?? null,
       configToStore,
-      show_in_topbar !== undefined ? (show_in_topbar ? 1 : 0) : null,
+      resolvedLocation !== undefined ? (resolvedLocation === 'topbar' ? 1 : 0) : null,
+      resolvedLocation ?? null,
       position ?? null,
       id
     )

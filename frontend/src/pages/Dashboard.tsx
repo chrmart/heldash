@@ -158,7 +158,7 @@ function DashboardServiceCard({ item, onEdit, editMode, groups }: {
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative', gridColumn: 'span 2' }}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative', gridColumn: 'span 1', aspectRatio: '1' }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
     >
@@ -199,11 +199,13 @@ function DashboardArrCard({ item, editMode, groups }: {
         opacity: isDragging ? 0.4 : 1,
         position: 'relative',
         gridColumn: 'span 2',
+        gridRow: 'span 2',
+        aspectRatio: '1',
       }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
     >
-      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14, height: '100%' }}>
         {item.instance.type === 'sabnzbd'
           ? <SabnzbdCardContent instance={item.instance} />
           : item.instance.type === 'seerr'
@@ -244,7 +246,8 @@ function DashboardWidgetCard({ item, editMode, groups }: {
   useEffect(() => {
     if (item.widget.type === 'docker_overview') return  // DockerOverviewContent handles its own loading
     loadStats(item.widget.id).catch(() => {})
-    const interval = setInterval(() => loadStats(item.widget.id).catch(() => {}), 30_000)
+    const ms = item.widget.type === 'home_assistant' ? 10_000 : 30_000
+    const interval = setInterval(() => loadStats(item.widget.id).catch(() => {}), ms)
     return () => clearInterval(interval)
   }, [item.widget.id])
 
@@ -267,8 +270,9 @@ function DashboardWidgetCard({ item, editMode, groups }: {
         transition,
         opacity: isDragging ? 0.4 : 1,
         position: 'relative',
-        gridColumn: 'span 4',
+        gridColumn: 'span 2',
         gridRow: 'span 2',
+        aspectRatio: '1',
       }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
@@ -373,7 +377,7 @@ function DashboardPlaceholderCard({ item, editMode }: { item: DashboardPlacehold
 
   const isWidget = item.type === 'placeholder_widget'
   const isRow = item.type === 'placeholder_row'
-  const gridColumn = isRow ? '1 / -1' : isWidget ? 'span 4' : 'span 2'
+  const gridColumn = isRow ? '1 / -1' : isWidget ? 'span 2' : 'span 1'
   const gridRow = isWidget ? 'span 2' : undefined
   const minHeight = isRow ? 28 : isWidget ? 160 : 80
 
@@ -479,6 +483,8 @@ function SortableGroup({ group, editMode, onEdit }: {
   onEdit: (s: Service) => void
 }) {
   const { updateGroup, deleteGroup, reorderGroupItems } = useDashboardStore()
+  const { settings } = useStore()
+  const appsPerRow = settings?.dashboard_grid_size ?? 5
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: group.id, disabled: !editMode,
   })
@@ -579,7 +585,7 @@ function SortableGroup({ group, editMode, onEdit }: {
         {group.items.length > 0 || editMode ? (
           <DndContext sensors={groupSensors} collisionDetection={closestCenter} onDragEnd={handleInnerDragEnd}>
             <SortableContext items={group.items.map(i => i.id)} strategy={rectSortingStrategy}>
-              <div className="services-grid" style={{ gridAutoFlow: 'dense' }}>
+              <div className="services-grid" style={{ gridAutoFlow: 'dense', '--app-cols': appsPerRow } as React.CSSProperties}>
                 {group.items.map(item => {
                   // For items inside groups, don't show the group selector (already in a group)
                   if (item.type === 'service') {
@@ -636,7 +642,8 @@ interface Props {
 }
 
 export function Dashboard({ onEdit }: Props) {
-  const { isAdmin } = useStore()
+  const { isAdmin, settings } = useStore()
+  const appsPerRow = settings?.dashboard_grid_size ?? 5
   const { instances, loadInstances, loadAllStats } = useArrStore()
   const { items, groups, editMode, guestMode, loading, reorder, reorderGroups, createGroup } = useDashboardStore()
 
@@ -734,7 +741,7 @@ export function Dashboard({ onEdit }: Props) {
       {(realUngroupedItems || editMode) && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleItemDragEnd}>
           <SortableContext items={items.map(i => i.id)} strategy={rectSortingStrategy}>
-            <div className="services-grid" style={{ gridAutoFlow: 'dense' }}>
+            <div className="services-grid" style={{ gridAutoFlow: 'dense', '--app-cols': appsPerRow } as React.CSSProperties}>
               {items.map(item => renderDashboardItem(item, editMode, onEdit, groups))}
             </div>
           </SortableContext>

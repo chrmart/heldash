@@ -661,8 +661,7 @@ h4 { font-size: 15px; line-height: 1.5; }
 /* ─── Grid Layout ─────────────────────────────────────────────────────────── */
 .services-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  grid-auto-rows: minmax(100px, auto);
+  grid-template-columns: repeat(var(--app-cols, 5), 1fr);
   gap: var(--spacing-lg);
   grid-auto-flow: dense;
 }
@@ -1083,7 +1082,7 @@ select.form-input option {
     display: none;
   }
   .services-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    grid-template-columns: repeat(var(--app-cols, 3), 1fr);
   }
 }
 
