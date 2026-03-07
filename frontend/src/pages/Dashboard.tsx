@@ -51,17 +51,23 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, X, Container } from 'lucide-react'
 
-// ── Shared edit-mode overlay (drag handle + remove button) ────────────────────
+// ── Shared edit-mode overlay (drag handle + remove button + group selector) ────
 function EditOverlay({
   dragProps,
   showHandle,
   isDragging,
   onRemove,
+  groups,
+  itemGroupId,
+  onMoveToGroup,
 }: {
   dragProps: object
   showHandle: boolean
   isDragging: boolean
   onRemove: () => void
+  groups?: { id: string; name: string }[]
+  itemGroupId?: string | null
+  onMoveToGroup?: (groupId: string | null) => void
 }) {
   return (
     <>
@@ -83,6 +89,34 @@ function EditOverlay({
       >
         <GripVertical size={12} />
       </div>
+
+      {/* Move to group dropdown */}
+      {groups && groups.length > 0 && onMoveToGroup && (
+        <select
+          value={itemGroupId ?? ''}
+          onChange={(e) => onMoveToGroup(e.target.value || null)}
+          onClick={(e) => e.stopPropagation()}
+          title="Move to group"
+          style={{
+            position: 'absolute', right: 28, bottom: 6,
+            opacity: showHandle ? 0.8 : 0,
+            transition: 'opacity 150ms ease',
+            cursor: 'pointer',
+            zIndex: 10,
+            fontSize: 11,
+            padding: '2px 6px',
+            height: 22,
+            borderRadius: 4,
+            background: 'var(--glass-bg)',
+            border: '1px solid var(--glass-border)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          <option value="">Ungrouped</option>
+          {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+      )}
+
       <button
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove() }}
         title="Remove from dashboard"
@@ -109,12 +143,13 @@ function EditOverlay({
 }
 
 // ── Service card ──────────────────────────────────────────────────────────────
-function DashboardServiceCard({ item, onEdit, editMode }: {
+function DashboardServiceCard({ item, onEdit, editMode, groups }: {
   item: DashboardServiceItem
   onEdit: (s: Service) => void
   editMode: boolean
+  groups?: DashboardGroup[]
 }) {
-  const { removeItem } = useDashboardStore()
+  const { removeItem, moveItemToGroup } = useDashboardStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id, disabled: !editMode,
   })
@@ -134,6 +169,9 @@ function DashboardServiceCard({ item, onEdit, editMode }: {
           showHandle={showHandle}
           isDragging={isDragging}
           onRemove={() => removeItem(item.id)}
+          groups={groups?.map(g => ({ id: g.id, name: g.name }))}
+          itemGroupId={item.ref_id && 'group_id' in item ? (item as any).group_id : undefined}
+          onMoveToGroup={(groupId) => moveItemToGroup(item.id, groupId)}
         />
       )}
     </div>
@@ -141,11 +179,12 @@ function DashboardServiceCard({ item, onEdit, editMode }: {
 }
 
 // ── Arr instance card (full media-style) ──────────────────────────────────────
-function DashboardArrCard({ item, editMode }: {
+function DashboardArrCard({ item, editMode, groups }: {
   item: DashboardArrItem
   editMode: boolean
+  groups?: DashboardGroup[]
 }) {
-  const { removeItem } = useDashboardStore()
+  const { removeItem, moveItemToGroup } = useDashboardStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id, disabled: !editMode,
   })
@@ -178,6 +217,8 @@ function DashboardArrCard({ item, editMode }: {
           showHandle={showHandle}
           isDragging={isDragging}
           onRemove={() => removeItem(item.id)}
+          groups={groups?.map(g => ({ id: g.id, name: g.name }))}
+          onMoveToGroup={(groupId) => moveItemToGroup(item.id, groupId)}
         />
       )}
     </div>
@@ -185,12 +226,13 @@ function DashboardArrCard({ item, editMode }: {
 }
 
 // ── Widget card ───────────────────────────────────────────────────────────────
-function DashboardWidgetCard({ item, editMode }: {
+function DashboardWidgetCard({ item, editMode, groups }: {
   item: DashboardWidgetItem
   editMode: boolean
+  groups?: DashboardGroup[]
 }) {
   const { isAdmin } = useStore()
-  const { removeItem } = useDashboardStore()
+  const { removeItem, moveItemToGroup } = useDashboardStore()
   const { stats, loadStats, setAdGuardProtection } = useWidgetStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id, disabled: !editMode,
@@ -296,6 +338,8 @@ function DashboardWidgetCard({ item, editMode }: {
           showHandle={showHandle}
           isDragging={isDragging}
           onRemove={() => removeItem(item.id)}
+          groups={groups?.map(g => ({ id: g.id, name: g.name }))}
+          onMoveToGroup={(groupId) => moveItemToGroup(item.id, groupId)}
         />
       )}
     </div>
@@ -395,6 +439,7 @@ function renderDashboardItem(
         item={item as DashboardServiceItem}
         onEdit={onEdit}
         editMode={editMode}
+        groups={groups}
       />
     )
   }
@@ -404,6 +449,7 @@ function renderDashboardItem(
         key={item.id}
         item={item as DashboardArrItem}
         editMode={editMode}
+        groups={groups}
       />
     )
   }
@@ -413,6 +459,7 @@ function renderDashboardItem(
         key={item.id}
         item={item as DashboardWidgetItem}
         editMode={editMode}
+        groups={groups}
       />
     )
   }
@@ -530,7 +577,41 @@ function SortableGroup({ group, editMode, onEdit }: {
           <DndContext sensors={groupSensors} collisionDetection={closestCenter} onDragEnd={handleInnerDragEnd}>
             <SortableContext items={group.items.map(i => i.id)} strategy={rectSortingStrategy}>
               <div className="services-grid" style={{ gridAutoFlow: 'dense' }}>
-                {group.items.map(item => renderDashboardItem(item, editMode, onEdit))}
+                {group.items.map(item => {
+                  // For items inside groups, don't show the group selector (already in a group)
+                  if (item.type === 'service') {
+                    return (
+                      <DashboardServiceCard
+                        key={item.id}
+                        item={item as DashboardServiceItem}
+                        onEdit={onEdit}
+                        editMode={editMode}
+                      />
+                    )
+                  }
+                  if (item.type === 'arr_instance') {
+                    return (
+                      <DashboardArrCard
+                        key={item.id}
+                        item={item as DashboardArrItem}
+                        editMode={editMode}
+                      />
+                    )
+                  }
+                  if (item.type === 'widget') {
+                    return (
+                      <DashboardWidgetCard
+                        key={item.id}
+                        item={item as DashboardWidgetItem}
+                        editMode={editMode}
+                      />
+                    )
+                  }
+                  if (item.type === 'placeholder' || item.type === 'placeholder_app' || item.type === 'placeholder_instance' || item.type === 'placeholder_row') {
+                    return <DashboardPlaceholderCard key={item.id} item={item as DashboardPlaceholderItem} editMode={editMode} />
+                  }
+                  return null
+                })}
               </div>
             </SortableContext>
           </DndContext>
@@ -621,6 +702,18 @@ export function Dashboard({ onEdit }: Props) {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Add Group button (edit mode only) — at top */}
+      {editMode && (
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => createGroup('Group')}
+          >
+            + Add Group
+          </button>
+        </div>
+      )}
+
       {/* Groups */}
       {(realGroupItems || editMode) && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd}>
@@ -643,18 +736,6 @@ export function Dashboard({ onEdit }: Props) {
             </div>
           </SortableContext>
         </DndContext>
-      )}
-
-      {/* Add Group button (edit mode only) */}
-      {editMode && (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => createGroup('Group')}
-          >
-            + Add Group
-          </button>
-        </div>
       )}
     </div>
   )

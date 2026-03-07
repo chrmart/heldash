@@ -797,8 +797,9 @@ function WidgetCard({
           <div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{widget.name}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8 }}>
-              <span>{{ adguard_home: 'AdGuard Home', docker_overview: 'Docker Overview', custom_button: 'Custom Buttons', home_assistant: 'Home Assistant', pihole: 'Pi-hole' }[widget.type] ?? 'Server Status'}</span>
-              {widget.show_in_topbar && <span style={{ color: 'var(--accent)' }}>· Topbar</span>}
+              <span>{{ adguard_home: 'AdGuard Home', docker_overview: 'Docker Overview', custom_button: 'Custom Buttons', home_assistant: 'Home Assistant', pihole: 'Pi-hole', nginx_pm: 'Nginx Proxy Manager' }[widget.type] ?? 'Server Status'}</span>
+              {widget.display_location === 'topbar' && <span style={{ color: 'var(--accent)' }}>· Topbar</span>}
+              {widget.display_location === 'sidebar' && <span style={{ color: 'var(--accent)' }}>· Sidebar</span>}
             </div>
           </div>
         </div>
