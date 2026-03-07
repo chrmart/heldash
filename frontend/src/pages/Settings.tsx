@@ -297,15 +297,6 @@ export function SettingsPage() {
   const [groupError, setGroupError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [gridSize, setGridSize] = useState(settings?.dashboard_grid_size ?? 5)
-  const [gridSaving, setGridSaving] = useState(false)
-
-  const saveGridSize = async (size: number) => {
-    setGridSaving(true)
-    try { await updateSettings({ dashboard_grid_size: size }) }
-    finally { setGridSaving(false) }
-  }
-
   const [autoTheme, setAutoTheme] = useState(settings?.auto_theme_enabled ?? false)
   const [lightStart, setLightStart] = useState(settings?.auto_theme_light_start ?? '08:00')
   const [darkStart, setDarkStart] = useState(settings?.auto_theme_dark_start ?? '20:00')
@@ -436,50 +427,6 @@ export function SettingsPage() {
                 <button className="btn btn-primary" onClick={saveTitle} disabled={saving} style={{ flexShrink: 0 }}>
                   {saving ? '...' : 'Save'}
                 </button>
-              </div>
-            </div>
-          </section>
-
-          {/* Dashboard Grid */}
-          <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
-            <h3 style={{ marginBottom: 20, fontSize: 15, fontWeight: 600 }}>Dashboard Layout</h3>
-            <div className="form-group">
-              <label className="form-label">Apps Per Row</label>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-                How many apps should be displayed side-by-side in each row?
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8 }}>
-                {[
-                  { apps: 2, label: '2 Apps' },
-                  { apps: 3, label: '3 Apps' },
-                  { apps: 4, label: '4 Apps' },
-                  { apps: 5, label: '5 Apps' },
-                  { apps: 6, label: '6 Apps' },
-                  { apps: 7, label: '7 Apps' },
-                  { apps: 8, label: '8 Apps' },
-                ].map(({ apps, label }) => (
-                  <button
-                    key={apps}
-                    onClick={() => {
-                      setGridSize(apps)
-                      saveGridSize(apps)
-                    }}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 'var(--radius-md)',
-                      fontSize: 13,
-                      fontWeight: gridSize === apps ? 600 : 500,
-                      cursor: 'pointer',
-                      border: gridSize === apps ? '2px solid var(--accent)' : '1px solid var(--glass-border)',
-                      background: gridSize === apps ? 'rgba(var(--accent-rgb), 0.12)' : 'var(--glass-bg)',
-                      color: gridSize === apps ? 'var(--accent)' : 'var(--text-primary)',
-                      transition: 'all 150ms ease',
-                    }}
-                    disabled={gridSaving}
-                  >
-                    {label}
-                  </button>
-                ))}
               </div>
             </div>
           </section>

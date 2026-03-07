@@ -38,13 +38,6 @@ export default function App() {
     }
   }, [settings])
 
-  // Apply dashboard grid size from settings
-  useEffect(() => {
-    if (settings?.dashboard_grid_size) {
-      document.documentElement.style.setProperty('--dashboard-grid-size', `${settings.dashboard_grid_size}px`)
-    }
-  }, [settings?.dashboard_grid_size])
-
   // Reload background after login/logout, apply as CSS variable
   useEffect(() => {
     loadMyBackground()

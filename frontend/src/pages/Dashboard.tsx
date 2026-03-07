@@ -448,10 +448,6 @@ function SortableGroup({ group, editMode, onEdit }: {
   onEdit: (s: Service) => void
 }) {
   const { updateGroup, deleteGroup, reorderGroupItems, groups: allGroups } = useDashboardStore()
-  const { settings } = useStore()
-  const appsPerRow = settings?.dashboard_grid_size ?? 5
-  // Inner grid columns = fraction of appsPerRow based on group's % of the 12-column outer grid
-  const innerCols = Math.max(1, Math.round(appsPerRow * group.col_span / 12))
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: group.id, disabled: !editMode,
   })
@@ -552,7 +548,7 @@ function SortableGroup({ group, editMode, onEdit }: {
         {group.items.length > 0 || editMode ? (
           <DndContext sensors={groupSensors} collisionDetection={closestCenter} onDragEnd={handleInnerDragEnd}>
             <SortableContext items={group.items.map(i => i.id)} strategy={rectSortingStrategy}>
-              <div className="services-grid" style={{ gridAutoFlow: 'dense', '--app-cols': innerCols, justifyContent: 'start' } as React.CSSProperties}>
+              <div className="services-grid" style={{ gridAutoFlow: 'dense', gridTemplateColumns: 'repeat(auto-fill, 160px)', justifyContent: 'start' } as React.CSSProperties}>
                 {group.items.map(item => {
                   // For items inside groups, don't show the group selector (already in a group)
                   if (item.type === 'service') {
@@ -612,8 +608,8 @@ interface Props {
 }
 
 export function Dashboard({ onEdit }: Props) {
-  const { isAdmin, settings } = useStore()
-  const appsPerRow = settings?.dashboard_grid_size ?? 5
+  const { isAdmin } = useStore()
+  const appsPerRow = 8
   const { instances, loadInstances, loadAllStats } = useArrStore()
   const { items, groups, editMode, guestMode, loading, reorder, reorderGroups, createGroup } = useDashboardStore()
 
