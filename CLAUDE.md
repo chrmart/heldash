@@ -57,7 +57,7 @@ heldash/
 │       │   └── LoginModal.tsx  # Login form modal
 │       ├── pages/
 │       │   ├── Dashboard.tsx   # DnD grid: services, arr instances, widgets, placeholders
-│       │   ├── ServicesPage.tsx # Table view of all services (fixed-width columns via colgroup)
+│       │   ├── ServicesPage.tsx # Table view with Dashboard & Health Check toggles (fixed-width columns)
 │       │   ├── Settings.tsx    # Tabbed: General (incl. background upload), Users, Groups (Apps/Media/Widgets/Docker/Background tabs), OIDC
 │       │   ├── MediaPage.tsx   # Arr/media instances (flat DnD grid)
 │       │   ├── DockerPage.tsx  # Docker containers: overview bar, sortable table, log viewer
@@ -130,7 +130,14 @@ Two pure functions used across multiple components:
 `docker.ts` connects to `/var/run/docker.sock` via `undici.Pool` (10 connections) so batch stats requests run concurrently. Access controlled by `hasDockerAccess()` (checks `docker_access` column on user's group). SSE log streaming uses `reply.hijack()` called **before** the Docker API request so the SSE connection opens immediately; errors are sent as SSE events.
 
 ### Widget system
-Three widget types: `server_status`, `adguard_home`, `docker_overview`. Widget credentials (AdGuard password) are stripped in `sanitize()` before returning to the frontend — stored server-side only. `docker_overview` widgets have a separate access gate (`docker_widget_access`) and never appear in `group_widget_visibility`.
+Four widget types: `server_status`, `adguard_home`, `docker_overview`, `nginx_pm`. Widget credentials (AdGuard/Nginx PM passwords) are stripped in `sanitize()` before returning to the frontend — stored server-side only. `docker_overview` widgets have a separate access gate (`docker_widget_access`) and never appear in `group_widget_visibility`. `nginx_pm` uses token-based authentication (username/password → Bearer token cached for 6 hours).
+
+### Dashboard Grid Layout
+- **20-column CSS grid** system (changed from responsive minmax to fixed columns)
+- **Apps**: span 2 columns = 10 apps max per row
+- **Widgets**: span 4 columns, span 2 rows = 2×2 app size
+- **grid-auto-flow: dense** for efficient space usage
+- Settings: user selects "2 to 10 apps per row" (not pixel widths)
 
 ### Multiple Zustand stores
 - `useStore` — main app (services, groups, settings, auth, users, userGroups)
@@ -249,11 +256,12 @@ Sparse junction tables: presence of a row means the item is **hidden** for that 
 | Column | Type | Notes |
 |---|---|---|
 | id | TEXT PK | nanoid() |
-| type | TEXT | 'server_status' \| 'adguard_home' \| 'docker_overview' |
+| type | TEXT | 'server_status' \| 'adguard_home' \| 'docker_overview' \| 'nginx_pm' |
 | name | TEXT NOT NULL | |
-| config | TEXT | JSON — AdGuard password stripped before sending to frontend |
+| config | TEXT | JSON — AdGuard/Nginx PM password stripped before sending to frontend |
 | position | INTEGER | |
 | show_in_topbar | INTEGER | 0/1 |
+| display_location | TEXT | 'topbar' \| 'sidebar' \| 'none' |
 | icon_url | TEXT | Custom icon (docker_overview falls back to Container lucide icon) |
 | created_at / updated_at | TEXT | |
 
@@ -275,7 +283,7 @@ Sparse junction tables: presence of a row means the item is **hidden** for that 
 | name | TEXT NOT NULL | Group display name |
 | owner_id | TEXT NOT NULL | user sub or 'guest' |
 | position | INTEGER NOT NULL | Sort order among groups |
-| col_span | INTEGER NOT NULL | Width on 12-column grid (1-12, default 6) |
+| col_span | INTEGER NOT NULL | Width on 20-column grid (1-20, default 10). Each app = 2 cols, widget = 4 cols |
 | created_at | TEXT NOT NULL | |
 
 ### settings
@@ -331,7 +339,7 @@ All routes prefixed `/api`. Frontend uses relative paths.
 | POST | /api/widgets | requireAdmin | Create widget |
 | PATCH | /api/widgets/:id | requireAdmin | Update widget |
 | DELETE | /api/widgets/:id | requireAdmin | Delete + icon file |
-| GET | /api/widgets/:id/stats | public | Live stats (server_status / adguard_home / nginx_pm; `{}` for docker_overview) |
+| GET | /api/widgets/:id/stats | public | Live stats (server_status / adguard_home / nginx_pm with proxy+cert counts; `{}` for docker_overview) |
 | POST | /api/widgets/:id/icon | requireAdmin | Upload custom icon |
 | POST | /api/widgets/:id/adguard/protection | requireAdmin | Toggle AdGuard protection |
 
@@ -541,24 +549,30 @@ All routes prefixed `/api`. Frontend uses relative paths.
 **Component-Level Improvements**:
   - [x] **Sidebar**: Gradient overlay on hover, active state with glow (box-shadow), 2px translate
   - [x] **Topbar**: Time display in monospace, widget stats with compact layout, elevated height (64px)
-  - [x] **Dashboard**: Grid layout with 12-column system, dashboard groups with col-span selector, group headers with uppercase labels
-  - [x] **Dashboard Groups** (new): Expandable group containers with individual col-span (25%-100%), drag-reorder, nested item DnD
+  - [x] **Dashboard**: 20-column grid layout (10 apps max per row), dashboard groups with col-span selector, group headers with uppercase labels
+  - [x] **Dashboard Groups**: Expandable group containers with individual col-span, drag-reorder, nested item DnD
   - [x] **Service Cards**: Hover lift (4px), icon scale (1.08x), glow shadow, status dots with dual animations
   - [x] **Media Cards**: Queue progress bars, stats display with accent colors, expandable sections
-  - [x] **Services Page**: Hover row effects, inline status dots, modal with form inputs and icon upload
+  - [x] **Services Page**: Hover row effects, inline status dots, **Dashboard toggle + Health Check toggle**, modal with form inputs
   - [x] **Media Page**: Instance cards, queue lists, calendar views with smooth transitions
   - [x] **Docker Page**: Sortable table, status badges, logs viewer with monospace font, stats bar with large numbers
   - [x] **Widgets Page**: Grid layout, widget cards with shadow on hover, tabbed config panels, stats display
-  - [x] **Settings Page**: Tabbed interface (General, Users, Groups with sub-tabs, OIDC), theme selector, form inputs with focus states
+  - [x] **Settings Page**: Tabbed interface (General, Users, Groups with sub-tabs, OIDC), "Apps Per Row" selector (2-10), form inputs with focus states
   - [x] **Status Indicators**: Online (dual-pulse ring + border), offline (breathing animation), unknown (static)
   - [x] **Form Elements**: Focus ring with accent color, hover state, improved toggles (350ms smooth animation)
   - [x] **Modals**: Slide-up animation, glass background, 32px padding, clear title hierarchy
   - [x] **Dark mode**: Per-accent accent-subtle variants (12% opacity), icon backgrounds (15%), nav active states with reduced glow
   - [x] **Accessibility**: Full `@media (prefers-reduced-motion: reduce)` support across all animations
 
-### Phase 6 — Future
+### Phase 6 — Smart Dashboard & Services Controls ✓
+- [x] **Nginx Proxy Manager Widget** — token-based auth, proxy/cert monitoring
+- [x] **Smart Dashboard Grid** — 20-column layout, 10 apps per row, widgets 2×2 sized
+- [x] **Services Page Toggles** — Dashboard toggle (add/remove) + Health Check toggle (enable/disable)
+- [x] **Settings Update** — "Apps Per Row" selector (2-10 instead of pixel widths)
+
+### Phase 7 — Future
 - [ ] OIDC / SSO via voidauth or Authentik
 - [ ] Notification webhooks (Gotify / ntfy) on status change
 - [ ] Custom check intervals per service (backend scheduler)
-- [ ] Import/export service list (JSON)
-- [ ] More integrations (Immich, Jellyfin, ...)
+- [ ] Torrent Client Integration (qBittorrent, Transmission, Deluge)
+- [ ] More integrations (Immich, Jellyfin, Home Assistant, Pi-hole, etc.)

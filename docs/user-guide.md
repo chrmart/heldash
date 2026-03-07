@@ -89,14 +89,22 @@ Alle Farben passen sich automatisch an das aktuell ausgewählte Theme an:
 
 Das Dashboard wurde mit mehreren visuellen Verbesserungen ausgestattet:
 
-- **Gruppierung**: Neue Dashboard Groups ermöglichen die Zusammenfassung von Items
+- **Smart Grid-Layout** — 20-Spalten-System für flexible Anordnung
+  - **Apps**: 2 Spalten breit = bis zu **10 Apps pro Reihe** möglich
+  - **Widgets**: 4 Spalten breit, 2 Zeilen hoch = doppelte Größe wie Apps
+  - In den Einstellungen kann man 2–10 Apps pro Reihe wählen
+  - Neben einem Widget passen 2 Apps vertikal
+
+- **Dashboard Groups** — Benannte Container zur Zusammenfassung
   - Benennbare Gruppen mit anpassbarer Breite (25%, 33%, 50%, 66%, 100%)
   - Drag & Drop zum Umordnen von Gruppen
   - Jede Gruppe hat einen eigenen Bereich mit subtiler Glass-Oberfläche
+  - Doppelklick auf Namen zum Bearbeiten
 
 - **Karten-Effekte**:
   - Beim Hover: Sanfte Hebung (4px nach oben) + Glow-Effekt
   - Service-Icons skalieren auf 108% beim Hover
+  - Widgets zeigen vollständige Statistiken in größerem Format
   - Smooth Transition für elegantes Gefühl
 
 - **Status-Punkte**:
@@ -106,9 +114,25 @@ Das Dashboard wurde mit mehreren visuellen Verbesserungen ausgestattet:
 
 ### Apps-Seite
 
-- **Tabelle mit besseren Hover-Effekten**
-- Admin-Buttons (Bearbeiten/Löschen) erscheinen sanft beim Hover
-- Karten zeigen Status-Punkt inline mit App-Name
+Die Apps-Seite zeigt alle Anwendungen in einer übersichtlichen Tabelle mit schnellen Kontrollen:
+
+**Tabellen-Spalten**:
+- **App**: Name und Icon
+- **URL**: Link zur Anwendung
+- **Status**: 🟢 Online / 🔴 Offline / ⚪ Unbekannt
+- **Check** (Togglebar): 🛡️ Health Check aktiviert / ⊘ deaktiviert
+  - Klick zum Ein/Ausschalten der Statusüberwachung
+  - Mit angewendet und Shadow-Effekt auf Hover
+- **Dashboard** (Togglebar, neu): ⊡ Yes / No
+  - Zeigt, ob App auf dem Dashboard angezeigt wird
+  - Klick zum schnellen Hinzufügen/Entfernen vom Dashboard
+  - Accent-Farbe wenn auf Dashboard
+- **Actions** (Admin only): Bearbeiten (✎) / Löschen (🗑)
+
+**Interaktionen**:
+- Beide Toggles sind clickable mit schönen Hover-Effekten (1.05x Scale + Shadow)
+- Status-Farben: Check grün (aktiv), Dashboard Accent (auf Dashboard)
+- Icons für schnelle visuelle Erkennung (Shield, LayoutDashboard)
 - Modal-Dialoge mit verbessertem Design und fokussierten Input-Feldern
 
 ### Media-Seite
@@ -130,13 +154,27 @@ Das Dashboard wurde mit mehreren visuellen Verbesserungen ausgestattet:
 
 - **Grid-Layout** mit auto-fill Columns
 - **Widget-Karten** mit Enhanced Shadow auf Hover
-- **Tab-Interface** für unterschiedliche Widget-Typen
-- **Stat-Display** mit aktuellen Werten (CPU, RAM, DNS-Abfragen, etc.)
+- **Tab-Interface** für verschiedene Widget-Typen:
+  - 🖥️ **Server Status**: CPU, RAM, Disk-Auslastung (Linux)
+  - 🛡️ **AdGuard Home**: DNS-Statistiken, Blockrate, Protection-Toggle
+  - 🐳 **Docker Overview**: Container-Counts, Start/Stop/Restart Dropdown
+  - 🔐 **Nginx Proxy Manager** (neu): Aktive Proxies, Zertifikate, Ablauf-Warnung
+    - Token-basierte Authentifizierung (Username + Password)
+    - Monitiert Proxy-Status und SSL-Zertifikat-Gesundheit
+    - Warnt vor abgelaufenen und bald ablaufenden Zertifikaten
+- **Stat-Display** mit aktuellen Werten und Live-Daten
+- **Display Location**: Widgets können in Topbar oder Sidebar angezeigt werden
 
 ### Einstellungen-Seite
 
 - **Tabbed Interface** mit Uppercase-Labels
-- **Tab 1 - Allgemein**: Theme-Selector mit Accent-Vorschau
+- **Tab 1 - Allgemein**:
+  - Theme-Selector mit Accent-Vorschau
+  - **Dashboard Layout**: "Apps Per Row" Selektor (2–10 Apps pro Reihe)
+    - Visual Button Grid mit Vorschau
+    - Sofortige Änderung ohne "Apply"-Button
+    - Bestimmt, wie viele Apps nebeneinander angeordnet werden
+    - Widgets sind immer 2×2 der App-Größe
 - **Tab 2 - Benutzer**: Benutzer-Tabelle mit Edit/Delete-Actions
 - **Tab 3 - Gruppen**: Expandable Groups mit Sub-Tabs für Sichtbarkeits-Kontrolle
   - Apps / Media / Widgets / Docker / Background

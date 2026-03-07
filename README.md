@@ -12,12 +12,20 @@ Coded by Claude.ai because iam to stupid to code but can wirte prompts lol
 
 **Dashboard**
 - 🗂️ Modular overview grid — freely arrange apps, media instances, and widgets independent of group structure
-- 📦 **Dashboard Groups** — named containers for organizing dashboard items (v2.0+)
+- 📏 **Smart Grid Layout** — 20-column grid supporting up to **10 apps per row**
+  - Apps: 2 columns wide (1×1 base size)
+  - Widgets: 4 columns wide, 2 rows tall (2×2 size) — twice the size of apps
+  - Next to a widget, 2 apps can fit vertically
+  - Settings: choose 2–10 apps per row layout
+- 📦 **Dashboard Groups** — named containers for organizing dashboard items
   - Configurable widths (25%, 33%, 50%, 66%, 100% of dashboard)
   - Drag-and-drop reordering of groups and items within groups
   - Double-click group names to edit, delete groups (items become ungrouped)
   - Per-user group configurations
-- ✅ Per-app and per-instance toggle to show on dashboard ("Show on Dashboard")
+- ✅ **Dashboard & Health Check Toggles** — one-click controls on Apps page
+  - Dashboard toggle: quickly add/remove apps from dashboard
+  - Health Check toggle: enable/disable status monitoring
+  - Real-time visual feedback (accent colors)
 - 🖱️ Edit mode — drag & drop reordering of all dashboard items and groups
 - 📐 Placeholder cards (App / Instance / Row) — reserve space and structure rows in edit mode
 - 👥 Per-user dashboards — each user arranges their own dashboard; guests share a common layout set by admins
@@ -50,7 +58,10 @@ Coded by Claude.ai because iam to stupid to code but can wirte prompts lol
 - 🖥️ Server Status — live CPU, RAM, and disk usage with progress bars (Linux hosts)
 - 🛡️ AdGuard Home — DNS query stats, block rate, protection toggle (admin-only)
 - 🐳 Docker Overview — container counts + Start/Stop/Restart dropdown (admin-only)
-- 🔐 Nginx Proxy Manager — active proxies, certificates, expiry monitoring
+- 🔐 **Nginx Proxy Manager** — active proxies, certificate counts, expiry alerts
+  - Token-based authentication (username + password)
+  - Monitors proxy host status and SSL certificate health
+  - Alerts for expired and soon-to-expire certificates
 - 📊 Widgets can be pinned to the topbar for at-a-glance stats
 - 🔒 Widget credentials stored server-side only — never exposed to the browser
 - 🔒 Docker Overview widget access is controlled per group separately from the Docker page
@@ -204,7 +215,6 @@ Frontend dev server runs on :5173 and proxies `/api`, `/icons`, and `/background
 - [x] Edit mode with drag & drop and placeholder cards
 - [x] "Show on Dashboard" toggle per app and instance
 - [x] Per-user dashboards with admin-managed guest dashboard
-- [x] **Dashboard Groups** — named containers with configurable widths and nested drag-and-drop
 - [x] Widget system (Server Status, AdGuard Home, Docker Overview)
 - [x] Topbar widget stats
 - [x] Tabbed settings page (General, Users, Groups, OIDC/SSO)
@@ -218,9 +228,10 @@ Frontend dev server runs on :5173 and proxies `/api`, `/icons`, and `/background
   - [x] Enhanced status indicator animations (dual-pulse)
   - [x] Dark mode accent color optimizations
   - [x] Prefers-reduced-motion accessibility support
-- [x] **Dashboard Groups** — named containers with configurable widths and nested drag-and-drop
 - [x] **Import/Export Services** — JSON backup/restore for migrations
-- [x] **Nginx Proxy Manager Widget** — monitor proxies and certificates
+- [x] **Nginx Proxy Manager Widget** — monitor proxies, certificates, expiry alerts
+- [x] **Smart Dashboard Grid** — 20-column layout, 10 apps per row, widgets 2×2 sized
+- [x] **Services Page Toggles** — one-click dashboard add/remove and health check toggle
 - [ ] OIDC / SSO via voidauth or Authentik (UI prepared)
 - [ ] Torrent Client Integration (qBittorrent, Transmission, Deluge)
-- [ ] More integrations (Immich, Jellyfin, ...)
+- [ ] More integrations (Immich, Jellyfin, Emby, Home Assistant, Pi-hole, etc.)
