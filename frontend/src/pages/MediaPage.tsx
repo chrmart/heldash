@@ -444,10 +444,12 @@ function CalendarTab() {
 
   events.sort((a, b) => a.date.localeCompare(b.date))
 
-  // Filter by date range and instance
+  // Filter by date range and instance (use string comparison for date accuracy)
+  const startStr = dateRange.start.getFullYear() + '-' + String(dateRange.start.getMonth() + 1).padStart(2, '0') + '-' + String(dateRange.start.getDate()).padStart(2, '0')
+  const endStr = dateRange.end.getFullYear() + '-' + String(dateRange.end.getMonth() + 1).padStart(2, '0') + '-' + String(dateRange.end.getDate()).padStart(2, '0')
+
   const dateFilteredEvents = events.filter(e => {
-    const eventDate = new Date(e.date)
-    return eventDate >= dateRange.start && eventDate < dateRange.end
+    return e.date >= startStr && e.date < endStr
   })
 
   const filteredEvents = filterInstanceId
