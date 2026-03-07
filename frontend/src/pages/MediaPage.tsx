@@ -7,8 +7,8 @@ import type { DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, Compass, Database } from 'lucide-react'
-import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem } from '../types/arr'
+import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, Compass, Database, AlertTriangle } from 'lucide-react'
+import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrStats } from '../types/arr'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
 
 // ── Tab type ──────────────────────────────────────────────────────────────────
@@ -340,12 +340,14 @@ function CalendarTab() {
     return () => clearTimeout(timer)
   }, [selectedDate, radarrSonarrInstances.map(i => i.id).join('')])
 
-  // Helper: format date as DD/MM/YYYY
+  // Helper: format date as "Mo, 07.03.2026"
   const formatDate = (date: Date): string => {
-    const day = String(date.getDate()).padStart(2, '0')
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const year = date.getFullYear()
-    return `${day}/${month}/${year}`
+    return date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  // Helper: short date for calendar items "Mo, 07.03"
+  const formatShortDate = (date: Date): string => {
+    return date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
   }
 
   // Helper: get date range for a given view
@@ -670,7 +672,7 @@ function CalendarTab() {
                       {item.type === 'movie' ? '🎬' : '📺'}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                      {formatDate(new Date(event.date))}
+                      {formatShortDate(new Date(event.date))}
                     </div>
                   </div>
                   <div>
@@ -733,7 +735,7 @@ function CalendarTab() {
 // ── Indexers tab ──────────────────────────────────────────────────────────────
 
 function IndexersTab() {
-  const { instances, indexers, loadIndexers } = useArrStore()
+  const { instances, indexers, stats, loadIndexers } = useArrStore()
   const [loading, setLoading] = useState(false)
 
   const prowlarrInstances = instances.filter(i => i.type === 'prowlarr' && i.enabled)
@@ -773,12 +775,19 @@ function IndexersTab() {
           <div key={inst.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 20 }}>🔍</span>
-              <h3 style={{ fontSize: 14, fontWeight: 600 }}>
-                {inst.name}
-                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 8 }}>
-                  ({enabledCount} enabled)
-                </span>
-              </h3>
+              <h3 style={{ fontSize: 14, fontWeight: 600 }}>{inst.name}</h3>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {enabledCount} enabled
+              </span>
+              {(() => {
+                const s = stats[inst.id]
+                const failing = s?.type === 'prowlarr' ? (s as ProwlarrStats).failingIndexers : 0
+                return failing > 0 ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.12)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245,158,11,0.3)' }}>
+                    <AlertTriangle size={11} /> {failing} failing
+                  </span>
+                ) : null
+              })()}
             </div>
 
             {instIndexers.length === 0 && !loading && (
@@ -829,12 +838,11 @@ function IndexersTab() {
 
 // ── Library tab ───────────────────────────────────────────────────────────────
 
-function getTypeEmoji(type: string): string {
-  switch (type) {
-    case 'radarr': return '🎬'
-    case 'sonarr': return '📺'
-    default: return '🎥'
-  }
+type LibrarySortKey = 'az' | 'za' | 'year' | 'missing'
+type LibraryFilter = 'all' | 'missing' | 'unmonitored'
+
+function getTypeLabel(type?: string): string {
+  return type === 'radarr' ? '🎬' : type === 'sonarr' ? '📺' : '🎥'
 }
 
 function LibraryTab() {
@@ -842,6 +850,8 @@ function LibraryTab() {
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<LibrarySortKey>('az')
+  const [filter, setFilter] = useState<LibraryFilter>('all')
 
   const radarrSonarrInstances = instances.filter(i => (i.type === 'radarr' || i.type === 'sonarr') && i.enabled)
 
@@ -869,55 +879,117 @@ function LibraryTab() {
   }
 
   const selected = selectedInstanceId ? radarrSonarrInstances.find(i => i.id === selectedInstanceId) : radarrSonarrInstances[0]
-  const items = selected?.type === 'radarr' ? (movies[selected.id] ?? []) : (series[selected.id] ?? [])
+  const isRadarr = selected?.type === 'radarr'
+  const items: any[] = selected ? (isRadarr ? (movies[selected.id] ?? []) : (series[selected.id] ?? [])) : []
+
+  const isMissing = (item: any): boolean => {
+    if (isRadarr) return item.monitored && !item.hasFile
+    return item.monitored && (item.statistics?.episodeFileCount ?? 0) < (item.statistics?.totalEpisodeCount ?? 0)
+  }
 
   const filtered = items
     .filter((item: any) => {
-      const title = item.title || item.name || ''
-      return title.toLowerCase().includes(search.toLowerCase())
+      const title: string = item.title ?? ''
+      if (!title.toLowerCase().includes(search.toLowerCase())) return false
+      if (filter === 'missing') return isMissing(item)
+      if (filter === 'unmonitored') return !item.monitored
+      return true
     })
     .sort((a: any, b: any) => {
-      const titleA = (a.title || a.name || '').toLowerCase()
-      const titleB = (b.title || b.name || '').toLowerCase()
-      return titleA.localeCompare(titleB)
+      if (sortKey === 'za') return (b.title ?? '').localeCompare(a.title ?? '')
+      if (sortKey === 'year') return (b.year ?? 0) - (a.year ?? 0)
+      if (sortKey === 'missing') {
+        const am = isMissing(a) ? 0 : 1
+        const bm = isMissing(b) ? 0 : 1
+        return am - bm || (a.title ?? '').localeCompare(b.title ?? '')
+      }
+      return (a.title ?? '').localeCompare(b.title ?? '')
     })
 
+  const missingCount = items.filter(isMissing).length
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 8, alignItems: 'center' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Controls row */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Instance selector */}
+        <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2 }}>
           {radarrSonarrInstances.map(i => (
             <button
               key={i.id}
-              onClick={() => setSelectedInstanceId(i.id)}
+              onClick={() => { setSelectedInstanceId(i.id); setFilter('all'); setSearch('') }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                padding: '7px 14px',
-                borderRadius: 'var(--radius-md)',
+                padding: '7px 14px', borderRadius: 'var(--radius-md)',
                 fontSize: 13, fontWeight: selectedInstanceId === i.id ? 600 : 400,
                 background: selectedInstanceId === i.id ? 'rgba(var(--accent-rgb), 0.12)' : 'transparent',
                 color: selectedInstanceId === i.id ? 'var(--accent)' : 'var(--text-secondary)',
                 border: selectedInstanceId === i.id ? '1px solid rgba(var(--accent-rgb), 0.25)' : '1px solid transparent',
-                cursor: 'pointer',
-                transition: 'all 150ms ease',
-                fontFamily: 'var(--font-sans)',
+                cursor: 'pointer', transition: 'all 150ms ease', fontFamily: 'var(--font-sans)',
               }}
             >
-              <span style={{ fontSize: 14 }}>{getTypeEmoji(i.type)}</span>
+              <span style={{ fontSize: 14 }}>{getTypeLabel(i.type)}</span>
               {i.name}
             </button>
           ))}
         </div>
+
+        {/* Search */}
         <input
           type="text"
           placeholder="Search…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="form-input"
-          style={{ flex: 1, minWidth: 150, fontSize: 13, padding: '5px 8px' }}
+          style={{ flex: 1, minWidth: 150, fontSize: 13, padding: '5px 10px' }}
         />
+
+        {/* Filter chips */}
+        <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2 }}>
+          {(['all', 'missing', 'unmonitored'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              style={{
+                padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: 12,
+                fontWeight: filter === f ? 600 : 400,
+                background: filter === f ? 'rgba(var(--accent-rgb), 0.12)' : 'transparent',
+                color: filter === f ? 'var(--accent)' : 'var(--text-secondary)',
+                border: filter === f ? '1px solid rgba(var(--accent-rgb), 0.25)' : '1px solid transparent',
+                cursor: 'pointer', transition: 'all 150ms ease', fontFamily: 'var(--font-sans)',
+                textTransform: 'capitalize',
+              }}
+            >
+              {f === 'missing' && missingCount > 0 ? `Missing (${missingCount})` : f === 'all' ? 'All' : f === 'unmonitored' ? 'Unmonitored' : f}
+            </button>
+          ))}
+        </div>
+
+        {/* Sort */}
+        <select
+          className="form-input"
+          value={sortKey}
+          onChange={e => setSortKey(e.target.value as LibrarySortKey)}
+          style={{ fontSize: 12, padding: '6px 10px', flexShrink: 0 }}
+        >
+          <option value="az">A → Z</option>
+          <option value="za">Z → A</option>
+          <option value="year">Newest first</option>
+          <option value="missing">Missing first</option>
+        </select>
+
         {loading && <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />}
       </div>
+
+      {/* Results count */}
+      {!loading && items.length > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          {filtered.length} of {items.length} {isRadarr ? 'movies' : 'series'}
+          {missingCount > 0 && filter !== 'missing' && (
+            <span style={{ marginLeft: 10, color: '#f59e0b' }}>• {missingCount} missing</span>
+          )}
+        </div>
+      )}
 
       {filtered.length === 0 && !loading && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
@@ -928,26 +1000,34 @@ function LibraryTab() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 }}>
         {filtered.map((item: any) => {
           const posterUrl = item.images?.find((i: any) => i.coverType === 'poster')?.remoteUrl
-          const title = item.title || item.name || 'Unknown'
-          const monitored = item.monitored ? '✓' : '○'
-          const hasFile = item.hasFile ? '💾' : '❌'
+          const title: string = item.title ?? 'Unknown'
+          const missing = isMissing(item)
+
+          // Radarr: hasFile boolean. Sonarr: episodeFileCount / totalEpisodeCount
+          const fileLabel = isRadarr
+            ? (item.hasFile ? 'Downloaded' : 'Missing')
+            : (() => {
+                const got = item.statistics?.episodeFileCount ?? 0
+                const total = item.statistics?.totalEpisodeCount ?? 0
+                return total > 0 ? `${got} / ${total} ep` : '—'
+              })()
+          const fileColor = isRadarr
+            ? (item.hasFile ? '#22c55e' : (item.monitored ? '#ef4444' : 'var(--text-muted)'))
+            : (() => {
+                const got = item.statistics?.episodeFileCount ?? 0
+                const total = item.statistics?.totalEpisodeCount ?? 0
+                if (total === 0) return 'var(--text-muted)'
+                return got >= total ? '#22c55e' : (item.monitored ? '#ef4444' : '#f59e0b')
+              })()
 
           return (
             <div
               key={item.id}
               className="glass"
-              style={{
-                borderRadius: 'var(--radius-lg)',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 0,
-                transition: 'all 200ms ease',
-                cursor: 'pointer',
-              }}
+              style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'all 200ms ease', cursor: 'default' }}
               onMouseEnter={e => {
-                ;(e.currentTarget as HTMLElement).style.transform = 'translateY(-4px)'
-                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.3)'
+                ;(e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)'
+                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.3)'
               }}
               onMouseLeave={e => {
                 ;(e.currentTarget as HTMLElement).style.transform = 'none'
@@ -955,66 +1035,44 @@ function LibraryTab() {
               }}
             >
               {/* Poster */}
-              <div
-                style={{
-                  aspectRatio: '2 / 3',
-                  background: posterUrl ? undefined : 'linear-gradient(135deg, rgba(var(--accent-rgb), 0.2), rgba(var(--text-rgb), 0.1))',
-                  backgroundImage: posterUrl ? `url(${posterUrl})` : undefined,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  position: 'relative',
-                }}
-              >
-                {!posterUrl && <span style={{ fontSize: 32 }}>{getTypeEmoji(selected?.type)}</span>}
+              <div style={{
+                aspectRatio: '2 / 3',
+                background: posterUrl ? undefined : 'linear-gradient(135deg, rgba(var(--accent-rgb), 0.2), rgba(var(--text-rgb), 0.1))',
+                backgroundImage: posterUrl ? `url(${posterUrl})` : undefined,
+                backgroundSize: 'cover', backgroundPosition: 'center',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
+              }}>
+                {!posterUrl && <span style={{ fontSize: 32 }}>{getTypeLabel(selected?.type)}</span>}
 
-                {/* Status Badges */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    display: 'flex',
-                    gap: 4,
-                    backdropFilter: 'blur(8px)',
-                  }}
-                >
-                  <div
-                    style={{
-                      background: 'rgba(0, 0, 0, 0.7)',
-                      color: monitored === '✓' ? '#22c55e' : '#ef4444',
-                      padding: '4px 8px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: 14,
-                    }}
-                  >
-                    {monitored}
-                  </div>
-                  <div
-                    style={{
-                      background: 'rgba(0, 0, 0, 0.7)',
-                      color: hasFile === '💾' ? '#22c55e' : '#ef4444',
-                      padding: '4px 8px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: 14,
-                    }}
-                  >
-                    {hasFile}
-                  </div>
+                {/* Badges top-right */}
+                <div style={{ position: 'absolute', top: 6, right: 6, display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
+                  {!item.monitored && (
+                    <span style={{
+                      background: 'rgba(0,0,0,0.75)', color: 'var(--text-muted)',
+                      padding: '2px 6px', borderRadius: 'var(--radius-sm)', fontSize: 10, fontWeight: 600,
+                      backdropFilter: 'blur(4px)',
+                    }}>Unmonitored</span>
+                  )}
+                  {missing && (
+                    <span style={{
+                      background: 'rgba(239,68,68,0.85)', color: '#fff',
+                      padding: '2px 6px', borderRadius: 'var(--radius-sm)', fontSize: 10, fontWeight: 600,
+                      backdropFilter: 'blur(4px)',
+                    }}>Missing</span>
+                  )}
                 </div>
               </div>
 
               {/* Info */}
-              <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={title}>
                   {title}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}>
-                  <span title="Monitored">{monitored} Monitor</span>
-                  <span title="File">•</span>
-                  <span title="Has File">{hasFile}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+                  {item.year > 0 && (
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.year}</span>
+                  )}
+                  <span style={{ fontSize: 11, color: fileColor, marginLeft: 'auto' }}>{fileLabel}</span>
                 </div>
               </div>
             </div>
