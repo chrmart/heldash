@@ -448,10 +448,7 @@ function SortableGroup({ group, editMode, onEdit }: {
   onEdit: (s: Service) => void
 }) {
   const { updateGroup, deleteGroup, reorderGroupItems, groups: allGroups } = useDashboardStore()
-  // Columns proportional to 8 (the fixed standard) based on group's share of the 12-column outer grid
   const innerCols = Math.max(1, Math.round(8 * group.col_span / 12))
-  // Minimum group width to always fit innerCols × 160px columns (+ gaps + horizontal padding)
-  const groupMinWidth = innerCols * 160 + (innerCols - 1) * 16 + 2 * 32
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: group.id, disabled: !editMode,
   })
@@ -480,7 +477,6 @@ function SortableGroup({ group, editMode, onEdit }: {
         opacity: isDragging ? 0.4 : 1,
         flex: `${group.col_span} 0 calc(${(group.col_span / 12 * 100).toFixed(4)}% - ${((12 - group.col_span) * 20 / 12).toFixed(4)}px)`,
         position: 'relative',
-        minWidth: groupMinWidth,
       }}
       onMouseEnter={() => setShowHandle(true)}
       onMouseLeave={() => setShowHandle(false)}
