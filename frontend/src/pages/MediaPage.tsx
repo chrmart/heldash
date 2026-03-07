@@ -1034,6 +1034,8 @@ function DiscoverTab() {
   const [searchInput, setSearchInput] = useState('')
   const [requesting, setRequesting] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState('popularity.desc')
+  const [confirmRequest, setConfirmRequest] = useState<{ item: any; mediaType: 'movie' | 'tv'; tmdbId: number } | null>(null)
+  const [selectedSeasons, setSelectedSeasons] = useState<number[]>([])
 
   const seerrInstances = instances.filter(i => i.type === 'seerr' && i.enabled)
   const selected = seerrInstances[0]
@@ -1289,19 +1291,10 @@ function DiscoverTab() {
                 )}
 
                 <button
-                  onClick={async e => {
+                  onClick={e => {
                     e.stopPropagation()
-                    if (!selected) return
-                    const key = `${item.mediaType}-${item.id}`
-                    setRequesting(key)
-                    try {
-                      await discoverRequest(selected.id, item.mediaType, item.tmdbId)
-                      alert('✓ Request sent!')
-                    } catch (e: any) {
-                      alert(`Error: ${e.message}`)
-                    } finally {
-                      setRequesting(null)
-                    }
+                    setConfirmRequest({ item, mediaType: item.mediaType, tmdbId: item.tmdbId })
+                    setSelectedSeasons(item.mediaType === 'tv' ? [1] : [])
                   }}
                   disabled={requesting === `${item.mediaType}-${item.id}`}
                   className="btn btn-primary btn-sm"
@@ -1333,6 +1326,127 @@ function DiscoverTab() {
           >
             Next
           </button>
+        </div>
+      )}
+
+      {/* Request Confirmation Modal */}
+      {confirmRequest && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(4px)',
+        }} onClick={() => setConfirmRequest(null)}>
+          <div className="glass" style={{
+            borderRadius: 'var(--radius-xl)',
+            padding: 24,
+            maxWidth: 400,
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Confirm Request</h3>
+
+            {/* Item Preview */}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+              {confirmRequest.item.posterPath && (
+                <img
+                  src={`https://image.tmdb.org/t/p/w92${confirmRequest.item.posterPath}`}
+                  alt=""
+                  style={{ width: 60, borderRadius: 'var(--radius-md)', objectFit: 'cover' }}
+                />
+              )}
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 500 }}>
+                  {confirmRequest.item.title || confirmRequest.item.name}
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {confirmRequest.mediaType === 'movie' ? '🎬 Movie' : '📺 TV Series'}
+                </p>
+              </div>
+            </div>
+
+            {/* Season Selection for TV */}
+            {confirmRequest.mediaType === 'tv' && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Request Seasons:</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(season => (
+                    <button
+                      key={season}
+                      onClick={() => {
+                        setSelectedSeasons(prev =>
+                          prev.includes(season)
+                            ? prev.filter(s => s !== season)
+                            : [...prev, season]
+                        )
+                      }}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: 12,
+                        background: selectedSeasons.includes(season)
+                          ? 'rgba(var(--accent-rgb), 0.3)'
+                          : 'rgba(var(--text-rgb), 0.1)',
+                        color: selectedSeasons.includes(season)
+                          ? 'var(--accent)'
+                          : 'var(--text-secondary)',
+                        border: selectedSeasons.includes(season)
+                          ? '1px solid var(--accent)'
+                          : '1px solid transparent',
+                        cursor: 'pointer',
+                        transition: 'all 150ms ease',
+                        fontFamily: 'var(--font-sans)',
+                      }}
+                    >
+                      S{season}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setConfirmRequest(null)}
+                className="btn btn-ghost btn-sm"
+                style={{ flex: 1, fontSize: 12 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!selected) return
+                  const key = `${confirmRequest.mediaType}-${confirmRequest.item.id}`
+                  setRequesting(key)
+                  try {
+                    await discoverRequest(
+                      selected.id,
+                      confirmRequest.mediaType,
+                      confirmRequest.tmdbId,
+                      confirmRequest.mediaType === 'tv' ? selectedSeasons : undefined
+                    )
+                    alert(`✓ ${confirmRequest.mediaType === 'movie' ? 'Movie' : 'Series'} requested!`)
+                    setConfirmRequest(null)
+                  } catch (e: any) {
+                    alert(`Error: ${e.message || 'Request failed'}`)
+                  } finally {
+                    setRequesting(null)
+                  }
+                }}
+                disabled={confirmRequest.mediaType === 'tv' && selectedSeasons.length === 0}
+                className="btn btn-primary btn-sm"
+                style={{ flex: 1, fontSize: 12 }}
+              >
+                Request
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

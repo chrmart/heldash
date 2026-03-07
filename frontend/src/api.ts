@@ -139,8 +139,8 @@ export const api = {
       const params = new URLSearchParams({ query })
       return req<any>(`/arr/${id}/discover/search?${params}`)
     },
-    discoverRequest: (id: string, mediaType: 'movie' | 'tv', tmdbId: number) =>
-      req<any>(`/arr/${id}/discover/request`, { method: 'POST', body: JSON.stringify({ mediaType, tmdbId }) }),
+    discoverRequest: (id: string, mediaType: 'movie' | 'tv', tmdbId: number, seasons?: number[]) =>
+      req<any>(`/arr/${id}/discover/request`, { method: 'POST', body: JSON.stringify({ mediaType, tmdbId, seasons }) }),
   },
 
   widgets: {

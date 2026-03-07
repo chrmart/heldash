@@ -122,7 +122,11 @@ export class SeerrClient extends ArrBaseClient {
     return this.get<SeerrDiscoverResponse>('search', { query })
   }
 
-  requestMedia(mediaType: 'movie' | 'tv', tmdbId: number): Promise<any> {
-    return this.post<any>('request', { mediaType, tmdbId })
+  requestMedia(mediaType: 'movie' | 'tv', tmdbId: number, seasons?: number[]): Promise<any> {
+    const body: any = { mediaType, tmdbId }
+    if (seasons && seasons.length > 0) {
+      body.seasons = seasons
+    }
+    return this.post<any>('request', body)
   }
 }

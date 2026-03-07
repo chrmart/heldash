@@ -566,7 +566,7 @@ export async function arrRoutes(app: FastifyInstance) {
   )
 
   // POST /api/arr/:id/discover/request
-  app.post<{ Params: { id: string }; Body: { mediaType: 'movie' | 'tv'; tmdbId: number } }>(
+  app.post<{ Params: { id: string }; Body: { mediaType: 'movie' | 'tv'; tmdbId: number; seasons?: number[] } }>(
     '/api/arr/:id/discover/request',
     { preHandler: [app.authenticate] },
     async (req, reply) => {
@@ -574,7 +574,7 @@ export async function arrRoutes(app: FastifyInstance) {
       if (!row) return
       if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
       try {
-        const result = await new SeerrClient(row.url, row.api_key).requestMedia(req.body.mediaType, req.body.tmdbId)
+        const result = await new SeerrClient(row.url, row.api_key).requestMedia(req.body.mediaType, req.body.tmdbId, req.body.seasons)
         return result
       } catch (e: any) {
         return reply.status(502).send({ error: 'Upstream error', detail: e.message })
