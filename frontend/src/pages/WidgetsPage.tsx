@@ -987,19 +987,23 @@ export function NginxPMStatsView({ stats }: { stats: NpmStats & { error?: string
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{stats.proxyCount}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{stats.proxy_hosts}</div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Proxies</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color: stats.totalExpiredCerts > 0 ? 'var(--status-offline)' : 'var(--accent)' }}>{stats.certificateCount}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{stats.streams}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Streams</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color: stats.cert_expiring_soon > 0 ? '#f59e0b' : 'var(--accent)' }}>{stats.certificates}</div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Certs</div>
         </div>
       </div>
-      {stats.totalExpiredCerts > 0 && (
-        <div style={{ fontSize: 11, color: 'var(--status-offline)', textAlign: 'center' }}>
-          {stats.totalExpiredCerts} expired · {stats.totalExpiringCertificates} expiring soon
+      {stats.cert_expiring_soon > 0 && (
+        <div style={{ fontSize: 11, color: '#f59e0b', textAlign: 'center' }}>
+          {stats.cert_expiring_soon} cert{stats.cert_expiring_soon !== 1 ? 's' : ''} expiring within 30 days
         </div>
       )}
     </div>

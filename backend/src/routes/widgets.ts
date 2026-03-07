@@ -499,7 +499,7 @@ export async function widgetsRoutes(app: FastifyInstance) {
       const { NginxPMClient } = await import('../clients/nginx-pm-client')
       const client = new NginxPMClient(config.url ?? '', config.username ?? '', config.password ?? '')
       try {
-        return await client.getStatus()
+        return await client.getStats()
       } catch (err) {
         return { error: (err as Error).message }
       }

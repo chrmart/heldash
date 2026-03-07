@@ -3,31 +3,31 @@ import { request, Agent } from 'undici'
 interface ProxyHost {
   id: number
   domain_names: string[]
-  forward_scheme: 'http' | 'https'
-  forward_host: string
-  forward_port: number
   enabled: number
-  meta: {
-    letsencrypt_agree?: boolean
-    letsencrypt_email?: string
-    dns_challenge?: boolean
-  }
-  certificate_id: number | null
+}
+
+interface Stream {
+  id: number
+  enabled: number
+}
+
+interface RedirectionHost {
+  id: number
+  enabled: number
 }
 
 interface Certificate {
   id: number
-  provider: 'letsencrypt' | 'other'
+  provider: string
   domain_names: string[]
-  expires_on: string
+  expires_on: string  // ISO date string
 }
 
-interface NpmStatus {
-  uptime: number
-  proxyCount: number
-  certificateCount: number
-  totalExpiredCerts: number
-  totalExpiringCertificates: number
+export interface NpmStats {
+  proxy_hosts: number
+  streams: number
+  certificates: number
+  cert_expiring_soon: number  // expires within 30 days
 }
 
 export class NginxPMClient {
@@ -84,17 +84,13 @@ export class NginxPMClient {
     return this.token
   }
 
-  private async fetchApi<T>(path: string, options?: Record<string, any>): Promise<T> {
+  private async fetchApi<T>(path: string): Promise<T> {
     const url = `${this.baseUrl}/api${path}`
     const token = await this.getToken()
 
     const res = await request(url, {
       method: 'GET',
-      ...options,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        ...options?.headers,
-      },
+      headers: { 'Authorization': `Bearer ${token}` },
       dispatcher: this.agent,
     })
 
@@ -111,50 +107,26 @@ export class NginxPMClient {
     return JSON.parse(body)
   }
 
-  async getStatus(): Promise<NpmStatus> {
-    try {
-      const [proxies, certs] = await Promise.all([
-        this.fetchApi<{ data: ProxyHost[] }>('/nginx/proxies'),
-        this.fetchApi<{ data: Certificate[] }>('/certificates'),
-      ])
+  async getStats(): Promise<NpmStats> {
+    const [proxyHosts, streams, certs, redirections] = await Promise.all([
+      this.fetchApi<ProxyHost[]>('/nginx/proxy-hosts'),
+      this.fetchApi<Stream[]>('/nginx/streams'),
+      this.fetchApi<Certificate[]>('/nginx/certificates'),
+      this.fetchApi<RedirectionHost[]>('/nginx/redirection-hosts'),
+    ])
 
-      const proxyCount = proxies.data.length
-      const enabledCount = proxies.data.filter(p => p.enabled === 1).length
+    const now = Date.now()
+    const in30Days = now + 30 * 24 * 60 * 60 * 1000
+    const certExpiringSoon = certs.filter(cert => {
+      const expiry = new Date(cert.expires_on).getTime()
+      return expiry > now && expiry <= in30Days
+    }).length
 
-      const now = new Date()
-      let totalExpiredCerts = 0
-      let totalExpiringCertificates = 0
-
-      certs.data.forEach(cert => {
-        const expiryDate = new Date(cert.expires_on)
-        const daysUntilExpiry = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-
-        if (daysUntilExpiry < 0) {
-          totalExpiredCerts++
-        } else if (daysUntilExpiry <= 30) {
-          totalExpiringCertificates++
-        }
-      })
-
-      return {
-        uptime: Math.floor(process.uptime()),
-        proxyCount: enabledCount,
-        certificateCount: certs.data.length,
-        totalExpiredCerts,
-        totalExpiringCertificates,
-      }
-    } catch (err) {
-      throw new Error(`NPM API error: ${(err as Error).message}`)
+    return {
+      proxy_hosts: proxyHosts.length + redirections.length,
+      streams: streams.length,
+      certificates: certs.length,
+      cert_expiring_soon: certExpiringSoon,
     }
-  }
-
-  async getProxies(): Promise<ProxyHost[]> {
-    const result = await this.fetchApi<{ data: ProxyHost[] }>('/nginx/proxies')
-    return result.data
-  }
-
-  async getCertificates(): Promise<Certificate[]> {
-    const result = await this.fetchApi<{ data: Certificate[] }>('/certificates')
-    return result.data
   }
 }

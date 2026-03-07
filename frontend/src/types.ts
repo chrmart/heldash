@@ -161,11 +161,10 @@ export interface AdGuardStats {
 }
 
 export interface NpmStats {
-  uptime: number
-  proxyCount: number
-  certificateCount: number
-  totalExpiredCerts: number
-  totalExpiringCertificates: number
+  proxy_hosts: number
+  streams: number
+  certificates: number
+  cert_expiring_soon: number  // expires within 30 days
 }
 
 export type WidgetStats = ServerStats | AdGuardStats | HaEntityState[] | NpmStats
