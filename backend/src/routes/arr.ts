@@ -284,13 +284,24 @@ export async function arrRoutes(app: FastifyInstance) {
         }
       }
       if (row.type === 'sonarr') {
-        const series = await new SonarrClient(row.url, row.api_key).getSeries()
+        const client = new SonarrClient(row.url, row.api_key)
+        const [series, health, diskspace, wanted] = await Promise.all([
+          client.getSeries(),
+          client.getHealth().catch(() => []),
+          client.getDiskSpace().catch(() => []),
+          client.getWantedMissing().catch(() => ({ totalRecords: 0, records: [] })),
+        ])
         return {
           type: 'sonarr',
           seriesCount: series.length,
           monitored: series.filter(s => s.monitored).length,
           episodeCount: series.reduce((a, s) => a + (s.statistics?.episodeFileCount ?? 0), 0),
           sizeOnDisk: series.reduce((a, s) => a + (s.statistics?.sizeOnDisk ?? 0), 0),
+          missingCount: wanted.totalRecords,
+          healthIssues: health
+            .filter(h => h.type !== 'ok')
+            .map(h => ({ type: h.type, message: h.message })),
+          diskspaceFreeBytes: diskspace.reduce((a, d) => a + (d.freeSpace ?? 0), 0),
         }
       }
       // prowlarr

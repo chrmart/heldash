@@ -46,6 +46,25 @@ export interface SonarrCalendarItem {
   series: { title: string; id: number }
 }
 
+export interface SonarrHealthItem {
+  source: string
+  type: string   // 'ok' | 'notice' | 'warning' | 'error'
+  message: string
+  wikiUrl?: string
+}
+
+export interface SonarrDiskSpace {
+  path: string
+  label: string
+  freeSpace: number
+  totalSpace: number
+}
+
+export interface SonarrWantedResponse {
+  totalRecords: number
+  records: SonarrCalendarItem[]
+}
+
 export class SonarrClient extends ArrBaseClient {
   constructor(url: string, apiKey: string) {
     super(url, apiKey, 'v3')
@@ -61,5 +80,17 @@ export class SonarrClient extends ArrBaseClient {
 
   getCalendar(start: string, end: string) {
     return this.get<SonarrCalendarItem[]>('calendar', { start, end, unmonitored: 'false', includeSeries: 'true' })
+  }
+
+  getHealth() {
+    return this.get<SonarrHealthItem[]>('health')
+  }
+
+  getDiskSpace() {
+    return this.get<SonarrDiskSpace[]>('diskspace')
+  }
+
+  getWantedMissing() {
+    return this.get<SonarrWantedResponse>('wanted/missing', { pageSize: '1', monitored: 'true' })
   }
 }

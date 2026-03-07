@@ -19,7 +19,7 @@ export interface ArrStatus {
 }
 
 // ── Stats (type-discriminated) ────────────────────────────────────────────────
-export interface RadarrHealthIssue {
+export interface ArrHealthIssue {
   type: string   // 'notice' | 'warning' | 'error'
   message: string
 }
@@ -31,7 +31,7 @@ export interface RadarrStats {
   withFile: number
   sizeOnDisk: number
   missingCount: number
-  healthIssues: RadarrHealthIssue[]
+  healthIssues: ArrHealthIssue[]
   diskspaceFreeBytes: number
 }
 
@@ -41,6 +41,9 @@ export interface SonarrStats {
   monitored: number
   episodeCount: number
   sizeOnDisk: number
+  missingCount: number
+  healthIssues: ArrHealthIssue[]
+  diskspaceFreeBytes: number
 }
 
 export interface ProwlarrStats {

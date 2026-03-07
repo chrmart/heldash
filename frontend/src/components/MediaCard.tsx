@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useArrStore } from '../store/useArrStore'
 import { useStore } from '../store/useStore'
-import type { ArrStatus, ArrStats, ArrQueueItem, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, RadarrHealthIssue } from '../types/arr'
+import type { ArrStatus, ArrStats, ArrQueueItem, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, ArrHealthIssue } from '../types/arr'
 import { ChevronDown, ChevronUp, Check, X, Trash2, AlertTriangle } from 'lucide-react'
 
 // Minimal instance shape — works for both ArrInstance and dashboard partial
@@ -208,7 +208,7 @@ function InstanceIcon({ iconUrl, iconEmoji }: { iconUrl?: string | null; iconEmo
 
 const normalizeUrl = (u: string) => u.replace(/\/$/, '').toLowerCase()
 
-function HealthIssueList({ issues }: { issues: RadarrHealthIssue[] }) {
+function HealthIssueList({ issues }: { issues: ArrHealthIssue[] }) {
   if (issues.length === 0) return <p style={{ fontSize: 12, color: 'var(--status-online)', padding: '8px 0' }}>No health issues.</p>
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -300,7 +300,9 @@ export function ArrCardContent({ instance }: {
               <Stat label="Series" value={stat.seriesCount} />
               <Stat label="Monitored" value={stat.monitored} />
               <Stat label="Episodes" value={stat.episodeCount} />
+              {stat.missingCount > 0 && <Stat label="Missing" value={stat.missingCount} />}
               <Stat label="Size" value={fmtBytes(stat.sizeOnDisk)} />
+              {stat.diskspaceFreeBytes > 0 && <Stat label="Disk Free" value={fmtBytes(stat.diskspaceFreeBytes)} />}
             </>
           )}
           {stat.type === 'prowlarr' && (
@@ -323,7 +325,7 @@ export function ArrCardContent({ instance }: {
         {instance.type === 'prowlarr' && (
           <ExpandBtn label="Indexers" active={expanded === 'indexers'} onClick={() => handleExpand('indexers')} />
         )}
-        {instance.type === 'radarr' && stat?.type === 'radarr' && (
+        {(instance.type === 'radarr' || instance.type === 'sonarr') && (stat?.type === 'radarr' || stat?.type === 'sonarr') && (
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => handleExpand('health')}
@@ -356,7 +358,7 @@ export function ArrCardContent({ instance }: {
                 ? <CalendarList items={calendars[instance.id]!} type={instance.type} />
                 : expanded === 'indexers' && indexers[instance.id]
                   ? <IndexerList items={indexers[instance.id]!} />
-                  : expanded === 'health' && stat?.type === 'radarr'
+                  : expanded === 'health' && (stat?.type === 'radarr' || stat?.type === 'sonarr')
                     ? <HealthIssueList issues={stat.healthIssues} />
                     : null
           }
