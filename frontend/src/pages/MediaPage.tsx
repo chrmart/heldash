@@ -1038,6 +1038,7 @@ function DiscoverTab() {
   const [sortBy, setSortBy] = useState('popularity.desc')
   const [confirmRequest, setConfirmRequest] = useState<{ item: any; mediaType: 'movie' | 'tv'; tmdbId: number } | null>(null)
   const [selectedSeasons, setSelectedSeasons] = useState<number[]>([])
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   const seerrInstances = instances.filter(i => i.type === 'seerr' && i.enabled)
   const selected = seerrInstances[0]
@@ -1056,6 +1057,13 @@ function DiscoverTab() {
     }
     load()
   }, [selected?.id, sortBy])
+
+  // Auto-dismiss notification after 4 seconds
+  useEffect(() => {
+    if (!notification) return
+    const timer = setTimeout(() => setNotification(null), 4000)
+    return () => clearTimeout(timer)
+  }, [notification])
 
   // Load specific page when pagination changes
   useEffect(() => {
@@ -1101,7 +1109,34 @@ function DiscoverTab() {
   const allResults = data?.results ?? []
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'relative' }}>
+      {/* Notification Toast */}
+      {notification && (
+        <div
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 500,
+            padding: '12px 16px',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 13,
+            fontWeight: 500,
+            backgroundColor: notification.type === 'success'
+              ? 'rgba(34, 197, 94, 0.1)'
+              : 'rgba(239, 68, 68, 0.1)',
+            color: notification.type === 'success'
+              ? '#22c55e'
+              : '#ef4444',
+            border: `1px solid ${notification.type === 'success'
+              ? 'rgba(34, 197, 94, 0.3)'
+              : 'rgba(239, 68, 68, 0.3)'}`,
+            animation: 'slideDown 200ms ease',
+          }}
+        >
+          {notification.message}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2 }}>
           {(['trending', 'movies', 'tv', 'search'] as const).map(t => (
@@ -1433,10 +1468,16 @@ function DiscoverTab() {
                       confirmRequest.tmdbId,
                       confirmRequest.mediaType === 'tv' ? selectedSeasons : undefined
                     )
-                    alert(`✓ ${confirmRequest.mediaType === 'movie' ? 'Movie' : 'Series'} requested!`)
+                    setNotification({
+                      type: 'success',
+                      message: `✓ ${confirmRequest.mediaType === 'movie' ? 'Movie' : 'Series'} requested!`
+                    })
                     setConfirmRequest(null)
                   } catch (e: any) {
-                    alert(`Error: ${e.message || 'Request failed'}`)
+                    setNotification({
+                      type: 'error',
+                      message: `Error: ${e.message || 'Request failed'}`
+                    })
                   } finally {
                     setRequesting(null)
                   }
