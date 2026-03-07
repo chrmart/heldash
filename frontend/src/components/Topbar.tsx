@@ -5,7 +5,7 @@ import { useDashboardStore } from '../store/useDashboardStore'
 import { useWidgetStore } from '../store/useWidgetStore'
 import { useDockerStore } from '../store/useDockerStore'
 import { api } from '../api'
-import type { ThemeAccent, ServerStats, AdGuardStats } from '../types'
+import type { ThemeAccent, ServerStats, AdGuardStats, HaEntityState, NpmStats } from '../types'
 import { containerCounts } from '../utils'
 
 interface Props {
@@ -150,7 +150,62 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
             )
           }
 
+          if (w.type === 'home_assistant') {
+            const entities = Array.isArray(stats[w.id]) ? stats[w.id] as unknown as HaEntityState[] : []
+            if (entities.length === 0) return null
+            return (
+              <div key={w.id} style={pillStyle}>
+                {label(`${w.name}:`)}
+                {entities.map((e, i) => (
+                  <React.Fragment key={e.entity_id}>
+                    {i > 0 && sep}
+                    {muted(e.label || e.entity_id)}{' '}
+                    {val(
+                      e.state + (e.unit ? ` ${e.unit}` : ''),
+                      e.state === 'on' ? 'var(--status-online)' : e.state === 'off' ? 'var(--text-muted)' : undefined
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            )
+          }
+
+          if (w.type === 'nginx_pm') {
+            const npm = stats[w.id] as unknown as NpmStats & { error?: string }
+            if (!npm || npm.error) return null
+            return (
+              <div key={w.id} style={pillStyle}>
+                {label('NPM:')}
+                {val(String(npm.proxyCount))} {muted('proxies')}
+                {sep}
+                {val(String(npm.certificateCount))} {muted('certs')}
+                {npm.totalExpiredCerts > 0 && <>{sep}{val(String(npm.totalExpiredCerts), 'var(--status-offline)')} {muted('expired')}</>}
+              </div>
+            )
+          }
+
+          if (w.type === 'pihole') {
+            const p = stats[w.id] as unknown as AdGuardStats
+            if (!p) return null
+            const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+            const isErr = p.total_queries === -1
+            return (
+              <div key={w.id} style={pillStyle}>
+                {label('Pi-hole:')}
+                {isErr
+                  ? muted('unreachable')
+                  : <>
+                      {val(fmt(p.total_queries))} {muted('req')}
+                      {sep}
+                      {val(fmt(p.blocked_queries), 'var(--status-offline)')} {muted(`blocked (${p.blocked_percent}%)`)}
+                    </>
+                }
+              </div>
+            )
+          }
+
           // server_status
+          if (w.type !== 'server_status') return null
           const s = stats[w.id] as ServerStats | undefined
           if (!s) return null
           return (
