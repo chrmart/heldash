@@ -193,11 +193,22 @@ Ein Klick auf die Karte öffnet die App direkt in einem neuen Tab.
 
 Oben rechts gibt es den Button **„Edit Dashboard"**. Nach dem Klick darauf:
 
+**Karten & Gruppen verschieben**:
 - Alle Karten bekommen einen Anfasser zum Verschieben (Gripper-Symbol oben links auf der Karte)
-- Karten können per Drag & Drop beliebig umgeordnet werden
-- Drei neue Buttons erscheinen: **App**, **Instance**, **Row**
+- Gruppen-Header zeigen auch einen Anfasser — damit lässt sich die ganze Gruppe verschieben
+- Karten können per Drag & Drop beliebig umgeordnet werden (auch innerhalb von Gruppen)
+- Gruppen können als Gesamtheit umgeordnet werden
 
-Mit diesen Buttons fügt man **Platzhalter** ein — leere Felder zum Strukturieren des Layouts. Ein Platzhalter vom Typ „Row" erzwingt z.B. einen Zeilenumbruch, damit die nächste Karte ganz links beginnt.
+**Gruppen verwalten**:
+- Am unteren Ende der Seite: **„+ Add Group"**-Button zum Erstellen neuer Gruppen
+- Jede Gruppe hat einen **Umschalt-Button** mit Größenoptionen: 25%, 33%, 50%, 66%, 100%
+- **Doppelklick auf Gruppennamen** → Namen bearbeiten und speichern (Enter oder Fokus verlieren)
+- **Ⓧ-Button** neben der Größe → Gruppe löschen (Inhalte werden auf das Hauptdashboard verschoben)
+
+**Platzhalter** — neue Buttons: **App**, **Instance**, **Row**:
+- Mit diesen Buttons fügt man leere Felder zum Strukturieren des Layouts ein
+- Ein Platzhalter vom Typ „Row" erzwingt einen Zeilenumbruch, damit die nächste Karte ganz links beginnt
+- Platzhalter kann man per Löschen-Button (oben rechts auf der Karte) wieder entfernen
 
 Mit **„Done"** wird der Bearbeitungsmodus beendet und die neue Anordnung gespeichert.
 

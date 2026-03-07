@@ -79,21 +79,44 @@ A visual reference guide for all refined UI components in HELDASH v2.0+.
 
 ```
 ┌──────────────────────────────────────┐
-│ 📁 MEDIA       [50%]  [✎] [✗]        │  ← Header with controls
+│ ⋮ MEDIA       [50%]  [×]             │  ← Header (edit mode)
 ├──────────────────────────────────────┤
 │ 🎬 Radarr   🎬 Sonarr   🎬 Prowlarr  │
 │                                      │
 │ (Items inside same service grid)    │
 └──────────────────────────────────────┘
-    Hover: Border color shift + subtle glow
-    Drag handle appears on group header
+    Drag: Group lifts (transform)
+    Hover: Border accent, glow shadow
+    Edit: Drag handle + width selector + delete button
 ```
 
-**Details**:
+**Styling**:
+- Class: `.glass .dashboard-group`
 - Radius: `--radius-xl` (24px)
 - Padding: `--spacing-xl` (20px)
-- Header: Uppercase label, 12px, letter-spacing 0.5px
-- Col-span options: 3, 4, 6, 8, 12 (25%-100%)
+- Transition: `all var(--transition-smooth)` (350ms cubic-bezier)
+- Min-height: 100px
+
+**Header** (`.dashboard-group-header`):
+- Flex layout: `gap: var(--spacing-md)`, align-items: center
+- Font: 12px, `font-weight: 700`, `letter-spacing: 0.5px`, uppercase
+- Border-bottom: `1px solid var(--glass-border)` with `padding-bottom: var(--spacing-md)`
+
+**Edit Mode Controls**:
+- **Drag handle**: `GripVertical` icon (14px), grab cursor, color transition on hover
+- **Name editing**: Double-click to edit inline, auto-focused input field
+- **Width selector**: `<select>` dropdown with 5 options:
+  - 25% (`col_span=3`)
+  - 33% (`col_span=4`)
+  - 50% (`col_span=6`) — default
+  - 66% (`col_span=8`)
+  - 100% (`col_span=12`)
+- **Delete button**: X icon, removes group and ungroups all items
+
+**Nested Items Grid**:
+- Same layout as ungrouped items: `services-grid` with `gridAutoFlow: dense`
+- Items maintain their own drag handles and remove buttons
+- Separate DnD context for group items
 
 ---
 

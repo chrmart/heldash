@@ -12,8 +12,13 @@ Coded by Claude.ai because iam to stupid to code but can wirte prompts lol
 
 **Dashboard**
 - 🗂️ Modular overview grid — freely arrange apps, media instances, and widgets independent of group structure
+- 📦 **Dashboard Groups** — named containers for organizing dashboard items (v2.0+)
+  - Configurable widths (25%, 33%, 50%, 66%, 100% of dashboard)
+  - Drag-and-drop reordering of groups and items within groups
+  - Double-click group names to edit, delete groups (items become ungrouped)
+  - Per-user group configurations
 - ✅ Per-app and per-instance toggle to show on dashboard ("Show on Dashboard")
-- 🖱️ Edit mode — drag & drop reordering of all dashboard items
+- 🖱️ Edit mode — drag & drop reordering of all dashboard items and groups
 - 📐 Placeholder cards (App / Instance / Row) — reserve space and structure rows in edit mode
 - 👥 Per-user dashboards — each user arranges their own dashboard; guests share a common layout set by admins
 - 🔗 App cards link directly to the service URL
@@ -192,6 +197,7 @@ Frontend dev server runs on :5173 and proxies `/api`, `/icons`, and `/background
 - [x] Edit mode with drag & drop and placeholder cards
 - [x] "Show on Dashboard" toggle per app and instance
 - [x] Per-user dashboards with admin-managed guest dashboard
+- [x] **Dashboard Groups** — named containers with configurable widths and nested drag-and-drop
 - [x] Widget system (Server Status, AdGuard Home, Docker Overview)
 - [x] Topbar widget stats
 - [x] Tabbed settings page (General, Users, Groups, OIDC/SSO)

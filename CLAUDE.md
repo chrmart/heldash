@@ -144,10 +144,12 @@ Full design system via CSS variables (`--glass-bg`, `--accent`, `--text-primary`
 No multipart/form-data. Frontend reads the file as DataURL, strips prefix, sends `{ data: string, content_type: string }` as JSON. Backend writes to `DATA_DIR/icons/<id>.<ext>` (icons) or `DATA_DIR/backgrounds/<id>.<ext>` (backgrounds) and stores the path in the DB. Both routes use `path.basename()` to prevent path traversal attacks.
 
 ### Drag & Drop persistence strategy
-- Service groups: `position` column, PATCH on drag end
-- Services within group: `position_x` column, PATCH on drag end
-- Arr media instances: `position` column, PATCH on drag end
-- Dashboard items: `position` column in `dashboard_items`, PATCH `/api/dashboard/reorder`
+- **Service groups** (app categories): `position` column, PATCH on drag end
+- **Services** within app group: `position_x` column, PATCH on drag end
+- **Arr media instances**: `position` column, PATCH on drag end
+- **Dashboard groups** (containers): `position` column in `dashboard_groups`, PATCH `/api/dashboard/groups/reorder`
+- **Dashboard items** (ungrouped): `position` column in `dashboard_items`, PATCH `/api/dashboard/reorder`
+- **Dashboard items** within groups: `position` column in `dashboard_items`, PATCH `/api/dashboard/groups/:id/reorder-items`
 - Optimistic update in Zustand store, async persist in background
 
 ### ServicesPage column alignment
@@ -259,9 +261,20 @@ Sparse junction tables: presence of a row means the item is **hidden** for that 
 | id | TEXT PK | nanoid() |
 | type | TEXT | 'service' \| 'arr_instance' \| 'widget' \| 'placeholder*' |
 | ref_id | TEXT | NULL for placeholders |
-| position | INTEGER | |
+| position | INTEGER | Sort order within owner/group |
+| group_id | TEXT | FK → dashboard_groups.id (nullable) — NULL = ungrouped |
 | owner_id | TEXT | user sub or 'guest' |
 | created_at | TEXT | |
+
+### dashboard_groups
+| Column | Type | Notes |
+|---|---|---|
+| id | TEXT PK | nanoid() |
+| name | TEXT NOT NULL | Group display name |
+| owner_id | TEXT NOT NULL | user sub or 'guest' |
+| position | INTEGER NOT NULL | Sort order among groups |
+| col_span | INTEGER NOT NULL | Width on 12-column grid (1-12, default 6) |
+| created_at | TEXT NOT NULL | |
 
 ### settings
 Key-value table. Values stored as JSON strings. Keys: `theme_mode`, `theme_accent`, `dashboard_title`, `auth_enabled`, `auth_mode`.
@@ -321,11 +334,19 @@ All routes prefixed `/api`. Frontend uses relative paths.
 ### Dashboard
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | /api/dashboard | public | Ordered items with embedded data, filtered by owner + group visibility |
+| GET | /api/dashboard | public | Ordered groups + items with embedded data, filtered by owner + group visibility |
+| **Group Management** |
+| POST | /api/dashboard/groups | authenticate | Create group |
+| PATCH | /api/dashboard/groups/reorder | authenticate | Reorder groups |
+| PATCH | /api/dashboard/groups/:id | authenticate | Update group (name, col_span) |
+| DELETE | /api/dashboard/groups/:id | authenticate | Delete group (items become ungrouped) |
+| PATCH | /api/dashboard/items/:id/group | authenticate | Move item to group (or NULL to ungroup) |
+| PATCH | /api/dashboard/groups/:id/reorder-items | authenticate | Reorder items within group |
+| **Item Management** |
 | POST | /api/dashboard/items | authenticate | Add item |
 | DELETE | /api/dashboard/items/:id | authenticate | Remove item |
 | DELETE | /api/dashboard/items/by-ref | authenticate | Remove by type + ref_id |
-| PATCH | /api/dashboard/reorder | authenticate | Bulk position update |
+| PATCH | /api/dashboard/reorder | authenticate | Reorder ungrouped items |
 
 ### Docker
 | Method | Path | Auth | Description |

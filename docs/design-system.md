@@ -396,12 +396,20 @@ Dark mode benefits from enhanced accent-subtle colors to prevent washed-out appe
 - Dashboard groups: `grid-template-columns: repeat(12, 1fr); gap: var(--spacing-xl)`
 - Group items inherit same service grid
 
-**Dashboard Groups** (new in Phase 5):
-- `border-radius: var(--radius-xl)` (24px)
-- `padding: var(--spacing-xl)` (20px internal spacing)
-- Hover: Subtle border color change to `hsla(..., 0.25)`
-- Header: Uppercase label with `letter-spacing: 0.5px`
-- Col-span selector: 3, 4, 6, 8, 12 (25%, 33%, 50%, 66%, 100%)
+**Dashboard Groups** (v2.0+):
+- Container: `.glass` class with `border-radius: var(--radius-xl)` (24px)
+- Padding: `var(--spacing-xl)` (20px) with `gap: var(--spacing-lg)` between header + items
+- Hover: Subtle border color transition to `hsla(..., 0.25)` accent
+- **Group Header** (`.dashboard-group-header`):
+  - Flex layout with drag handle, name, col-span selector, delete button
+  - Text: Uppercase `12px`, `font-weight: 700`, `letter-spacing: 0.5px`
+  - Border-bottom: `1px solid var(--glass-border)` with `padding-bottom: var(--spacing-md)`
+- **Editing Features**:
+  - **Drag handle**: `GripVertical` icon (14px), appears on hover, grab cursor
+  - **Name editing**: Double-click to edit, inline input with auto-focus
+  - **Width selector**: `<select>` with options (25%, 33%, 50%, 66%, 100% = col_span 3, 4, 6, 8, 12)
+  - **Delete button**: X icon, removes group and ungroups items to main dashboard
+- **Nested items**: Inherit service grid layout, sort independently within group
 
 **Service Cards on Dashboard**:
 - Each card: `padding: var(--spacing-lg)` (16px)
