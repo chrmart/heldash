@@ -681,6 +681,7 @@ h4 { font-size: 15px; line-height: 1.5; }
   flex-direction: column;
   gap: var(--spacing-lg);
   min-height: 100px;
+  overflow: hidden;
   /* No background — items inside use glass themselves; stacking would darken them */
   background: transparent !important;
   backdrop-filter: none !important;
