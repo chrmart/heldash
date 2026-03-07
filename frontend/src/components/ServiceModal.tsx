@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { Service } from '../types'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
+import { api } from '../api'
 import { X, Upload } from 'lucide-react'
 
 interface Props {
@@ -220,7 +221,19 @@ export function ServiceModal({ service, onClose }: Props) {
               <input
                 type="checkbox"
                 checked={form.check_enabled}
-                onChange={e => set('check_enabled', e.target.checked)}
+                onChange={async e => {
+                  const wasDisabled = !form.check_enabled
+                  const nowEnabled = e.target.checked
+                  set('check_enabled', nowEnabled)
+                  // Auto-run check when enabling (if editing existing service)
+                  if (wasDisabled && nowEnabled && service?.id) {
+                    try {
+                      await api.services.check(service.id)
+                    } catch {
+                      // Silently fail, user can manually trigger check if needed
+                    }
+                  }
+                }}
               />
               <span className="form-label" style={{ margin: 0 }}>Enable Status Check</span>
             </label>

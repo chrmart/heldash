@@ -386,15 +386,19 @@ function WidgetForm({
   }
 
   // Update default name when type changes (only on create)
+  const getDefaultNameForType = (t: WidgetFormType): string => {
+    if (t === 'adguard_home') return 'AdGuard Home'
+    if (t === 'docker_overview') return 'Docker Overview'
+    if (t === 'custom_button') return 'Quick Actions'
+    if (t === 'home_assistant') return 'Home Assistant'
+    if (t === 'pihole') return 'Pi-hole'
+    return 'Server Status'
+  }
+
   const handleTypeChange = (t: WidgetFormType) => {
     setType(t)
     if (!isEdit && !name) {
-      if (t === 'adguard_home') setName('AdGuard Home')
-      else if (t === 'docker_overview') setName('Docker Overview')
-      else if (t === 'custom_button') setName('Quick Actions')
-      else if (t === 'home_assistant') setName('Home Assistant')
-      else if (t === 'pihole') setName('Pi-hole')
-      else setName('Server Status')
+      setName(getDefaultNameForType(t))
     }
   }
 
@@ -465,12 +469,12 @@ function WidgetForm({
               value={type}
               onChange={e => handleTypeChange(e.target.value as WidgetFormType)}
             >
-              <option value="server_status">Server Status</option>
               <option value="adguard_home">AdGuard Home</option>
-              <option value="docker_overview">Docker Overview</option>
               <option value="custom_button">Custom Buttons</option>
+              <option value="docker_overview">Docker Overview</option>
               <option value="home_assistant">Home Assistant</option>
               <option value="pihole">Pi-hole</option>
+              <option value="server_status">Server Status</option>
             </select>
           </div>
         )}

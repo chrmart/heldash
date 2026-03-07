@@ -87,7 +87,7 @@ function UserEditRow({
           <label className="form-label" style={{ fontSize: 11 }}>Group</label>
           <select className="form-input" value={groupId} onChange={e => setGroupId(e.target.value)} style={{ fontSize: 13, padding: '5px 8px' }} disabled={isSelf}>
             <option value="">— no group —</option>
-            {userGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            {[...userGroups].sort((a, b) => a.name.localeCompare(b.name)).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -262,7 +262,7 @@ function GroupVisibilityEditor({
             style={{ fontSize: 13 }}
           >
             <option value="">— No background —</option>
-            {backgrounds.map(b => (
+            {[...backgrounds].sort((a, b) => a.name.localeCompare(b.name)).map(b => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>
@@ -659,7 +659,7 @@ export function SettingsPage() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <label className="form-label" style={{ fontSize: 11, whiteSpace: 'nowrap', margin: 0 }}>Group</label>
               <select className="form-input" value={newUser.user_group_id} onChange={e => setNewUser(u => ({ ...u, user_group_id: e.target.value }))} style={{ flex: 1, minWidth: 0 }}>
-                {userGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                {[...userGroups].sort((a, b) => a.name.localeCompare(b.name)).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
