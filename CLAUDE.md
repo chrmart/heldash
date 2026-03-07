@@ -407,13 +407,43 @@ All routes prefixed `/api`. Frontend uses relative paths.
 - HTTP status codes: 400 bad input, 404 not found, 413 too large, 415 unsupported type.
 - Never expose `api_key`, `password_hash`, or widget passwords in API responses.
 
-### CSS / Theming
+### CSS / Theming & Design System
 - All colors via CSS variables (`var(--text-primary)`, `var(--accent)`, etc.).
 - Theme switching: change `data-theme` + `data-accent` on `document.documentElement`.
 - `color-scheme: dark/light` set per theme block so native controls render correctly.
-- Glass card: `.glass` class + `backdrop-filter: blur(20px) saturate(180%)`.
-- Border radius: `--radius-sm` (8px) → `--radius-md` (14px) → `--radius-lg` (20px) → `--radius-xl` (28px).
-- `btn-primary`: outline style — transparent background, accent color border and text.
+
+**Spacing Grid (8px base)**:
+```
+--spacing-xs: 4px    --spacing-md: 12px    --spacing-2xl: 24px
+--spacing-sm: 8px    --spacing-lg: 16px    --spacing-3xl: 32px
+                     --spacing-xl: 20px
+```
+
+**Typography**:
+- `--font-sans: 'Geist'` — refined, modern body text
+- `--font-display: 'Space Mono'` — distinctive display headers (h1-h4)
+- `--font-mono: 'JetBrains Mono'` — monospace for codes/timestamps
+
+**Transitions (cubic-bezier easing)**:
+```
+--transition-fast: 100ms cubic-bezier(0.4, 0, 0.2, 1)
+--transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1)
+--transition-smooth: 350ms cubic-bezier(0.34, 1.56, 0.64, 1)  ← bounce
+--transition-slow: 500ms ease
+```
+
+**Glass cards**: `.glass` class + `backdrop-filter: blur(24px) saturate(200%)`
+
+**Border radius**: `--radius-sm` (8px) → `--radius-md` (12px) → `--radius-lg` (16px) → `--radius-xl` (24px) → `--radius-2xl` (32px)
+
+**Component highlights**:
+- Service cards: smooth lift on hover (4px translate), icon scale (1.08x), glow shadow
+- Sidebar nav: active state with gradient overlay + glow effect, 2px translate on hover
+- Status dots: online = dual-pulse (ring + border), offline = breathing animation
+- Form inputs: focus ring with accent color, subtle hover state
+- Toggles: smooth animation (350ms), better visual feedback
+- Dark mode: accent-subtle optimized per color (12% opacity), icon backgrounds enhanced (15% opacity)
+- **Accessibility**: Full `@media (prefers-reduced-motion: reduce)` support — all animations disabled
 
 ---
 
@@ -476,8 +506,22 @@ All routes prefixed `/api`. Frontend uses relative paths.
 - [x] Start / Stop / Restart containers (admin-only)
 - [x] Docker Overview widget with container counts and control dropdown
 
-### Phase 5 — Enhancements
+### Phase 5 — Enhancements ✓
 - [x] Background images — upload and assign per user group (applied as subtle overlay)
+- [x] **UI/UX Refinement** — distinctive typography, refined glass morphism, strategic micro-interactions
+  - [x] Geist + Space Mono typography system (modern body + distinctive display)
+  - [x] Consistent 8px spacing grid across all components
+  - [x] Refined glass morphism (24px blur, 200% saturate)
+  - [x] Sidebar navigation with gradient overlays and glow effects on active state
+  - [x] Enhanced status indicator animations (dual-pulse for online, breathing for offline)
+  - [x] Strategic cubic-bezier easing for smooth, intentional motion
+  - [x] Dark mode accent-subtle optimizations (per-color variants for better contrast)
+  - [x] Full accessibility compliance: `prefers-reduced-motion` media query support
+  - [x] Service card hover effects (lift, icon scale, glow shadow)
+  - [x] Form input focus states with accent ring
+  - [x] Toggle switch with improved visual feedback
+
+### Phase 6 — Future
 - [ ] OIDC / SSO via voidauth or Authentik
 - [ ] Notification webhooks (Gotify / ntfy) on status change
 - [ ] Custom check intervals per service (backend scheduler)

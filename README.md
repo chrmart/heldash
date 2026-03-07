@@ -64,8 +64,17 @@ Coded by Claude.ai because iam to stupid to code but can wirte prompts lol
 - 🖼️ Background images — upload custom backgrounds (PNG/JPG/SVG/WebP, max 5 MB), assign one per user group
 - 🔐 OIDC/SSO configuration UI prepared (coming in a future release)
 
-**General**
+**Design & Accessibility**
+- 🎨 Refined glass morphism design with distinctive typography (Geist + Space Mono)
+- ♿ Full accessibility support — prefers-reduced-motion compliance
 - 🌓 Light/Dark mode + 3 accent colors (Cyan, Orange, Magenta)
+- ✨ Strategic micro-interactions with smooth easing curves (cubic-bezier)
+- 🎯 Refined sidebar navigation with glow effects and visual feedback
+- 💫 Enhanced status indicators with dual-pulse animations
+- 📏 Consistent 8px grid system for precise spacing
+- 🌟 Dark mode accent-subtle optimized for better contrast
+
+**General**
 - 💾 SQLite persistence — all data survives container restarts
 - 🐳 Single Docker container, minimal footprint
 - 🔑 OIDC-ready user model (voidauth integration coming later)
@@ -189,6 +198,13 @@ Frontend dev server runs on :5173 and proxies `/api`, `/icons`, and `/background
 - [x] Docker page — live container stats, log streaming, start/stop/restart
 - [x] Per-group Docker permissions (page access + widget access)
 - [x] Background images — upload and assign per user group
+- [x] **UI/UX Refinement** — distinctive typography, refined glass morphism, micro-interactions
+  - [x] Geist + Space Mono typography system
+  - [x] Consistent 8px spacing grid
+  - [x] Sidebar navigation with glow effects
+  - [x] Enhanced status indicator animations (dual-pulse)
+  - [x] Dark mode accent color optimizations
+  - [x] Prefers-reduced-motion accessibility support
 - [ ] OIDC / SSO via voidauth or Authentik (UI prepared)
 - [ ] Notification webhooks (Gotify / ntfy)
 - [ ] More integrations (Immich, Jellyfin, ...)

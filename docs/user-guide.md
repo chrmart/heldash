@@ -30,13 +30,56 @@ Die Oberfläche besteht aus drei Bereichen:
 **Linke Leiste (Sidebar)**
 Navigation zwischen den Seiten. Welche Punkte sichtbar sind hängt von der eigenen Gruppe ab — Gäste sehen z.B. keine Docker-Seite, sofern der Admin das nicht freigegeben hat.
 
+Navigation Items zeigen folgende Effekte:
+- **Hover**: Subtile Verschiebung nach rechts mit Gradient-Overlay
+- **Aktiv**: Leuchtender Hintergrund mit Glow-Effekt und Glow-Shadow
+
 **Obere Leiste (Topbar)**
-- Links: Datum und Uhrzeit des Servers
+- Links: Datum und Uhrzeit des Servers (in monospace Font für Präzision)
 - Mitte: Hier erscheinen Widgets, die für die Topbar aktiviert wurden (CPU-Auslastung, Docker-Übersicht etc.)
 - Rechts: Design-Einstellungen, Aktualisieren-Button, Dashboard-Steuerung, Login/Logout
 
 **Hauptbereich**
-Zeigt die jeweils aktive Seite.
+Zeigt die jeweils aktive Seite. Alle Komponenten nutzen ein konsistentes 8px-basiertes Spacing-System und Glass-Morphism Design.
+
+---
+
+## Design & Benutzerfreundlichkeit
+
+Die HELDASH-Oberfläche wurde mit modernem, raffiniertem Design überarbeitet:
+
+### Typografie
+- **Body**: Geist Font — modern und lesbar
+- **Überschriften**: Space Mono — charaktervoll und tech-forward
+- Konsistente Schriftgrößen und Zeilenabstände für optimale Lesbarkeit
+
+### Animationen & Micro-Interactions
+- **Service-Karten**: Sanfte Hebung beim Hover (4px nach oben) mit Glow-Effekt
+- **Status-Punkte**:
+  - 🟢 Online: Doppelte Puls-Animation (Ring + Border)
+  - 🔴 Offline: Sanfte Atemanimation
+  - ⚪ Unbekannt: Statischer Punkt
+- **Buttons**: Sanfte Übergänge bei Hover und Click
+- **Toggles**: Glatte Animation beim Umschalten
+
+### Accessibility
+- 🎯 **Reduzierte Motion**: Benutzer mit Bewegungsempfindlichkeit können alle Animationen deaktivieren (Browser-Setting → `Bewegung reduzieren`)
+- 🌓 **Dark/Light Mode**: Beide Modi sind vollständig optimiert und getestet
+- 🎨 **3 Accent-Farben**: Cyan, Orange, Magenta — alle mit optimierten Kontrasten
+- ♿ **WCAG Konformität**: Alle Farben erfüllen mindestens WCAG AA Standard
+
+### Farbschema
+Alle Farben passen sich automatisch an das aktuell ausgewählte Theme an:
+
+**Dunkelmodus (Standard)**:
+- Tiefe, subtile Hintergründe für geringere Augenbelastung
+- Lebendige Accent-Farben für gute Sichtbarkeit
+- Optimierte Glaseffekte mit stärkeren Blur und Sättigung
+
+**Hellmodus**:
+- Helle, durchlüftete Oberflächen
+- Sanfte Shadows für Tiefenwahrnehmung
+- Subtilere Accent-Farben für ausgewogenes Aussehen
 
 ---
 
