@@ -214,6 +214,50 @@ export interface Background {
   file_path: string
 }
 
+// ── Home Assistant ────────────────────────────────────────────────────────────
+
+export interface HaInstance {
+  id: string
+  name: string
+  url: string
+  enabled: boolean
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+export interface HaPanel {
+  id: string
+  instance_id: string
+  entity_id: string
+  label: string | null
+  panel_type: string
+  position: number
+  owner_id: string
+  created_at: string
+}
+
+export interface HaEntityFull {
+  entity_id: string
+  state: string
+  attributes: {
+    friendly_name?: string
+    unit_of_measurement?: string
+    device_class?: string
+    icon?: string
+    temperature?: number
+    current_temperature?: number
+    hvac_mode?: string
+    media_title?: string
+    media_artist?: string
+    brightness?: number
+    color_temp?: number
+    [key: string]: unknown
+  }
+  last_changed: string
+  last_updated: string
+}
+
 export interface DockerContainer {
   id: string
   name: string

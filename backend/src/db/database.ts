@@ -231,6 +231,30 @@ function applySchema(db: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Home Assistant instances
+    CREATE TABLE IF NOT EXISTS ha_instances (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      url         TEXT NOT NULL,
+      token       TEXT NOT NULL,
+      enabled     INTEGER NOT NULL DEFAULT 1,
+      position    INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Home Assistant panels (entity cards per user)
+    CREATE TABLE IF NOT EXISTS ha_panels (
+      id          TEXT PRIMARY KEY,
+      instance_id TEXT NOT NULL,
+      entity_id   TEXT NOT NULL,
+      label       TEXT,
+      panel_type  TEXT NOT NULL DEFAULT 'auto',
+      position    INTEGER NOT NULL DEFAULT 0,
+      owner_id    TEXT NOT NULL DEFAULT 'guest',
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- Insert default settings if not exist
     INSERT OR IGNORE INTO settings (key, value) VALUES
       ('theme_mode', '"dark"'),

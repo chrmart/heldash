@@ -18,6 +18,7 @@ import { dashboardRoutes } from './routes/dashboard'
 import { widgetsRoutes } from './routes/widgets'
 import { dockerRoutes } from './routes/docker'
 import { backgroundsRoutes } from './routes/backgrounds'
+import { haRoutes } from './routes/ha'
 
 const PORT = parseInt(process.env.PORT ?? '8282', 10)
 const DATA_DIR = process.env.DATA_DIR ?? '/data'
@@ -208,6 +209,7 @@ async function start() {
   await app.register(dockerRoutes)
   await app.register(backgroundsRoutes)
   await app.register(settingsRoutes)
+  await app.register(haRoutes)
 
   // ── SPA fallback – serve index.html for all non-API routes ───────────────────
   app.setNotFoundHandler(async (req, reply) => {
