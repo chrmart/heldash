@@ -228,15 +228,15 @@ export async function executeSyncChangeset(
           const created = await limiter.execute(() => client.postCustomFormat({
             name: change.slug, // best effort name recovery
             includeCustomFormatWhenRenaming: false,
-            specifications: change.conditions,
+            specifications: change.conditions ?? [],
           }))
           db.transaction(() => {
             registerMapping(instanceId, change.slug, created.id, change.conditionsHash ?? '')
           })()
         }
       } else if (change.reason === 'conditions_drift' && change.conditions && change.arrFormatId) {
-        const live = await limiter.execute(() => client.getCustomFormat(change.arrFormatId))
-        await limiter.execute(() => client.putCustomFormat(change.arrFormatId, {
+        const live = await limiter.execute(() => client.getCustomFormat(change.arrFormatId!))
+        await limiter.execute(() => client.putCustomFormat(change.arrFormatId!, {
           ...live,
           specifications: change.conditions,
         }))
