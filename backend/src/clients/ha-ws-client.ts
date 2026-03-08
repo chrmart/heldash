@@ -1,4 +1,4 @@
-import { WebSocket, Agent } from 'undici'
+import { WebSocket } from 'undici'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -16,8 +16,6 @@ type StateListener = (entityId: string, newState: HaEntityState) => void
 // Manages a single persistent WebSocket connection to one HA instance.
 // Subscribes to `state_changed` events and fans them out to registered listeners.
 // Auto-reconnects with exponential backoff. Stops when all listeners unsubscribe.
-
-const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } })
 
 export class HaWsClient {
   private ws: WebSocket | null = null
@@ -47,7 +45,7 @@ export class HaWsClient {
     // Convert http(s):// → ws(s)://
     const wsUrl = this.url.replace(/^http/, 'ws') + '/api/websocket'
     try {
-      this.ws = new WebSocket(wsUrl, [], { dispatcher: insecureAgent })
+      this.ws = new WebSocket(wsUrl)
     } catch {
       this.scheduleReconnect()
       return
