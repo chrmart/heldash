@@ -19,6 +19,8 @@ import { widgetsRoutes } from './routes/widgets'
 import { dockerRoutes } from './routes/docker'
 import { backgroundsRoutes } from './routes/backgrounds'
 import { haRoutes } from './routes/ha'
+import { trashRoutes } from './routes/trash'
+import { initScheduler, shutdownScheduler } from './trash/scheduler'
 
 const PORT = parseInt(process.env.PORT ?? '8282', 10)
 const DATA_DIR = process.env.DATA_DIR ?? '/data'
@@ -210,6 +212,10 @@ async function start() {
   await app.register(backgroundsRoutes)
   await app.register(settingsRoutes)
   await app.register(haRoutes)
+  await app.register(trashRoutes)
+
+  // ── Start TRaSH sync scheduler (after routes so app.log is available) ────
+  initScheduler(app.log)
 
   // ── SPA fallback – serve index.html for all non-API routes ───────────────────
   app.setNotFoundHandler(async (req, reply) => {
@@ -225,6 +231,7 @@ async function start() {
   // ── Graceful shutdown ────────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'Shutdown signal received, closing server...')
+    shutdownScheduler()
     try {
       await app.close()
       app.log.info('Server closed gracefully')

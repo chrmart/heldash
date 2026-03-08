@@ -262,5 +262,142 @@ function applySchema(db: Database.Database) {
       ('dashboard_title', '"HELDASH"'),
       ('auth_enabled', 'true'),
       ('auth_mode', '"local"');
+
+    -- ── TRaSH Guides: raw + normalized format/profile cache ──────────────────
+    CREATE TABLE IF NOT EXISTS trash_guides_cache (
+      id                  TEXT PRIMARY KEY,
+      arr_type            TEXT NOT NULL,
+      category            TEXT NOT NULL,
+      slug                TEXT NOT NULL,
+      name                TEXT NOT NULL,
+      file_path           TEXT NOT NULL,
+      file_sha            TEXT NOT NULL,
+      raw_data            TEXT NOT NULL DEFAULT '',
+      normalized_data     TEXT NOT NULL,
+      conditions_hash     TEXT NOT NULL DEFAULT '',
+      github_sha          TEXT NOT NULL,
+      github_commit_date  TEXT NOT NULL,
+      schema_version      INTEGER NOT NULL DEFAULT 1,
+      fetched_at          TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(arr_type, category, slug)
+    );
+
+    -- ── TRaSH Guides: per-file SHA index for incremental fetching ────────────
+    CREATE TABLE IF NOT EXISTS trash_guides_file_index (
+      file_path     TEXT PRIMARY KEY,
+      file_sha      TEXT NOT NULL,
+      size_bytes    INTEGER NOT NULL DEFAULT 0,
+      arr_type      TEXT NOT NULL,
+      last_fetched  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- ── TRaSH Guides: slug ↔ arr integer ID mapping per instance ─────────────
+    CREATE TABLE IF NOT EXISTS trash_format_instances (
+      id                    TEXT PRIMARY KEY,
+      instance_id           TEXT NOT NULL,
+      slug                  TEXT NOT NULL,
+      arr_format_id         INTEGER NOT NULL,
+      last_conditions_hash  TEXT NOT NULL DEFAULT '',
+      created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+      last_seen             TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(instance_id, slug)
+    );
+
+    -- ── TRaSH Guides: per-instance sync configuration ────────────────────────
+    CREATE TABLE IF NOT EXISTS trash_instance_configs (
+      id                    TEXT PRIMARY KEY,
+      instance_id           TEXT NOT NULL UNIQUE,
+      arr_type              TEXT NOT NULL,
+      profile_slug          TEXT,
+      sync_mode             TEXT NOT NULL DEFAULT 'notify',
+      sync_interval_hours   INTEGER NOT NULL DEFAULT 24,
+      last_sync_at          TEXT,
+      last_sync_sha         TEXT,
+      last_repair_daily_at  TEXT,
+      enabled               INTEGER NOT NULL DEFAULT 1,
+      created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- ── TRaSH Guides: user score + enabled overrides ─────────────────────────
+    CREATE TABLE IF NOT EXISTS trash_user_overrides (
+      id            TEXT PRIMARY KEY,
+      instance_id   TEXT NOT NULL,
+      slug          TEXT NOT NULL,
+      score         INTEGER,
+      enabled       INTEGER NOT NULL DEFAULT 1,
+      updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(instance_id, slug)
+    );
+
+    -- ── TRaSH Guides: user-created and imported custom formats ───────────────
+    CREATE TABLE IF NOT EXISTS trash_custom_formats (
+      id              TEXT PRIMARY KEY,
+      instance_id     TEXT NOT NULL,
+      source          TEXT NOT NULL,
+      arr_format_id   INTEGER,
+      name            TEXT NOT NULL,
+      slug            TEXT NOT NULL,
+      score           INTEGER NOT NULL DEFAULT 0,
+      specifications  TEXT NOT NULL DEFAULT '[]',
+      enabled         INTEGER NOT NULL DEFAULT 1,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(instance_id, slug)
+    );
+
+    -- ── TRaSH Guides: soft-deprecated formats ────────────────────────────────
+    CREATE TABLE IF NOT EXISTS trash_deprecated_formats (
+      id              TEXT PRIMARY KEY,
+      instance_id     TEXT NOT NULL,
+      slug            TEXT NOT NULL,
+      name            TEXT NOT NULL,
+      arr_format_id   INTEGER,
+      deprecated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      user_notified   INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(instance_id, slug)
+    );
+
+    -- ── TRaSH Guides: pending change previews ────────────────────────────────
+    CREATE TABLE IF NOT EXISTS trash_pending_previews (
+      id                TEXT PRIMARY KEY,
+      instance_id       TEXT NOT NULL,
+      diff              TEXT NOT NULL,
+      preview_base_sha  TEXT NOT NULL,
+      is_stale          INTEGER NOT NULL DEFAULT 0,
+      created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at        TEXT NOT NULL
+    );
+
+    -- ── TRaSH Guides: sync execution checkpoints (one row per instance) ──────
+    CREATE TABLE IF NOT EXISTS trash_sync_checkpoints (
+      instance_id      TEXT PRIMARY KEY,
+      status           TEXT NOT NULL DEFAULT 'in_progress',
+      total_steps      INTEGER NOT NULL DEFAULT 0,
+      completed_steps  INTEGER NOT NULL DEFAULT 0,
+      last_step        TEXT,
+      started_at       TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- ── TRaSH Guides: sync audit log ─────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS trash_sync_log (
+      id                   TEXT PRIMARY KEY,
+      instance_id          TEXT NOT NULL,
+      trigger              TEXT NOT NULL,
+      status               TEXT NOT NULL,
+      github_sha           TEXT,
+      github_commit_date   TEXT,
+      formats_created      INTEGER NOT NULL DEFAULT 0,
+      conditions_updated   INTEGER NOT NULL DEFAULT 0,
+      scores_updated       INTEGER NOT NULL DEFAULT 0,
+      formats_deprecated   INTEGER NOT NULL DEFAULT 0,
+      profiles_updated     INTEGER NOT NULL DEFAULT 0,
+      repaired_items       INTEGER NOT NULL DEFAULT 0,
+      error_message        TEXT,
+      started_at           TEXT NOT NULL DEFAULT (datetime('now')),
+      finished_at          TEXT,
+      duration_ms          INTEGER
+    );
   `)
 }

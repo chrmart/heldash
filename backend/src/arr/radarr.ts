@@ -89,4 +89,22 @@ export class RadarrClient extends ArrBaseClient {
   getWantedMissing() {
     return this.get<RadarrWantedResponse>('wanted/missing', { pageSize: '1', monitored: 'true' })
   }
+
+  // ── TRaSH Sync: Custom Formats ───────────────────────────────────────────────
+  getCustomFormats() { return this.get<import('../trash/types').ArrCustomFormat[]>('customformat') }
+  getCustomFormat(id: number) { return this.get<import('../trash/types').ArrCustomFormat>(`customformat/${id}`) }
+  postCustomFormat(body: import('../trash/client-interface').CreateCustomFormatBody) {
+    return this.post<import('../trash/types').ArrCustomFormat>('customformat', body)
+  }
+  putCustomFormat(id: number, body: import('../trash/types').ArrCustomFormat) {
+    return this.put<import('../trash/types').ArrCustomFormat>(`customformat/${id}`, body)
+  }
+  deleteCustomFormat(id: number) { return this.del(`customformat/${id}`) }
+
+  // ── TRaSH Sync: Quality Profiles ─────────────────────────────────────────────
+  getQualityProfiles() { return this.get<import('../trash/types').ArrQualityProfile[]>('qualityprofile') }
+  getQualityProfile(id: number) { return this.get<import('../trash/types').ArrQualityProfile>(`qualityprofile/${id}`) }
+  putQualityProfile(id: number, body: import('../trash/types').ArrQualityProfile) {
+    return this.put<import('../trash/types').ArrQualityProfile>(`qualityprofile/${id}`, body)
+  }
 }

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { LayoutDashboard, Settings, AppWindow, Info, Tv2, BarChart2, Container, Home } from 'lucide-react'
+import { LayoutDashboard, Settings, AppWindow, Info, Tv2, BarChart2, Container, Home, BookMarked } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
 import { useWidgetStore } from '../store/useWidgetStore'
@@ -86,6 +86,7 @@ export function Sidebar({ page, onNavigate }: Props) {
             <NavItem icon={<Container size={16} />} label="Docker" active={page === 'docker'} onClick={() => onNavigate('docker')} />
           )}
           <NavItem icon={<Home size={16} />} label="Home Assistant" active={page === 'home_assistant'} onClick={() => onNavigate('home_assistant')} />
+          <NavItem icon={<BookMarked size={16} />} label="TRaSH Guides" active={page === 'trash_guides'} onClick={() => onNavigate('trash_guides')} />
         </>
       )}
 

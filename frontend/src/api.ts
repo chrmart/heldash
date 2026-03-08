@@ -1,5 +1,6 @@
 import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull } from './types'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse } from './types/arr'
+import type { TrashInstanceConfig, TrashProfileSummary, TrashFormatRow, TrashPreview, TrashSyncLogEntry, TrashDeprecatedFormat, TrashImportableFormat } from './types/trash'
 
 const BASE = '/api'
 
@@ -239,6 +240,36 @@ export const api = {
         req<HaPanel>(`/ha/panels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
       delete: (id: string) => req<void>(`/ha/panels/${id}`, { method: 'DELETE' }),
       reorder: (ids: string[]) => req<{ ok: boolean }>('/ha/panels/reorder', { method: 'PATCH', body: JSON.stringify({ ids }) }),
+    },
+  },
+
+  trash: {
+    instances: {
+      list: () => req<TrashInstanceConfig[]>('/trash/instances'),
+      configure: (instanceId: string, data: {
+        profile_slug?: string | null
+        sync_mode?: 'auto' | 'manual' | 'notify'
+        sync_interval_hours?: number
+        enabled?: boolean
+      }) => req<{ ok: boolean }>(`/trash/instances/${instanceId}/configure`, { method: 'POST', body: JSON.stringify(data) }),
+      profiles: (instanceId: string) => req<TrashProfileSummary[]>(`/trash/instances/${instanceId}/profiles`),
+      customFormats: (instanceId: string) => req<TrashFormatRow[]>(`/trash/instances/${instanceId}/custom-formats`),
+      saveOverrides: (instanceId: string, overrides: Array<{ slug: string; score?: number | null; enabled?: boolean }>) =>
+        req<{ ok: boolean }>(`/trash/instances/${instanceId}/overrides`, { method: 'PUT', body: JSON.stringify({ overrides }) }),
+      sync: (instanceId: string) => req<{ ok: boolean }>(`/trash/instances/${instanceId}/sync`, { method: 'POST', body: JSON.stringify({}) }),
+      preview: (instanceId: string) => req<TrashPreview>(`/trash/instances/${instanceId}/preview`),
+      applyPreview: (instanceId: string, previewId: string) =>
+        req<{ ok: boolean }>(`/trash/instances/${instanceId}/apply/${previewId}`, { method: 'POST', body: JSON.stringify({}) }),
+      log: (instanceId: string) => req<TrashSyncLogEntry[]>(`/trash/instances/${instanceId}/log`),
+      deprecated: (instanceId: string) => req<TrashDeprecatedFormat[]>(`/trash/instances/${instanceId}/deprecated`),
+      deleteDeprecated: (instanceId: string, slug: string) =>
+        req<{ ok: boolean }>(`/trash/instances/${instanceId}/deprecated/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
+      importFormats: (instanceId: string) => req<TrashImportableFormat[]>(`/trash/instances/${instanceId}/import-formats`),
+      doImportFormats: (instanceId: string, formatIds: number[]) =>
+        req<{ imported: number }>(`/trash/instances/${instanceId}/import-formats`, { method: 'POST', body: JSON.stringify({ format_ids: formatIds }) }),
+    },
+    github: {
+      forceFetch: () => req<{ sha: string; filesUpdated: number; formatsUpdated: number }>('/trash/github/fetch', { method: 'POST', body: JSON.stringify({}) }),
     },
   },
 

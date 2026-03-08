@@ -71,6 +71,29 @@ export class ArrBaseClient {
     return JSON.parse(chunks.length ? Buffer.concat(chunks).toString('utf-8') : 'null') as T
   }
 
+  protected async put<T>(endpoint: string, body: unknown): Promise<T> {
+    const url = `${this.apiBase}/${endpoint}`
+    const res = await request(url, {
+      method: 'PUT',
+      headers: { 'X-Api-Key': this.apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      dispatcher: agent,
+    })
+    if (res.statusCode >= 400) {
+      const errChunks: Buffer[] = []
+      for await (const chunk of res.body) errChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      const errBody = errChunks.length ? Buffer.concat(errChunks).toString('utf-8') : ''
+      let msg = `HTTP ${res.statusCode}`
+      try { const j = JSON.parse(errBody); msg += ': ' + (j.message ?? j.error ?? errBody.slice(0, 200)) } catch { if (errBody) msg += ': ' + errBody.slice(0, 200) }
+      throw new Error(msg)
+    }
+    const chunks: Buffer[] = []
+    for await (const chunk of res.body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    }
+    return JSON.parse(chunks.length ? Buffer.concat(chunks).toString('utf-8') : 'null') as T
+  }
+
   protected async del(endpoint: string): Promise<void> {
     const url = `${this.apiBase}/${endpoint}`
     const res = await request(url, {

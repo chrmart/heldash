@@ -10,6 +10,7 @@ import { MediaPage } from './pages/MediaPage'
 import { WidgetsPage } from './pages/WidgetsPage'
 import { DockerPage } from './pages/DockerPage'
 import { HaPage } from './pages/HaPage'
+import TrashPage from './pages/TrashPage'
 import { SetupPage } from './pages/SetupPage'
 import { ServiceModal } from './components/ServiceModal'
 import { LoginModal } from './components/LoginModal'
@@ -163,6 +164,7 @@ export default function App() {
               )}
               {page === 'docker' && <DockerPage />}
               {page === 'home_assistant' && <HaPage />}
+              {page === 'trash_guides' && <TrashPage />}
               {page === 'about' && (
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                   <div className="glass" style={{ padding: 32, borderRadius: 'var(--radius-xl)', maxWidth: 400, width: '100%', textAlign: 'center' }}>
