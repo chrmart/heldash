@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   RefreshCw, Settings2, ChevronDown, ChevronRight, Check, X, Loader,
   AlertTriangle, Trash2, Download, GitCommit, Clock, CheckCircle,
@@ -75,77 +76,77 @@ function ConfigureModal({ config, profiles, onClose }: ConfigureModalProps) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Configure — {config.instance_id}</h2>
-          <button className="modal-close" onClick={onClose}><X size={20} /></button>
-        </div>
+      <div
+        className="glass"
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 480,
+          borderRadius: 'var(--radius-xl)',
+          padding: '40px 40px 36px',
+          animation: 'slide-up var(--transition-base)',
+          position: 'relative',
+        }}
+      >
+        <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}>
+          <X size={16} />
+        </button>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 0 8px' }}>
-          {/* Enabled */}
-          <label className="form-toggle" style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+        <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4, color: 'var(--text-primary)' }}>
+          Configure Sync
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 28, fontFamily: 'var(--font-mono)' }}>
+          {config.instance_id}
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <label className="form-toggle" style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-            <span style={{ color: 'var(--text-primary)' }}>TRaSH sync enabled</span>
+            <span className="form-label" style={{ marginBottom: 0, cursor: 'pointer' }}>TRaSH sync enabled</span>
           </label>
 
-          {/* Profile */}
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Quality Profile</label>
-            <select
-              className="form-input"
-              value={profileSlug}
-              onChange={e => setProfileSlug(e.target.value)}
-            >
+            <select className="form-input" value={profileSlug} onChange={e => setProfileSlug(e.target.value)} style={{ fontSize: 14, padding: '10px 12px' }}>
               <option value="">— No profile selected —</option>
               {profiles.map(p => (
-                <option key={p.slug} value={p.slug}>
-                  {p.name} ({p.formatCount} formats)
-                </option>
+                <option key={p.slug} value={p.slug}>{p.name} ({p.formatCount} formats)</option>
               ))}
             </select>
           </div>
 
-          {/* Sync mode */}
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Sync Mode</label>
-            <select
-              className="form-input"
-              value={syncMode}
-              onChange={e => setSyncMode(e.target.value as 'auto' | 'manual' | 'notify')}
-            >
+            <select className="form-input" value={syncMode} onChange={e => setSyncMode(e.target.value as 'auto' | 'manual' | 'notify')} style={{ fontSize: 14, padding: '10px 12px' }}>
               <option value="notify">Notify — show diff, require confirmation</option>
               <option value="auto">Auto — apply changes automatically</option>
               <option value="manual">Manual — only sync when triggered</option>
             </select>
           </div>
 
-          {/* Interval */}
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Sync interval (hours)</label>
-            <input
-              type="number"
-              className="form-input"
-              min={1}
-              max={168}
-              value={intervalHours}
-              onChange={e => setIntervalHours(Number(e.target.value))}
-            />
+            <input type="number" className="form-input" min={1} max={168} value={intervalHours} onChange={e => setIntervalHours(Number(e.target.value))} style={{ fontSize: 14, padding: '10px 12px' }} />
           </div>
 
-          {error && <div style={{ color: '#f87171', fontSize: 13 }}>{error}</div>}
-        </div>
+          {error && <div className="setup-error">{error}</div>}
 
-        <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={save} disabled={saving}>
-            {saving ? <Loader size={14} className="spin" /> : <Check size={14} />}
-            Save
-          </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" onClick={save} disabled={saving} style={{ flex: 1, gap: 8, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+              {saving
+                ? <><div className="spinner" style={{ width: 15, height: 15, borderWidth: 2 }} /> Saving…</>
+                : <><Check size={15} /> Save</>
+              }
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -184,16 +185,29 @@ function PreviewModal({ instanceId, preview, onApply, onClose }: PreviewModalPro
     repair: 'Repair',
   }
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Pending Changes</h2>
-          <button className="modal-close" onClick={onClose}><X size={20} /></button>
-        </div>
+      <div
+        className="glass"
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 620, maxHeight: '82vh',
+          borderRadius: 'var(--radius-xl)',
+          padding: '32px',
+          animation: 'slide-up var(--transition-base)',
+          position: 'relative',
+          display: 'flex', flexDirection: 'column', gap: 16,
+        }}
+      >
+        <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}>
+          <X size={16} />
+        </button>
 
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8, color: 'var(--text-primary)' }}>
+            Pending Changes
+          </h2>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
             {preview.summary.formatsAdded > 0 && (
               <span style={{ color: '#10b981', fontSize: 13 }}>+{preview.summary.formatsAdded} formats</span>
             )}
@@ -210,27 +224,29 @@ function PreviewModal({ instanceId, preview, onApply, onClose }: PreviewModalPro
               <span style={{ color: '#f59e0b', fontSize: 13 }}>{preview.summary.repairItems} repairs</span>
             )}
           </div>
-          {preview.stale && (
-            <div style={{
-              background: '#f59e0b22', border: '1px solid #f59e0b44',
-              borderRadius: 8, padding: '8px 12px', color: '#f59e0b', fontSize: 13, marginBottom: 12,
-            }}>
-              <AlertTriangle size={12} style={{ marginRight: 6 }} />
-              Preview is stale — a newer GitHub commit exists. Re-trigger sync to refresh.
-            </div>
-          )}
         </div>
 
-        <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {preview.stale && (
+          <div style={{
+            background: '#f59e0b22', border: '1px solid #f59e0b44',
+            borderRadius: 'var(--radius-md)', padding: '10px 14px',
+            color: '#f59e0b', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <AlertTriangle size={14} />
+            Preview is stale — a newer GitHub commit exists. Re-trigger sync to refresh.
+          </div>
+        )}
+
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
           {preview.changes.map((ch, i) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'flex-start', gap: 12,
-              padding: '8px 12px', borderRadius: 8, background: 'var(--glass-bg)',
-              border: '1px solid var(--border)',
+              padding: '8px 12px', borderRadius: 'var(--radius-sm)',
+              background: 'var(--glass-bg)', border: '1px solid var(--border)',
             }}>
               <span style={{
                 minWidth: 120, fontSize: 11, fontWeight: 600, padding: '2px 6px',
-                borderRadius: 4, background: 'var(--accent)22', color: 'var(--accent)',
+                borderRadius: 4, background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)',
                 whiteSpace: 'nowrap',
               }}>
                 {typeLabels[ch.type] ?? ch.type}
@@ -248,17 +264,22 @@ function PreviewModal({ instanceId, preview, onApply, onClose }: PreviewModalPro
           )}
         </div>
 
-        {error && <div style={{ color: '#f87171', fontSize: 13, marginTop: 12 }}>{error}</div>}
+        {error && <div className="setup-error">{error}</div>}
 
-        <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>Close</button>
-          <button className="btn-primary" onClick={apply} disabled={applying || preview.stale}>
-            {applying ? <Loader size={14} className="spin" /> : <Play size={14} />}
-            Apply Changes
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+            Close
+          </button>
+          <button className="btn btn-primary" onClick={apply} disabled={applying || preview.stale} style={{ flex: 1, gap: 8, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+            {applying
+              ? <><div className="spinner" style={{ width: 15, height: 15, borderWidth: 2 }} /> Applying…</>
+              : <><Play size={15} /> Apply Changes</>
+            }
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -298,43 +319,70 @@ function ImportModal({ instanceId, formats, onClose }: ImportModalProps) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Import Formats from Arr</h2>
-          <button className="modal-close" onClick={onClose}><X size={20} /></button>
-        </div>
+      <div
+        className="glass"
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 540, maxHeight: '82vh',
+          borderRadius: 'var(--radius-xl)',
+          padding: '32px',
+          animation: 'slide-up var(--transition-base)',
+          position: 'relative',
+          display: 'flex', flexDirection: 'column', gap: 16,
+        }}
+      >
+        <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}>
+          <X size={16} />
+        </button>
 
         {result ? (
-          <div style={{ textAlign: 'center', padding: '24px 0' }}>
-            <CheckCircle size={40} style={{ color: '#10b981', marginBottom: 12 }} />
-            <div style={{ fontSize: 16, color: 'var(--text-primary)' }}>
-              Imported {result.imported} format{result.imported !== 1 ? 's' : ''}
-            </div>
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+            <CheckCircle size={48} style={{ color: '#10b981', marginBottom: 16 }} />
+            <h2 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+              Import complete
+            </h2>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+              {result.imported} format{result.imported !== 1 ? 's' : ''} imported successfully.
+            </p>
+            <button className="btn btn-primary" onClick={onClose} style={{ marginTop: 24, padding: '11px 32px', fontSize: 14, justifyContent: 'center' }}>
+              Done
+            </button>
           </div>
         ) : (
           <>
-            <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+            <div>
+              <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4, color: 'var(--text-primary)' }}>
+                Import Formats from Arr
+              </h2>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                Select existing custom formats to import into TRaSH tracking.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
               <input
                 className="form-input"
                 placeholder="Search formats…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{ flex: 1 }}
+                style={{ flex: 1, fontSize: 14, padding: '10px 12px' }}
+                autoFocus
               />
-              <button className="btn-secondary" onClick={toggleAll} style={{ whiteSpace: 'nowrap' }}>
+              <button className="btn btn-ghost" onClick={toggleAll} style={{ whiteSpace: 'nowrap', fontSize: 13 }}>
                 {selected.size === filtered.length ? 'Deselect all' : 'Select all'}
               </button>
             </div>
-            <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0 }}>
               {filtered.map(f => (
                 <label key={f.id} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '8px 12px', borderRadius: 8,
-                  background: selected.has(f.id) ? 'var(--accent)11' : 'var(--glass-bg)',
-                  border: `1px solid ${selected.has(f.id) ? 'var(--accent)44' : 'var(--border)'}`,
-                  cursor: 'pointer',
+                  padding: '8px 12px', borderRadius: 'var(--radius-sm)',
+                  background: selected.has(f.id) ? 'rgba(var(--accent-rgb),0.08)' : 'var(--glass-bg)',
+                  border: `1px solid ${selected.has(f.id) ? 'rgba(var(--accent-rgb),0.3)' : 'var(--border)'}`,
+                  cursor: 'pointer', transition: 'all 150ms ease',
                 }}>
                   <input
                     type="checkbox"
@@ -350,28 +398,30 @@ function ImportModal({ instanceId, formats, onClose }: ImportModalProps) {
                 </label>
               ))}
               {filtered.length === 0 && (
-                <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: 24 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: 32 }}>
                   No matching formats.
                 </div>
               )}
             </div>
-            {error && <div style={{ color: '#f87171', fontSize: 13, marginTop: 8 }}>{error}</div>}
+
+            {error && <div className="setup-error">{error}</div>}
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={doImport} disabled={importing || selected.size === 0} style={{ flex: 1, gap: 8, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+                {importing
+                  ? <><div className="spinner" style={{ width: 15, height: 15, borderWidth: 2 }} /> Importing…</>
+                  : <><Download size={15} /> Import{selected.size > 0 ? ` (${selected.size})` : ''}</>
+                }
+              </button>
+            </div>
           </>
         )}
-
-        <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>
-            {result ? 'Close' : 'Cancel'}
-          </button>
-          {!result && (
-            <button className="btn-primary" onClick={doImport} disabled={importing || selected.size === 0}>
-              {importing ? <Loader size={14} className="spin" /> : <Download size={14} />}
-              Import {selected.size > 0 ? `(${selected.size})` : ''}
-            </button>
-          )}
-        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
