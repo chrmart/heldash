@@ -53,6 +53,7 @@ interface TrashState {
   saveOverrides: (instanceId: string, profileSlug: string, overrides: Array<{ slug: string; score?: number | null; enabled?: boolean; excluded?: boolean }>) => Promise<void>
   deleteDeprecated: (instanceId: string, slug: string) => Promise<void>
   importFormats: (instanceId: string, formatIds: number[], profileSlug?: string) => Promise<{ imported: number }>
+  removeUserFormat: (instanceId: string, slug: string, profileSlug?: string) => Promise<void>
   forceFetchGithub: () => Promise<{ sha: string; filesUpdated: number; formatsUpdated: number }>
 }
 
@@ -162,6 +163,10 @@ export const useTrashStore = create<TrashState>((set, get) => ({
 
   importFormats: async (instanceId, formatIds, profileSlug) => {
     return api.trash.instances.doImportFormats(instanceId, formatIds, profileSlug)
+  },
+
+  removeUserFormat: async (instanceId, slug, profileSlug) => {
+    await api.trash.instances.removeUserFormat(instanceId, slug, profileSlug)
   },
 
   forceFetchGithub: async () => {

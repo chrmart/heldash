@@ -455,7 +455,7 @@ function ProfileEditor({ instanceId, profileCfg, profileName, isSyncing, isAdmin
   const {
     formats, preview, syncLogs, deprecated, importable,
     loadFormats, loadPreview, loadSyncLog, loadDeprecated, loadImportable,
-    saveOverrides, triggerSync, updateProfileConfig,
+    saveOverrides, triggerSync, updateProfileConfig, removeUserFormat, loadAllFormats,
   } = useTrashStore()
 
   const profileSlug = profileCfg.profile_slug
@@ -813,6 +813,19 @@ function ProfileEditor({ instanceId, profileCfg, profileName, isSyncing, isAdmin
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>
                   score: {f.score}
                 </span>
+                {isAdmin && (
+                  <button
+                    className="btn btn-ghost btn-icon"
+                    title="Remove from this profile"
+                    style={{ padding: 4, flexShrink: 0, color: 'var(--text-muted)' }}
+                    onClick={async () => {
+                      await removeUserFormat(instanceId, f.slug, profileSlug)
+                      await Promise.all([loadFormats(instanceId, profileSlug), loadAllFormats(instanceId)])
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

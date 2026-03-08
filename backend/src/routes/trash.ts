@@ -572,28 +572,26 @@ export async function trashRoutes(app: FastifyInstance) {
         }
       })
 
-      // Include user custom formats for this profile (if a profile was specified)
-      if (requestedProfileSlug) {
-        const userCustomRows = db.prepare(
-          'SELECT * FROM trash_custom_formats WHERE instance_id = ? AND profile_slug = ?'
-        ).all(req.params.id, requestedProfileSlug) as UserCustomFormatDbRow[]
+      // Include user custom formats — filtered by profile if specified, all for instance otherwise
+      const userCustomRows = requestedProfileSlug
+        ? db.prepare('SELECT * FROM trash_custom_formats WHERE instance_id = ? AND profile_slug = ?')
+            .all(req.params.id, requestedProfileSlug) as UserCustomFormatDbRow[]
+        : db.prepare('SELECT * FROM trash_custom_formats WHERE instance_id = ?')
+            .all(req.params.id) as UserCustomFormatDbRow[]
 
-        const userRows = userCustomRows.map(r => ({
-          slug: r.slug,
-          name: r.name,
-          recommendedScore: r.score,
-          score: r.score,
-          enabled: r.enabled === 1,
-          excluded: false,
-          deprecated: false,
-          arrFormatId: r.arr_format_id,
-          isUserFormat: true,
-        }))
+      const userRows = userCustomRows.map(r => ({
+        slug: r.slug,
+        name: r.name,
+        recommendedScore: r.score,
+        score: r.score,
+        enabled: r.enabled === 1,
+        excluded: false,
+        deprecated: false,
+        arrFormatId: r.arr_format_id,
+        isUserFormat: true,
+      }))
 
-        return [...trashRows, ...userRows]
-      }
-
-      return trashRows
+      return [...trashRows, ...userRows]
     },
   )
 
@@ -861,6 +859,25 @@ export async function trashRoutes(app: FastifyInstance) {
         } catch { /* skip individual failures */ }
       }
       return { ok: true, imported }
+    },
+  )
+
+  // ── DELETE /api/trash/instances/:id/user-formats/:slug — remove user custom format ──
+
+  app.delete<{ Params: { id: string; slug: string }; Querystring: { profile_slug?: string } }>(
+    '/api/trash/instances/:id/user-formats/:slug',
+    { preHandler: [app.requireAdmin] },
+    async (req, reply) => {
+      const { id, slug } = req.params
+      const { profile_slug } = req.query
+      if (profile_slug) {
+        db.prepare('DELETE FROM trash_custom_formats WHERE instance_id = ? AND slug = ? AND profile_slug = ?')
+          .run(id, slug, profile_slug)
+      } else {
+        db.prepare('DELETE FROM trash_custom_formats WHERE instance_id = ? AND slug = ?')
+          .run(id, slug)
+      }
+      return reply.status(204).send()
     },
   )
 

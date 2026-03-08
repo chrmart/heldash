@@ -287,6 +287,10 @@ export const api = {
       importFormats: (instanceId: string) => req<TrashImportableFormat[]>(`/trash/instances/${instanceId}/import-formats`),
       doImportFormats: (instanceId: string, formatIds: number[], profileSlug?: string) =>
         req<{ imported: number }>(`/trash/instances/${instanceId}/import-formats`, { method: 'POST', body: JSON.stringify({ format_ids: formatIds, profile_slug: profileSlug }) }),
+      removeUserFormat: (instanceId: string, slug: string, profileSlug?: string) => {
+        const qs = profileSlug ? `?profile_slug=${encodeURIComponent(profileSlug)}` : ''
+        return req<void>(`/trash/instances/${instanceId}/user-formats/${encodeURIComponent(slug)}${qs}`, { method: 'DELETE' })
+      },
     },
     github: {
       forceFetch: () => req<{ sha: string; filesUpdated: number; formatsUpdated: number }>('/trash/github/fetch', { method: 'POST', body: JSON.stringify({}) }),
