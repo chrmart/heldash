@@ -122,38 +122,61 @@ function InstanceFormModal({ instance, onClose, onSaved }: InstanceFormProps) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>{isEdit ? 'Edit Instance' : 'Add HA Instance'}</h2>
-          <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
-        </div>
-        <div className="modal-body">
-          <label className="form-label">Name</label>
-          <input className="form-input" value={name} onChange={e => setName(e.target.value)} placeholder="Home Assistant" />
+      <div
+        className="glass"
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 480,
+          borderRadius: 'var(--radius-xl)',
+          padding: '40px 40px 36px',
+          animation: 'slide-up var(--transition-base)',
+          position: 'relative',
+        }}
+      >
+        <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}>
+          <X size={16} />
+        </button>
 
-          <label className="form-label" style={{ marginTop: 12 }}>URL</label>
-          <input className="form-input" value={url} onChange={e => setUrl(e.target.value)} placeholder="http://homeassistant.local:8123" />
+        <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 6, color: 'var(--text-primary)' }}>
+          {isEdit ? 'Edit Instance' : 'Add HA Instance'}
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 28 }}>
+          {isEdit ? 'Update your Home Assistant instance settings.' : 'Connect a Home Assistant instance to your dashboard.'}
+        </p>
 
-          <label className="form-label" style={{ marginTop: 12 }}>
-            Long-Lived Access Token {isEdit && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(leave blank to keep existing)</span>}
-          </label>
-          <input
-            className="form-input"
-            type="password"
-            value={token}
-            onChange={e => setToken(e.target.value)}
-            placeholder={isEdit ? '••••••••••••• (unchanged)' : 'HA long-lived access token'}
-          />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
-            <label className="form-toggle" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-              <span className="form-label" style={{ marginBottom: 0, cursor: 'pointer' }}>Enabled</span>
-            </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Name</label>
+            <input className="form-input" value={name} onChange={e => setName(e.target.value)} placeholder="Home Assistant" style={{ fontSize: 14, padding: '10px 12px' }} />
           </div>
 
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">URL</label>
+            <input className="form-input" value={url} onChange={e => setUrl(e.target.value)} placeholder="http://homeassistant.local:8123" style={{ fontSize: 14, padding: '10px 12px' }} />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">
+              Long-Lived Access Token{' '}
+              {isEdit && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(leave blank to keep existing)</span>}
+            </label>
+            <input
+              className="form-input"
+              type="password"
+              value={token}
+              onChange={e => setToken(e.target.value)}
+              placeholder={isEdit ? '••••••••••••• (unchanged)' : 'HA long-lived access token'}
+              style={{ fontSize: 14, padding: '10px 12px' }}
+            />
+          </div>
+
+          <label className="form-toggle" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+            <span className="form-label" style={{ marginBottom: 0, cursor: 'pointer' }}>Enabled</span>
+          </label>
+
           {isEdit && (
-            <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button className="btn btn-ghost" onClick={handleTest} disabled={testing} style={{ gap: 6 }}>
                 <TestTube2 size={14} />
                 {testing ? 'Testing…' : 'Test Connection'}
@@ -166,14 +189,19 @@ function InstanceFormModal({ instance, onClose, onSaved }: InstanceFormProps) {
             </div>
           )}
 
-          {error && <p style={{ color: 'var(--status-offline)', marginTop: 10, fontSize: 13 }}>{error}</p>}
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ gap: 6 }}>
-            {saving ? <Loader size={14} className="spin" /> : <Check size={14} />}
-            {isEdit ? 'Save' : 'Add'}
-          </button>
+          {error && <div className="setup-error">{error}</div>}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ flex: 1, gap: 8, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+              {saving
+                ? <><div className="spinner" style={{ width: 15, height: 15, borderWidth: 2 }} /> Saving…</>
+                : <><Check size={15} /> {isEdit ? 'Save Changes' : 'Add Instance'}</>
+              }
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -199,29 +227,49 @@ function EditPanelModal({ panel, onClose }: { panel: HaPanel; onClose: () => voi
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 360 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Edit Panel Label</h2>
-          <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
-        </div>
-        <div className="modal-body">
-          <label className="form-label">Custom Label</label>
-          <input
-            className="form-input"
-            value={label}
-            onChange={e => setLabel(e.target.value)}
-            placeholder="Leave blank to use friendly_name"
-            autoFocus
-          />
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-            Entity: <code style={{ fontFamily: 'var(--font-mono)' }}>{panel.entity_id}</code>
-          </p>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ gap: 6 }}>
-            <Check size={14} />Save
-          </button>
+      <div
+        className="glass"
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 400,
+          borderRadius: 'var(--radius-xl)',
+          padding: '40px 40px 36px',
+          animation: 'slide-up var(--transition-base)',
+          position: 'relative',
+        }}
+      >
+        <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}>
+          <X size={16} />
+        </button>
+
+        <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 6, color: 'var(--text-primary)' }}>
+          Edit Panel Label
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 28, fontFamily: 'var(--font-mono)' }}>
+          {panel.entity_id}
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Custom Label</label>
+            <input
+              className="form-input"
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              placeholder="Leave blank to use friendly_name"
+              autoFocus
+              style={{ fontSize: 14, padding: '10px 12px' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ flex: 1, gap: 8, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+              <Check size={15} /> Save
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -302,92 +350,112 @@ function EntityBrowserModal({ instances, panels, onClose, onAdd }: EntityBrowser
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Add Entity Panel</h2>
-          <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
+      <div
+        className="glass"
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 560, maxHeight: '82vh',
+          borderRadius: 'var(--radius-xl)',
+          padding: '32px',
+          animation: 'slide-up var(--transition-base)',
+          position: 'relative',
+          display: 'flex', flexDirection: 'column', gap: 16,
+        }}
+      >
+        <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}>
+          <X size={16} />
+        </button>
+
+        <div>
+          <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4, color: 'var(--text-primary)' }}>
+            Add Entity Panel
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            Select entities to pin as panels on your dashboard.
+          </p>
         </div>
-        <div className="modal-body" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {instances.length > 1 && (
-            <div>
-              <label className="form-label">Instance</label>
-              <select className="form-input" value={selectedInstance} onChange={e => setSelectedInstance(e.target.value)}>
-                {instances.filter(i => i.enabled).map(i => (
-                  <option key={i.id} value={i.id}>{i.name}</option>
-                ))}
-              </select>
+
+        {instances.length > 1 && (
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Instance</label>
+            <select className="form-input" value={selectedInstance} onChange={e => setSelectedInstance(e.target.value)} style={{ fontSize: 14, padding: '10px 12px' }}>
+              {instances.filter(i => i.enabled).map(i => (
+                <option key={i.id} value={i.id}>{i.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div style={{ position: 'relative' }}>
+          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input
+            className="form-input"
+            style={{ paddingLeft: 34, fontSize: 14, padding: '10px 12px 10px 34px' }}
+            placeholder="Search entities…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            autoFocus
+          />
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0 }}>
+          {loading && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+              <div className="spinner" style={{ width: 24, height: 24, borderWidth: 2 }} />
             </div>
           )}
-          <div style={{ position: 'relative' }}>
-            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input
-              className="form-input"
-              style={{ paddingLeft: 30 }}
-              placeholder="Search entities…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              autoFocus
-            />
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {loading && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
-                <div className="spinner" style={{ width: 24, height: 24, borderWidth: 2 }} />
-              </div>
-            )}
-            {error && <p style={{ color: 'var(--status-offline)', fontSize: 13 }}>{error}</p>}
-            {!loading && !error && Object.entries(byDomain).sort(([a], [b]) => a.localeCompare(b)).map(([domain, domainEntities]) => (
-              <div key={domain}>
-                <button
-                  onClick={() => toggleDomain(domain)}
-                  style={{
-                    width: '100%', textAlign: 'left', background: 'none', border: 'none',
-                    color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, letterSpacing: '0.8px',
-                    textTransform: 'uppercase', padding: '6px 4px', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 6,
-                  }}
-                >
-                  {expanded.has(domain) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                  {domainLabel(domain)} ({domainEntities.length})
-                </button>
-                {expanded.has(domain) && domainEntities.map(entity => {
-                  const isAdded = existingSet.has(entity.entity_id)
-                  const isLoading = adding === entity.entity_id
-                  return (
-                    <div
-                      key={entity.entity_id}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px',
-                        borderRadius: 'var(--radius-sm)', opacity: isAdded ? 0.5 : 1,
-                        background: isAdded ? 'rgba(var(--accent-rgb),0.04)' : undefined,
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {entity.attributes.friendly_name ?? entity.entity_id}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {entity.entity_id}
-                        </div>
+          {error && <p style={{ color: 'var(--status-offline)', fontSize: 13 }}>{error}</p>}
+          {!loading && !error && Object.entries(byDomain).sort(([a], [b]) => a.localeCompare(b)).map(([domain, domainEntities]) => (
+            <div key={domain}>
+              <button
+                onClick={() => toggleDomain(domain)}
+                style={{
+                  width: '100%', textAlign: 'left', background: 'none', border: 'none',
+                  color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, letterSpacing: '0.8px',
+                  textTransform: 'uppercase', padding: '6px 4px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {expanded.has(domain) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                {domainLabel(domain)} ({domainEntities.length})
+              </button>
+              {expanded.has(domain) && domainEntities.map(entity => {
+                const isAdded = existingSet.has(entity.entity_id)
+                const isLoading = adding === entity.entity_id
+                return (
+                  <div
+                    key={entity.entity_id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
+                      borderRadius: 'var(--radius-sm)', opacity: isAdded ? 0.5 : 1,
+                      background: isAdded ? 'rgba(var(--accent-rgb),0.04)' : undefined,
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {entity.attributes.friendly_name ?? entity.entity_id}
                       </div>
-                      <span style={{ fontSize: 11, color: stateColor(entity.state), fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-                        {formatState(entity)}
-                      </span>
-                      <button
-                        className="btn btn-ghost btn-icon"
-                        style={{ flexShrink: 0, width: 24, height: 24 }}
-                        disabled={isAdded || isLoading}
-                        onClick={() => handleAdd(entity)}
-                        data-tooltip={isAdded ? 'Already added' : 'Add panel'}
-                      >
-                        {isLoading ? <Loader size={12} /> : <Plus size={12} />}
-                      </button>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {entity.entity_id}
+                      </div>
                     </div>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
+                    <span style={{ fontSize: 11, color: stateColor(entity.state), fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                      {formatState(entity)}
+                    </span>
+                    <button
+                      className="btn btn-ghost btn-icon"
+                      style={{ flexShrink: 0, width: 24, height: 24 }}
+                      disabled={isAdded || isLoading}
+                      onClick={() => handleAdd(entity)}
+                      data-tooltip={isAdded ? 'Already added' : 'Add panel'}
+                    >
+                      {isLoading ? <Loader size={12} /> : <Plus size={12} />}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
         </div>
       </div>
     </div>
