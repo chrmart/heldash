@@ -82,7 +82,9 @@ heldash/
         │   ├── prowlarr.ts     # ProwlarrClient extends ArrBaseClient (v1)
         │   └── sabnzbd.ts      # SabnzbdClient — own undici client, no inheritance
         ├── clients/
-        │   └── nginx-pm-client.ts # NginxPMClient: Nginx Proxy Manager API integration
+        │   ├── nginx-pm-client.ts # NginxPMClient: Nginx Proxy Manager API integration
+│   ├── ha-ws-client.ts    # HaWsClient: single HA WebSocket connection, handles auth + subscribe_events, auto-reconnect
+│   └── ha-ws-manager.ts   # Singleton pool of HaWsClient keyed by instanceId; invalidate on PATCH/DELETE
         └── routes/
             ├── services.ts     # CRUD + /check + /check-all + /icon upload
             ├── groups.ts       # CRUD for service groups
@@ -458,6 +460,9 @@ All routes prefixed `/api`. Frontend uses relative paths.
 - **HA panels reorder route ordering** — `PATCH /api/ha/panels/reorder` must be registered BEFORE `PATCH /api/ha/panels/:id`. Fastify static routes take priority over parameterized ones regardless of registration order, but registering first is the safe explicit approach.
 - **HA state polling** — `HaPage` polls states every 30s (not 10s like widgets). Polling key is `instanceIds.join(',')` — a stable string from unique instance IDs referenced by current panels. State is stored in `stateMap: Record<instanceId, Record<entity_id, HaEntityFull>>`.
 - **HA panel label** — Stored `null` by default (not the HA friendly_name). Frontend resolves: `panel.label || entity?.attributes.friendly_name || panel.entity_id`. Never pre-fill with friendly_name so it stays current if HA renames the entity.
+- **HA WebSocket bridge** — `HaWsClient` (undici `WebSocket`) connects to `ws(s)://host/api/websocket`, completes the HA auth handshake, then subscribes to `state_changed` events. The backend SSE endpoint (`GET /api/ha/instances/:id/stream`) fans these events to `EventSource` clients. `HaWsClient` uses `undici.Agent` with `rejectUnauthorized: false` for self-signed certs. Auth failure (`auth_invalid`) sets `destroyed = true` to prevent retry loops. Reconnects with exponential backoff (5s → 60s cap).
+- **HA WS client lifecycle** — `HaWsManager` holds one `HaWsClient` per instance ID. Client is created on first SSE subscriber, automatically disconnects when all subscribers close, and is invalidated (destroyed + removed from pool) on instance PATCH or DELETE so updated credentials take effect immediately.
+- **Frontend HA subscriptions** — `HaPage` opens one `EventSource` per unique instance ID when panels are loaded. `loadStates` still runs once on mount for the initial bulk snapshot (before WS has connected). `updateEntityState` in `useHaStore` updates a single entity in `stateMap` without touching other instances.
 
 ---
 
@@ -632,4 +637,4 @@ All routes prefixed `/api`. Frontend uses relative paths.
 - [ ] Custom check intervals per service (backend scheduler)
 - [ ] Torrent Client Integration (qBittorrent, Transmission, Deluge)
 - [ ] More integrations (Immich, Jellyfin, Pi-hole, etc.)
-- [ ] HA WebSocket for real-time state updates (replaces 30s polling)
+- [x] HA WebSocket for real-time state updates (replaces 30s polling)
