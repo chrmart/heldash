@@ -238,7 +238,7 @@ export async function executeSyncChangeset(
         const live = await limiter.execute(() => client.getCustomFormat(change.arrFormatId!))
         await limiter.execute(() => client.putCustomFormat(change.arrFormatId!, {
           ...live,
-          specifications: change.conditions,
+          specifications: change.conditions ?? [],
         }))
         if (change.conditionsHash) {
           updateConditionsHash(instanceId, change.slug, change.conditionsHash)
