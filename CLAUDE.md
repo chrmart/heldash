@@ -1,6 +1,6 @@
 # CLAUDE.md — HELDASH
 
-Personal homelab dashboard. Shows service tiles with live status indicators, groups them into categories, and lets the user drag-and-drop the layout. Includes a Media section for Radarr/Sonarr/Prowlarr/SABnzbd, a Docker page for live container management, a Widget system for at-a-glance system stats, and a dedicated Home Assistant page for multi-instance entity monitoring and control. Designed for self-hosting on Unraid behind nginx-proxy-manager.
+Personal homelab dashboard. Shows service tiles with live status indicators, groups them into categories, and lets the user drag-and-drop the layout. Includes a Media section for Radarr/Sonarr/Prowlarr/SABnzbd, a Docker page for live container management, a Widget system for at-a-glance system stats, a dedicated Home Assistant page for multi-instance entity monitoring and control, and TRaSH Guides sync for custom format + quality profile management. Designed for self-hosting on Unraid behind nginx-proxy-manager.
 
 ---
 
@@ -9,7 +9,7 @@ Personal homelab dashboard. Shows service tiles with live status indicators, gro
 | Layer | Technology |
 |---|---|
 | Frontend | React 18, TypeScript (strict), Vite 5 |
-| State | Zustand (useStore + useArrStore + useDockerStore + useWidgetStore + useDashboardStore + useHaStore) |
+| State | Zustand (useStore + useArrStore + useDockerStore + useWidgetStore + useDashboardStore + useHaStore + useTrashStore) |
 | Drag & Drop | @dnd-kit/core + @dnd-kit/sortable + @dnd-kit/utilities |
 | Icons | lucide-react |
 | Styling | Vanilla CSS (CSS custom properties, glass morphism) |
@@ -51,7 +51,7 @@ heldash/
 │       ├── styles/
 │       │   └── global.css      # All CSS: variables, glass, layout, components
 │       ├── components/
-│       │   ├── Sidebar.tsx     # Left nav (Dashboard / Apps / Media / Docker / Widgets / Home Assistant / Settings / About)
+│       │   ├── Sidebar.tsx     # Left nav (Dashboard / Apps / Media / Docker / Widgets / Home Assistant / TRaSH Guides / Settings / About)
 │       │   ├── Topbar.tsx      # Date, theme controls, Add buttons, auth, topbar widget stats
 │       │   ├── ServiceCard.tsx # Tile: icon, status dot, hover actions
 │       │   ├── ServiceModal.tsx # Add/edit service form with icon upload
@@ -64,9 +64,13 @@ heldash/
 │       │   ├── DockerPage.tsx  # Docker containers: overview bar, sortable table, log viewer
 │       │   ├── WidgetsPage.tsx # Widget management + DockerOverviewContent (exported, reused by Dashboard)
 │       │   ├── HaPage.tsx      # Home Assistant: multi-instance mgmt, entity browser modal, DnD panel grid
+│       │   ├── TrashPage.tsx   # TRaSH Guides: instance panels, configure/preview/import modals, formats/deprecated/log tabs
 │       │   └── SetupPage.tsx   # First-launch admin account creation
+│       ├── store/
+│       │   └── useTrashStore.ts # TRaSH store: configs, profiles, formats, preview, syncLogs, deprecated, importable
 │       └── types/
-│           └── arr.ts          # ArrInstance, ArrStats union, SabnzbdStats, queue/history types
+│           ├── arr.ts          # ArrInstance, ArrStats union, SabnzbdStats, queue/history types
+│           └── trash.ts        # TrashInstanceConfig, TrashFormatRow, TrashPreview, TrashSyncLogEntry, …
 └── backend/
     ├── tsconfig.json           # strict: true, noEmitOnError: true
     ├── package.json            # build: "tsc" (no || true suppression)
@@ -83,8 +87,20 @@ heldash/
         │   └── sabnzbd.ts      # SabnzbdClient — own undici client, no inheritance
         ├── clients/
         │   ├── nginx-pm-client.ts # NginxPMClient: Nginx Proxy Manager API integration
-│   ├── ha-ws-client.ts    # HaWsClient: single HA WebSocket connection, handles auth + subscribe_events, auto-reconnect
-│   └── ha-ws-manager.ts   # Singleton pool of HaWsClient keyed by instanceId; invalidate on PATCH/DELETE
+        │   ├── ha-ws-client.ts    # HaWsClient: single HA WebSocket connection, auth handshake, subscribe_events, auto-reconnect
+        │   └── ha-ws-manager.ts   # Singleton pool of HaWsClient keyed by instanceId; invalidate on PATCH/DELETE
+        ├── trash/
+        │   ├── types.ts           # All shared TRaSH types (NormalizedCustomFormat, ArrSnapshot, Changeset, SyncReport, …)
+        │   ├── github-fetcher.ts  # Incremental GitHub fetch: commit SHA + per-file SHA comparison
+        │   ├── trash-parser.ts    # Two-pass JSON parser: CFs → slug map → quality profiles; conditions hash
+        │   ├── format-id-resolver.ts # In-memory slug→ArrId mapping with DB persistence; O(1) lookup
+        │   ├── arr-rate-limiter.ts   # Token bucket (5 req/s per instance); per-instance singleton pool
+        │   ├── client-interface.ts   # TrashArrClient interface (CF + profile CRUD)
+        │   ├── merge-engine.ts    # Pure changeset computation (no external calls); phases A-E
+        │   ├── sync-executor.ts   # Executes changeset phases A-E with checkpoint safety + audit log
+        │   ├── repair-engine.ts   # Drift detection: missing_in_arr, conditions_drift, deprecated_still_enabled
+        │   ├── migration-runner.ts # Re-normalizes cache rows where schema_version < PARSER_SCHEMA_VERSION
+        │   └── scheduler.ts       # Per-instance timers with 2s stagger; acquireSync/releaseSync guard
         └── routes/
             ├── services.ts     # CRUD + /check + /check-all + /icon upload
             ├── groups.ts       # CRUD for service groups
@@ -96,7 +112,8 @@ heldash/
             ├── dashboard.ts    # Dashboard item management (ordered list, per-owner)
             ├── docker.ts       # Docker Engine API proxy (containers, stats, logs SSE, control)
             ├── backgrounds.ts  # Background image CRUD + assign to user group
-            └── ha.ts           # Home Assistant: instance CRUD + HA proxy (states, service calls) + panel CRUD
+            ├── ha.ts           # Home Assistant: instance CRUD + HA proxy (states, service calls) + panel CRUD + SSE stream
+            └── trash.ts        # TRaSH Guides: configure, sync, preview, apply, overrides, log, deprecated, import
 ```
 
 ---
@@ -135,7 +152,7 @@ Two pure functions used across multiple components:
 `docker.ts` connects to `/var/run/docker.sock` via `undici.Pool` (10 connections) so batch stats requests run concurrently. Access controlled by `hasDockerAccess()` (checks `docker_access` column on user's group). SSE log streaming uses `reply.hijack()` called **before** the Docker API request so the SSE connection opens immediately; errors are sent as SSE events.
 
 ### Widget system
-Four widget types: `server_status`, `adguard_home`, `docker_overview`, `nginx_pm`. Widget credentials (AdGuard/Nginx PM passwords) are stripped in `sanitize()` before returning to the frontend — stored server-side only. `docker_overview` widgets have a separate access gate (`docker_widget_access`) and never appear in `group_widget_visibility`. `nginx_pm` uses token-based authentication (username/password → Bearer token cached for 6 hours).
+Five widget types: `server_status`, `adguard_home`, `docker_overview`, `nginx_pm`, `home_assistant`. Widget credentials (AdGuard/Nginx PM passwords) are stripped in `sanitize()` before returning to the frontend — stored server-side only. `docker_overview` widgets have a separate access gate (`docker_widget_access`) and never appear in `group_widget_visibility`. `nginx_pm` uses token-based authentication (username/password → Bearer token cached for 6 hours). `home_assistant` widget polls entity states via `GET /api/ha/instances/:id/states`.
 
 ### Dashboard Grid Layout
 - **20-column CSS grid** system (changed from responsive minmax to fixed columns)
@@ -151,6 +168,20 @@ Four widget types: `server_status`, `adguard_home`, `docker_overview`, `nginx_pm
 - `useWidgetStore` — widgets (widget list, stats cache, AdGuard toggle)
 - `useDashboardStore` — dashboard items (ordered list, add/remove/reorder)
 - `useHaStore` — Home Assistant (instances, panels, stateMap per instance)
+- `useTrashStore` — TRaSH Guides (configs, profiles, formats, preview, syncLogs, deprecated, importable; all keyed by instanceId)
+
+### TRaSH Guides sync architecture
+- **GitHub fetch**: incremental — commit SHA check → git tree diff → per-file SHA comparison → fetch only changed files. Files sorted alphabetically before parsing (deterministic slug assignment).
+- **Parser**: two-pass — CFs first (build `trash_id→slug` map) → quality profiles (resolve trash_id refs). `PARSER_SCHEMA_VERSION` constant triggers re-normalization on schema bump.
+- **Slug**: `kebab_case(name)` with `+→-plus`, `&→-and`, `__dup1`/`__dup2` collision namespace.
+- **Conditions hash**: `SHA-256(sorted JSON)`, first 16 hex chars — stored in cache and `trash_format_instances` for O(1) drift detection.
+- **Format ID resolver**: `trash_format_instances` table + in-memory `Map<instanceId, Map<slug, TrashFormatInstance>>`. Resolves `arr_format_id` by slug; invalidated after sync.
+- **Merge engine** (`merge-engine.ts`): pure function — no external API calls. Takes `ArrSnapshot` (pre-loaded live arr state) + upstream formats + overrides + deprecated slugs → returns `Changeset`.
+- **Rate limiter**: token bucket 5 req/s per instance; singleton pool `getRateLimiter(instanceId)`.
+- **Sync phases**: A=Create, B=UpdateConditions, C=ProfileScorePatch, D=SoftDeprecate, E=Repair. Each wrapped in try/catch (no abort on single failure).
+- **Notify mode**: changeset stored as `trash_pending_previews` row (expires 24h). User reviews via `GET /preview` → applies via `POST /apply/:pid`.
+- **Scheduler**: on startup, compares `now - last_sync_at` vs `sync_interval_hours`; staggered 2s between instances. `registerSyncFn()` called inside route plugin to pass `app.log` to scheduler.
+- **Repair**: daily drift scan via `repair-engine.ts`; detects `missing_in_arr`, `conditions_drift`, `deprecated_still_enabled`. Interrupted checkpoints (from crashed syncs) logged on startup.
 
 ### CSS custom properties, no Tailwind
 Full design system via CSS variables (`--glass-bg`, `--accent`, `--text-primary`, etc.). Theme switching works by changing `data-theme` and `data-accent` on `<html>`. No framework overhead.
@@ -318,6 +349,20 @@ Sparse junction tables: presence of a row means the item is **hidden** for that 
 ### settings
 Key-value table. Values stored as JSON strings. Keys: `theme_mode`, `theme_accent`, `dashboard_title`, `auth_enabled`, `auth_mode`.
 
+### TRaSH Guides tables (summary)
+| Table | Purpose |
+|---|---|
+| `trash_guides_cache` | Normalized CF + profile data from GitHub; keyed by `(arr_type, category, slug)` |
+| `trash_guides_file_index` | Per-file SHA for incremental fetching |
+| `trash_format_instances` | `slug ↔ arr_format_id` mapping per instance; stores `last_conditions_hash` |
+| `trash_instance_configs` | Per-instance sync config (profile_slug, sync_mode, interval, enabled) |
+| `trash_user_overrides` | Per-instance per-slug score + enabled overrides |
+| `trash_custom_formats` | User-imported or non-TRaSH formats tracked by HELDASH |
+| `trash_deprecated_formats` | Formats removed from TRaSH; score=0, kept in arr until user deletes |
+| `trash_pending_previews` | Stored changesets for notify-mode review; expires 24h |
+| `trash_sync_checkpoints` | Crash-safe in-progress sync state (UNIQUE on instance_id) |
+| `trash_sync_log` | Audit log: one row per sync run with status, counts, duration |
+
 ---
 
 ## API Reference
@@ -417,12 +462,33 @@ All routes prefixed `/api`. Frontend uses relative paths.
 | DELETE | /api/ha/instances/:id | requireAdmin | Delete + cascade all panels |
 | POST | /api/ha/instances/:id/test | requireAdmin | Test HA connection (`{ ok, error? }`) |
 | GET | /api/ha/instances/:id/states | authenticate | Proxy `GET /api/states` from HA (all entities) |
+| GET | /api/ha/instances/:id/stream | authenticate | SSE stream of `state_changed` events from HA WebSocket bridge |
 | POST | /api/ha/instances/:id/call | authenticate | Proxy `POST /api/services/:domain/:service` to HA |
 | GET | /api/ha/panels | optional | List caller's panels (owner_id = sub or 'guest') |
 | POST | /api/ha/panels | authenticate | Add panel (409 if duplicate) |
 | PATCH | /api/ha/panels/reorder | authenticate | Reorder panels (registered before `:id` route) |
 | PATCH | /api/ha/panels/:id | authenticate | Update panel label / panel_type |
 | DELETE | /api/ha/panels/:id | authenticate | Remove panel |
+
+### TRaSH Guides
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | /api/trash/instances | authenticate | List configured instances with `isSyncing` flag |
+| POST | /api/trash/instances/:id/configure | requireAdmin | Upsert sync config (profile_slug, sync_mode, interval, enabled) |
+| GET | /api/trash/instances/:id/profiles | authenticate | Available TRaSH quality profiles from cache |
+| GET | /api/trash/instances/:id/custom-formats | authenticate | All formats with user overrides merged in |
+| GET | /api/trash/instances/:id/overrides | authenticate | Raw user overrides |
+| PUT | /api/trash/instances/:id/overrides | authenticate | Bulk upsert overrides |
+| POST | /api/trash/instances/:id/sync | requireAdmin | Trigger manual sync (async, returns immediately) |
+| GET | /api/trash/instances/:id/preview | authenticate | Pending changeset preview (404 if none) |
+| POST | /api/trash/instances/:id/apply/:pid | requireAdmin | Apply a pending preview |
+| GET | /api/trash/instances/:id/log | authenticate | Sync audit log (default 50 entries) |
+| GET | /api/trash/instances/:id/deprecated | authenticate | Deprecated formats list |
+| DELETE | /api/trash/instances/:id/deprecated/:slug | requireAdmin | Delete deprecated format (also removes from arr) |
+| GET | /api/trash/instances/:id/import-formats | requireAdmin | Live custom formats from arr (for import selection) |
+| POST | /api/trash/instances/:id/import-formats | requireAdmin | Import selected format IDs into tracking |
+| GET | /api/trash/sync-status | authenticate (silent) | Widget stats — `TrashWidgetStats` |
+| POST | /api/trash/github/fetch | requireAdmin | Force re-fetch all TRaSH data from GitHub |
 
 ### Misc
 | Method | Path | Description |
@@ -463,6 +529,13 @@ All routes prefixed `/api`. Frontend uses relative paths.
 - **HA WebSocket bridge** — `HaWsClient` (undici `WebSocket`) connects to `ws(s)://host/api/websocket`, completes the HA auth handshake, then subscribes to `state_changed` events. The backend SSE endpoint (`GET /api/ha/instances/:id/stream`) fans these events to `EventSource` clients. `HaWsClient` uses `undici.Agent` with `rejectUnauthorized: false` for self-signed certs. Auth failure (`auth_invalid`) sets `destroyed = true` to prevent retry loops. Reconnects with exponential backoff (5s → 60s cap).
 - **HA WS client lifecycle** — `HaWsManager` holds one `HaWsClient` per instance ID. Client is created on first SSE subscriber, automatically disconnects when all subscribers close, and is invalidated (destroyed + removed from pool) on instance PATCH or DELETE so updated credentials take effect immediately.
 - **Frontend HA subscriptions** — `HaPage` opens one `EventSource` per unique instance ID when panels are loaded. `loadStates` still runs once on mount for the initial bulk snapshot (before WS has connected). `updateEntityState` in `useHaStore` updates a single entity in `stateMap` without touching other instances.
+- **TRaSH sync guard** — `acquireSync(instanceId)` returns `false` if already syncing (in-memory `Set<string>`). Routes return 409; scheduler skips. Always `releaseSync` in `.finally()`.
+- **TRaSH notify vs apply** — In notify mode the sync function stores a preview and returns early (`return` before `executeSyncChangeset`). Apply-preview route calls `runSync` with trigger `'user_confirm'` which skips the notify branch.
+- **TRaSH slug generation** — `toSlug(name)` in `trash-parser.ts`. Must be called consistently everywhere a slug is needed. Never derive slugs from arr format names (different casing/spacing).
+- **TRaSH circular import** — `merge-engine.ts` uses `require('./format-id-resolver')` inline to avoid circular dep with `sync-executor → merge-engine → format-id-resolver → (same chain)`. Known code smell but functional.
+- **TRaSH rate limiter** — `getRateLimiter(instanceId)` returns singleton per instance. Token bucket: capacity=5, refill=5/s. `execute<T>(fn)` wraps with retry (1s→3s→5s, max 3 attempts).
+- **TRaSH `toSlug` export** — `trash-parser.ts` exports `toSlug` for use in `routes/trash.ts` (import-formats route) via `const { toSlug } = await import('../trash/trash-parser')`.
+- **TrashPage CSS colors** — Does NOT use `var(--success/warning/error)` (those don't exist in global.css). Uses hardcoded hex: `#10b981` (green), `#f59e0b` (amber), `#f87171` (red).
 
 ---
 
@@ -559,82 +632,20 @@ All routes prefixed `/api`. Frontend uses relative paths.
 
 ## Roadmap
 
-### Phase 1 — Core ✓
-- [x] Service tiles with status indicators, health checks, icon upload
-- [x] Service groups with drag-and-drop reordering
-- [x] Dark/light mode + 3 accent colors
-- [x] Dashboard title customization
-- [x] Glass morphism design system
+### Completed ✓
+- Core: service tiles, groups, DnD, health checks, dark/light + 3 accent themes, glass morphism
+- Auth: JWT httpOnly cookie, bcrypt, setup page, grp_admin/grp_guest/custom, per-group visibility (apps/media/widgets/docker)
+- Media: Radarr/Sonarr/Prowlarr/SABnzbd, server-side proxy, Seerr requests
+- Dashboard: modular DnD grid, dashboard groups with col-span, per-user layouts, guest mode, placeholders
+- Widgets: Server Status, AdGuard Home, Docker Overview, Nginx PM, Home Assistant, Pi-hole; topbar/sidebar display
+- Docker: live container list, batch stats, SSE log streaming, start/stop/restart, per-group access
+- Backgrounds: upload + per-group assignment
+- UI: Geist + Space Mono typography, 8px spacing grid, glass morphism, micro-interactions, prefers-reduced-motion
+- Home Assistant: multi-instance, entity browser, DnD panel grid, real-time WebSocket bridge, toggle support, HA widget
+- TRaSH Guides: custom format + quality profile sync for Radarr/Sonarr; notify/auto/manual modes; preview diff; score overrides; soft deprecation; daily repair; import from arr; audit log; incremental GitHub fetch
 
-### Phase 2 — Auth & Multi-user ✓
-- [x] Local username/password auth (bcrypt + JWT httpOnly cookie)
-- [x] First-launch setup page
-- [x] Group-based access control (grp_admin / grp_guest / custom)
-- [x] Per-group app, media, and widget visibility
-- [x] Per-group Docker page and Docker widget access
-- [x] User management (CRUD, password reset, group assignment)
-- [x] Guest theme customization via localStorage
-- [ ] OIDC integration (voidauth / Authentik) — user model is OIDC-ready
-
-### Phase 3 — Media & Dashboard ✓
-- [x] Radarr / Sonarr / Prowlarr / SABnzbd integrations
-- [x] Server-side proxy (API keys never reach browser)
-- [x] Modular dashboard (free arrangement, DnD, placeholder cards)
-- [x] Per-user dashboards with admin-managed guest dashboard
-- [x] Widget system: Server Status, AdGuard Home, Docker Overview
-- [x] Topbar widget stats
-
-### Phase 4 — Docker ✓
-- [x] Docker page: live container list, sortable table, overview stats bar
-- [x] Batch CPU/RAM stats (parallel Pool connections)
-- [x] Live log streaming via SSE (stdout + stderr, filter, reconnect)
-- [x] Start / Stop / Restart containers (admin-only)
-- [x] Docker Overview widget with container counts and control dropdown
-
-### Phase 5 — Enhancements ✓
-- [x] Background images — upload and assign per user group (applied as subtle overlay)
-- [x] **UI/UX Refinement** — distinctive typography, refined glass morphism, strategic micro-interactions
-  - [x] Geist + Space Mono typography system (modern body + distinctive display)
-  - [x] Consistent 8px spacing grid across all components
-  - [x] Refined glass morphism (24px blur, 200% saturate)
-
-**Component-Level Improvements**:
-  - [x] **Sidebar**: Gradient overlay on hover, active state with glow (box-shadow), 2px translate
-  - [x] **Topbar**: Time display in monospace, widget stats with compact layout, elevated height (64px)
-  - [x] **Dashboard**: 20-column grid layout (10 apps max per row), dashboard groups with col-span selector, group headers with uppercase labels
-  - [x] **Dashboard Groups**: Expandable group containers with individual col-span, drag-reorder, nested item DnD
-  - [x] **Service Cards**: Hover lift (4px), icon scale (1.08x), glow shadow, status dots with dual animations
-  - [x] **Media Cards**: Queue progress bars, stats display with accent colors, expandable sections
-  - [x] **Services Page**: Hover row effects, inline status dots, **Dashboard toggle + Health Check toggle**, modal with form inputs
-  - [x] **Media Page**: Instance cards, queue lists, calendar views with smooth transitions
-  - [x] **Docker Page**: Sortable table, status badges, logs viewer with monospace font, stats bar with large numbers
-  - [x] **Widgets Page**: Grid layout, widget cards with shadow on hover, tabbed config panels, stats display
-  - [x] **Settings Page**: Tabbed interface (General, Users, Groups with sub-tabs, OIDC), "Apps Per Row" selector (2-10), form inputs with focus states
-  - [x] **Status Indicators**: Online (dual-pulse ring + border), offline (breathing animation), unknown (static)
-  - [x] **Form Elements**: Focus ring with accent color, hover state, improved toggles (350ms smooth animation)
-  - [x] **Modals**: Slide-up animation, glass background, 32px padding, clear title hierarchy
-  - [x] **Dark mode**: Per-accent accent-subtle variants (12% opacity), icon backgrounds (15%), nav active states with reduced glow
-  - [x] **Accessibility**: Full `@media (prefers-reduced-motion: reduce)` support across all animations
-
-### Phase 6 — Smart Dashboard & Services Controls ✓
-- [x] **Nginx Proxy Manager Widget** — token-based auth, proxy/cert monitoring
-- [x] **Smart Dashboard Grid** — 20-column layout, 10 apps per row, widgets 2×2 sized
-- [x] **Services Page Toggles** — Dashboard toggle (add/remove) + Health Check toggle (enable/disable)
-- [x] **Settings Update** — "Apps Per Row" selector (2-10 instead of pixel widths)
-
-### Phase 7 — Home Assistant ✓
-- [x] **Home Assistant integration page** — multi-instance management (admin CRUD + test connection)
-- [x] Entity browser modal — loads all HA states, grouped by domain, collapsible, with search
-- [x] Panel grid — DnD sortable entity cards with 30s live polling, toggle support
-- [x] Toggle domains: light, switch, input_boolean, automation, fan, media_player
-- [x] Label fallback chain: custom label → HA `friendly_name` → `entity_id`
-- [x] HA tokens stored server-side only — never exposed to the frontend
-- [x] Home Assistant Widget (widget system) — entity states in topbar/sidebar/dashboard
-
-### Phase 8 — Future
-- [ ] OIDC / SSO via voidauth or Authentik
+### Future
+- [ ] OIDC / SSO via voidauth or Authentik (user model already OIDC-ready)
 - [ ] Notification webhooks (Gotify / ntfy) on status change
-- [ ] Custom check intervals per service (backend scheduler)
 - [ ] Torrent Client Integration (qBittorrent, Transmission, Deluge)
-- [ ] More integrations (Immich, Jellyfin, Pi-hole, etc.)
-- [x] HA WebSocket for real-time state updates (replaces 30s polling)
+- [ ] More integrations (Immich, Jellyfin, Pi-hole, Unraid array)

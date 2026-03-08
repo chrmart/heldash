@@ -57,11 +57,22 @@ Coded by Claude.ai because iam to stupid to code but can wirte prompts lol
 **Home Assistant**
 - 🏠 Dedicated **Home Assistant** page — multi-instance support (add/edit/delete/test)
 - 🔍 Entity browser — loads all states from HA, grouped by domain with search filter
-- 🃏 Panel grid — entity cards with live state polling (30s), drag-and-drop reorder
+- 🃏 Panel grid — entity cards with real-time WebSocket updates, drag-and-drop reorder
 - 🔘 Toggle support — light, switch, input_boolean, automation, fan, media_player
 - 📡 State colors — on/open/unlocked/playing/home/active = green; off/closed/locked/… = gray
 - 🔒 Long-Lived Access Tokens stored server-side only — never exposed to the browser
 - 🏷️ Custom labels per panel — falls back to HA `friendly_name` → `entity_id`
+
+**TRaSH Guides Sync**
+- 📋 **TRaSH Guides integration** — sync custom formats and quality profiles for Radarr/Sonarr
+- 🔄 Three sync modes: **Auto** (apply immediately), **Notify** (review diff first), **Manual** (on demand)
+- 👁️ Change preview — diff view showing exactly what will be added, updated, or deprecated before applying
+- 🎚️ Per-format score overrides — set custom scores or disable individual formats per instance
+- 📉 Soft deprecation — formats removed from TRaSH get score 0, tracked in deprecated list, never hard-deleted
+- 🔧 Auto repair — daily drift detection corrects scores and conditions that diverged from TRaSH recommendations
+- 📥 Import from Arr — pull existing custom formats already in Radarr/Sonarr into HELDASH tracking
+- 📜 Sync audit log — per-instance history of every sync with status, duration, and change counts
+- ⚡ Incremental GitHub fetch — only downloads changed files (per-file SHA comparison), not the full repo
 
 **Widgets**
 - 🖥️ Server Status — live CPU, RAM, and disk usage with progress bars (Linux hosts)
@@ -201,7 +212,8 @@ Import it via Community Applications → Import to get a pre-filled container se
 - [x] **Nginx Proxy Manager Widget** — monitor proxies, certificates, expiry alerts
 - [x] **Smart Dashboard Grid** — 20-column layout, 10 apps per row, widgets 2×2 sized
 - [x] **Services Page Toggles** — one-click dashboard add/remove and health check toggle
-- [x] **Home Assistant Integration** — multi-instance, entity browser, panel grid, live polling, toggle support
+- [x] **Home Assistant Integration** — multi-instance, entity browser, panel grid, real-time WebSocket state updates, toggle support
+- [x] **TRaSH Guides Sync** — custom formats + quality profile sync for Radarr/Sonarr; notify/auto/manual modes; preview, overrides, repair, import, audit log
 - [ ] OIDC / SSO via voidauth or Authentik (UI prepared)
 - [ ] Torrent Client Integration (qBittorrent, Transmission, Deluge)
 - [ ] More integrations (Immich, Jellyfin, Emby, Pi-hole, etc.)

@@ -10,9 +10,10 @@
 6. [Docker](#docker)
 7. [Widgets](#widgets)
 8. [Home Assistant](#home-assistant)
-9. [Einstellungen](#einstellungen)
-10. [Design anpassen](#design-anpassen)
-11. [Benutzer-Account](#benutzer-account)
+9. [TRaSH Guides Sync](#trash-guides-sync)
+10. [Einstellungen](#einstellungen)
+11. [Design anpassen](#design-anpassen)
+12. [Benutzer-Account](#benutzer-account)
 
 ---
 
@@ -502,6 +503,73 @@ Jede Karte zeigt:
 - **Entfernen**: Hover → Papierkorb-Icon
 
 Die Zustände werden alle **30 Sekunden automatisch aktualisiert**.
+
+---
+
+## TRaSH Guides Sync
+
+Die **TRaSH Guides**-Seite synchronisiert Custom Formats und Quality Profiles von [trash-guides.info](https://trash-guides.info) direkt in Radarr- und Sonarr-Instanzen.
+
+> Diese Funktion ist nur für Admins zugänglich.
+
+### Was sind TRaSH Guides?
+
+TRaSH Guides ist eine Community-gepflegte Sammlung von Empfehlungen für Radarr und Sonarr — inklusive Custom Formats (z.B. HDR-Erkennung, Codec-Filter, Release-Group-Bewertungen) und vorkonfigurierten Quality Profiles mit empfohlenen Scores. HELDASH lädt diese Daten direkt von GitHub und hält die Instanzen automatisch aktuell.
+
+### Instanz konfigurieren
+
+Auf der TRaSH-Seite erscheinen alle Radarr- und Sonarr-Instanzen, die in HELDASH eingetragen sind. Nicht konfigurierte Instanzen werden unten als „Not yet configured" gelistet — dort auf **„Enable TRaSH sync"** klicken, um eine Instanz zu aktivieren.
+
+Über **„Configure"** lässt sich pro Instanz einstellen:
+
+| Feld | Beschreibung |
+|---|---|
+| **Enabled** | TRaSH-Sync für diese Instanz ein-/ausschalten |
+| **Quality Profile** | Welches TRaSH-Profil verwendet werden soll (z.B. „HD Bluray + WEB") |
+| **Sync Mode** | Wie Änderungen angewendet werden (siehe unten) |
+| **Sync Interval** | Wie viele Stunden zwischen automatischen Syncs (Standard: 24h) |
+
+### Sync-Modi
+
+| Modus | Verhalten |
+|---|---|
+| **Notify** | HELDASH berechnet Änderungen und zeigt sie zur Prüfung an — nichts wird ohne Bestätigung angewendet |
+| **Auto** | Änderungen werden automatisch angewendet, sobald GitHub-Updates erkannt werden |
+| **Manual** | Nur wenn man selbst auf „Sync" klickt — kein automatischer Sync |
+
+### Änderungen reviewen und anwenden (Notify-Modus)
+
+Wenn Änderungen vorhanden sind, erscheint oben im Instance-Panel der Button **„Review"**. Der Diff-Dialog zeigt:
+- Neu hinzugekommene Formats mit ihrem empfohlenen Score
+- Formats mit aktualisierten Conditions
+- Formats, die aus den TRaSH Guides entfernt wurden (werden als „deprecated" markiert, nicht gelöscht)
+
+Mit **„Apply Changes"** werden die Änderungen in Radarr/Sonarr übernommen.
+
+### Formats & Score-Overrides
+
+Im Tab **„Formats"** sieht man alle Custom Formats, die für die Instanz gelten:
+- **Toggle links**: Format in Radarr/Sonarr aktivieren/deaktivieren
+- **Score**: Empfohlener Wert wird angezeigt; daneben kann ein eigener Score eingetragen werden
+- **Filter**: Alle / Nur aktivierte / Nur überschriebene anzeigen
+
+Änderungen werden erst nach Klick auf **„Save overrides"** gespeichert.
+
+### Deprecated Formats
+
+Wenn TRaSH Guides ein Format entfernen, wird es in HELDASH als deprecated markiert (Score wird auf 0 gesetzt, Format bleibt in Radarr/Sonarr erhalten). Im Tab **„Deprecated"** sieht man alle solchen Formats und kann sie bei Bedarf vollständig löschen (entfernt das Format auch aus Radarr/Sonarr).
+
+### Sync Log
+
+Der Tab **„Sync Log"** zeigt die letzten Sync-Läufe mit Status, Dauer, Auslöser und Anzahl der Änderungen.
+
+### Import aus Arr
+
+Über **„Import from Arr"** lassen sich bestehende Custom Formats aus Radarr/Sonarr in das HELDASH-Tracking übernehmen — nützlich für Instanzen, die bereits vor der TRaSH-Integration Formats enthielten.
+
+### GitHub-Cache aktualisieren
+
+Oben rechts gibt es den Button **„Refresh from GitHub"** — dieser lädt die neuesten TRaSH-Daten sofort von GitHub, unabhängig vom automatischen Intervall.
 
 ---
 
