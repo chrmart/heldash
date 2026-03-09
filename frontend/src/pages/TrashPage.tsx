@@ -1172,13 +1172,11 @@ function ProfileEditor({ instanceId, profileCfg, profileName, isSyncing, isAdmin
 
 interface BrowseFormatsModalProps {
   instanceId: string
-  profileSlugs: string[]
   onClose: () => void
 }
 
-function BrowseFormatsModal({ instanceId, profileSlugs, onClose }: BrowseFormatsModalProps) {
-  const { allFormats, loadAllFormats, assignUserFormat, removeUserFormat } = useTrashStore()
-  const [assigning, setAssigning] = useState<string | null>(null)
+function BrowseFormatsModal({ instanceId, onClose }: BrowseFormatsModalProps) {
+  const { allFormats, loadAllFormats, removeUserFormat } = useTrashStore()
   const [deleting, setDeleting] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -1325,23 +1323,10 @@ function BrowseFormatsModal({ instanceId, profileSlugs, onClose }: BrowseFormats
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                             {f.deprecated && <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: '#f59e0b22', color: '#f59e0b' }}>deprecated</span>}
                             <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', fontWeight: 600 }}>custom</span>
-                            {profileSlugs.length > 0 && (
-                              <select
-                                className="form-input"
-                                value={f.userProfileSlug ?? ''}
-                                disabled={assigning === f.slug}
-                                onChange={async e => {
-                                  const val = e.target.value || null
-                                  setAssigning(f.slug)
-                                  try { await assignUserFormat(instanceId, f.slug, val) }
-                                  finally { setAssigning(null) }
-                                }}
-                                style={{ fontSize: 11, padding: '3px 6px', minWidth: 130 }}
-                              >
-                                <option value="">— unlinked —</option>
-                                {profileSlugs.map(s => <option key={s} value={s}>{s}</option>)}
-                              </select>
-                            )}
+                            {f.arrFormatId !== null
+                              ? <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>ID {f.arrFormatId}</span>
+                              : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>pending</span>
+                            }
                             <button
                               className="btn btn-ghost btn-icon"
                               title="Delete this user custom format"
@@ -1607,7 +1592,7 @@ function InstanceEditor({ config, instanceName, isAdmin }: InstanceEditorProps) 
         />
       )}
       {showBrowse && (
-        <BrowseFormatsModal instanceId={id} profileSlugs={profileConfigs.map(p => p.profile_slug)} onClose={() => setShowBrowse(false)} />
+        <BrowseFormatsModal instanceId={id} onClose={() => setShowBrowse(false)} />
       )}
     </div>
   )

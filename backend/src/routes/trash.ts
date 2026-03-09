@@ -228,6 +228,11 @@ async function runSync(
       const changed = await fetchChangedFiles(commitInfo)
       if (changed.length > 0) {
         const { formats, trashIdToSlug } = parseCustomFormats(changed, commitInfo.sha, commitInfo.commitDate)
+        // Supplement trashIdToSlug with already-cached CFs so profiles can resolve
+        // trash_id references even when only profile files (not CF files) were changed.
+        for (const cf of loadCachedFormats(arrType)) {
+          if (cf.trashId && !trashIdToSlug.has(cf.trashId)) trashIdToSlug.set(cf.trashId, cf.slug)
+        }
         const profiles = parseQualityProfiles(changed, trashIdToSlug, commitInfo.sha, commitInfo.commitDate)
         persistToCache(formats, profiles, arrType)
         app.log.info({ instanceId, formatsUpdated: formats.length, profilesUpdated: profiles.length }, 'trash: cache updated')
@@ -537,14 +542,19 @@ export async function trashRoutes(app: FastifyInstance) {
 
       let formats = loadCachedFormats(cfg.arr_type as 'radarr' | 'sonarr')
 
-      // Filter to formats in the requested profile
+      // Filter to formats in the requested profile.
+      // Only apply the filter when formatScores is non-empty — an empty array means
+      // the cache was built by an incremental fetch that only saw profile files (not CF files)
+      // and therefore couldn't resolve trash_id → slug mappings. In that case we fall back
+      // to returning all TRaSH formats so the ProfileEditor always has data to work with.
       if (requestedProfileSlug) {
         const cachedProfiles = loadCachedProfiles(cfg.arr_type as 'radarr' | 'sonarr')
         const prof = cachedProfiles.find(p => p.slug === requestedProfileSlug)
-        if (prof) {
+        if (prof && prof.formatScores.length > 0) {
           const slugSet = new Set(prof.formatScores.map(fs => fs.formatSlug))
           formats = formats.filter(f => slugSet.has(f.slug))
         }
+        // if prof not found or formatScores empty: return all formats as safe fallback
       }
 
       const overrides = db.prepare(
