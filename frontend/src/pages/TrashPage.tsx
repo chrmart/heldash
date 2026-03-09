@@ -68,9 +68,14 @@ function ProfileConfigModal({ instanceId, existing, availableProfiles, alreadyCo
   const [loadingFormats, setLoadingFormats] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // step 2 state
+  // step 2: TRaSH formats
   const [setupFormats, setSetupFormats] = useState<TrashFormatRow[]>([])
   const [formatSetup, setFormatSetup] = useState<Record<string, FormatSetup>>({})
+  // step 2: user custom formats
+  const [allUserFormats, setAllUserFormats] = useState<TrashFormatRow[]>([])
+  const [selectedUser, setSelectedUser] = useState<Set<string>>(new Set())
+  const [userSetup, setUserSetup] = useState<Record<string, FormatSetup>>({})
+
   const [fmtSearch, setFmtSearch] = useState('')
 
   useEffect(() => { loadProfiles(instanceId).catch(() => {}) }, [instanceId])
@@ -82,12 +87,24 @@ function ProfileConfigModal({ instanceId, existing, availableProfiles, alreadyCo
     setError(null)
     setLoadingFormats(true)
     try {
-      const rows = await api.trash.instances.customFormats(instanceId, profileSlug)
-      const trashOnly = rows.filter(f => !f.isUserFormat)
+      // fetch TRaSH formats for this profile + all user custom formats for the instance
+      const [profileRows, allRows] = await Promise.all([
+        api.trash.instances.customFormats(instanceId, profileSlug),
+        api.trash.instances.customFormats(instanceId),
+      ])
+      const trashOnly = profileRows.filter(f => !f.isUserFormat)
+      const userOnly = allRows.filter(f => f.isUserFormat)
       setSetupFormats(trashOnly)
+      setAllUserFormats(userOnly)
       const defaults: Record<string, FormatSetup> = {}
       for (const f of trashOnly) defaults[f.slug] = { score: String(f.recommendedScore), enabled: true }
       setFormatSetup(defaults)
+      // pre-select user formats already linked to this profile
+      const preSelected = new Set(userOnly.filter(f => f.userProfileSlug === profileSlug).map(f => f.slug))
+      setSelectedUser(preSelected)
+      const userDefaults: Record<string, FormatSetup> = {}
+      for (const f of userOnly) userDefaults[f.slug] = { score: String(f.score), enabled: f.enabled }
+      setUserSetup(userDefaults)
       setStep(2)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load formats')
@@ -103,19 +120,32 @@ function ProfileConfigModal({ instanceId, existing, availableProfiles, alreadyCo
         await updateProfileConfig(instanceId, existing!.profile_slug, { sync_mode: syncMode, sync_interval_hours: intervalHours, enabled })
       } else {
         await addProfileConfig(instanceId, { profile_slug: profileSlug, sync_mode: syncMode, sync_interval_hours: intervalHours, enabled })
-        // save overrides for any format where score != recommended or enabled = false
+
+        // TRaSH format overrides — only for non-default values
         const overrides = setupFormats
-          .filter(f => {
-            const s = formatSetup[f.slug]
-            return s && (String(f.recommendedScore) !== s.score || !s.enabled)
+          .filter(f => { const s = formatSetup[f.slug]; return s && (s.score !== String(f.recommendedScore) || !s.enabled) })
+          .map(f => { const s = formatSetup[f.slug]; return { slug: f.slug, score: Number(s.score) || 0, enabled: s.enabled, excluded: false } })
+        if (overrides.length > 0) await saveOverrides(instanceId, profileSlug, overrides)
+
+        // user custom formats — assign selected ones to this profile with configured score
+        await Promise.all(
+          allUserFormats.map(f => {
+            const shouldLink = selectedUser.has(f.slug)
+            const currentlyLinked = f.userProfileSlug === profileSlug
+            if (shouldLink) {
+              const us = userSetup[f.slug] ?? { score: String(f.score), enabled: f.enabled }
+              return api.trash.instances.patchUserFormat(instanceId, f.slug, {
+                profile_slug: profileSlug,
+                score: Number(us.score) || 0,
+                enabled: us.enabled,
+              })
+            } else if (currentlyLinked) {
+              // was pre-selected but user deselected → unlink
+              return api.trash.instances.patchUserFormat(instanceId, f.slug, { profile_slug: null })
+            }
+            return Promise.resolve()
           })
-          .map(f => {
-            const s = formatSetup[f.slug]
-            return { slug: f.slug, score: Number(s.score) || 0, enabled: s.enabled, excluded: false }
-          })
-        if (overrides.length > 0) {
-          await saveOverrides(instanceId, profileSlug, overrides)
-        }
+        )
       }
       onClose()
     } catch (e: unknown) {
@@ -125,18 +155,70 @@ function ProfileConfigModal({ instanceId, existing, availableProfiles, alreadyCo
     }
   }
 
-  const visibleFormats = setupFormats.filter(f =>
-    !fmtSearch || f.name.toLowerCase().includes(fmtSearch.toLowerCase()) || f.slug.includes(fmtSearch.toLowerCase())
-  )
+  const q = fmtSearch.toLowerCase()
+  const visibleTrash = setupFormats.filter(f => !q || f.name.toLowerCase().includes(q) || f.slug.includes(q))
+  const visibleUser = allUserFormats.filter(f => !q || f.name.toLowerCase().includes(q) || f.slug.includes(q))
   const allEnabled = setupFormats.every(f => formatSetup[f.slug]?.enabled !== false)
 
   function toggleAll() {
     const next = !allEnabled
-    setFormatSetup(prev => {
-      const copy = { ...prev }
-      for (const f of setupFormats) copy[f.slug] = { ...copy[f.slug], enabled: next }
-      return copy
-    })
+    setFormatSetup(prev => { const c = { ...prev }; for (const f of setupFormats) c[f.slug] = { ...c[f.slug], enabled: next }; return c })
+  }
+
+  function renderFormatRow(f: TrashFormatRow, isUser: boolean) {
+    if (isUser) {
+      const included = selectedUser.has(f.slug)
+      const us = userSetup[f.slug] ?? { score: String(f.score), enabled: f.enabled }
+      return (
+        <div key={f.slug} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 90px 56px', gap: 8, alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid var(--border)', opacity: included ? 1 : 0.4 }}>
+          <input
+            type="checkbox"
+            checked={included}
+            onChange={() => setSelectedUser(prev => { const n = new Set(prev); included ? n.delete(f.slug) : n.add(f.slug); return n })}
+            style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+          />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              {f.userProfileSlug ? `linked → ${f.userProfileSlug}` : 'unlinked'}
+            </div>
+          </div>
+          <input
+            type="number"
+            value={us.score}
+            disabled={!included}
+            onChange={e => setUserSetup(prev => ({ ...prev, [f.slug]: { ...us, score: e.target.value } }))}
+            style={{ width: '100%', padding: '4px 8px', fontSize: 13, textAlign: 'right', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--glass-bg)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', opacity: included ? 1 : 0.4 }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <label className="form-toggle" style={{ transform: 'scale(0.85)' }}>
+              <input type="checkbox" checked={us.enabled} disabled={!included} onChange={e => setUserSetup(prev => ({ ...prev, [f.slug]: { ...us, enabled: e.target.checked } }))} />
+            </label>
+          </div>
+        </div>
+      )
+    }
+    const s = formatSetup[f.slug] ?? { score: String(f.recommendedScore), enabled: true }
+    const scoreChanged = s.score !== String(f.recommendedScore)
+    return (
+      <div key={f.slug} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 56px', gap: 8, alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid var(--border)', opacity: s.enabled ? 1 : 0.45 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>rec: {f.recommendedScore}</div>
+        </div>
+        <input
+          type="number"
+          value={s.score}
+          onChange={e => setFormatSetup(prev => ({ ...prev, [f.slug]: { ...s, score: e.target.value } }))}
+          style={{ width: '100%', padding: '4px 8px', fontSize: 13, textAlign: 'right', border: `1px solid ${scoreChanged ? 'rgba(var(--accent-rgb),0.5)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', background: 'var(--glass-bg)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <label className="form-toggle" style={{ transform: 'scale(0.85)' }}>
+            <input type="checkbox" checked={s.enabled} onChange={e => setFormatSetup(prev => ({ ...prev, [f.slug]: { ...s, enabled: e.target.checked } }))} />
+          </label>
+        </div>
+      </div>
+    )
   }
 
   return createPortal(
@@ -157,17 +239,11 @@ function ProfileConfigModal({ instanceId, existing, availableProfiles, alreadyCo
       >
         <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}><X size={16} /></button>
 
-        {/* step indicator */}
         {!isEdit && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
             {(['Settings', 'Custom Formats'] as const).map((label, i) => (
               <React.Fragment key={label}>
-                <span style={{
-                  fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99,
-                  background: step === i + 1 ? 'rgba(var(--accent-rgb),0.15)' : 'var(--glass-bg)',
-                  color: step === i + 1 ? 'var(--accent)' : 'var(--text-muted)',
-                  border: `1px solid ${step === i + 1 ? 'rgba(var(--accent-rgb),0.3)' : 'var(--border)'}`,
-                }}>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: step === i + 1 ? 'rgba(var(--accent-rgb),0.15)' : 'var(--glass-bg)', color: step === i + 1 ? 'var(--accent)' : 'var(--text-muted)', border: `1px solid ${step === i + 1 ? 'rgba(var(--accent-rgb),0.3)' : 'var(--border)'}` }}>
                   {i + 1}. {label}
                 </span>
                 {i === 0 && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>›</span>}
@@ -177,13 +253,15 @@ function ProfileConfigModal({ instanceId, existing, availableProfiles, alreadyCo
         )}
 
         <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4, color: 'var(--text-primary)' }}>
-          {isEdit ? 'Edit Profile' : step === 1 ? 'Add Profile' : `${availableProfiles.find(p => p.slug === profileSlug)?.name ?? profileSlug}`}
+          {isEdit ? 'Edit Profile' : step === 1 ? 'Add Profile' : (availableProfiles.find(p => p.slug === profileSlug)?.name ?? profileSlug)}
         </h2>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: step === 2 ? 16 : 28, fontFamily: 'var(--font-mono)' }}>
-          {step === 2 ? `${setupFormats.length} TRaSH formats · adjust scores before adding` : instanceId}
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: step === 2 ? 14 : 28, fontFamily: 'var(--font-mono)' }}>
+          {step === 2
+            ? `${setupFormats.length} TRaSH formats · ${allUserFormats.length} user custom formats`
+            : instanceId}
         </p>
 
-        {/* ── Step 1: Settings ── */}
+        {/* ── Step 1 ── */}
         {step === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {!isEdit && (
@@ -214,73 +292,61 @@ function ProfileConfigModal({ instanceId, existing, availableProfiles, alreadyCo
           </div>
         )}
 
-        {/* ── Step 2: Format setup ── */}
+        {/* ── Step 2 ── */}
         {step === 2 && (
           <>
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <input
-                className="form-input"
-                placeholder="Search formats…"
-                value={fmtSearch}
-                onChange={e => setFmtSearch(e.target.value)}
-                style={{ flex: 1, fontSize: 13, padding: '8px 12px' }}
-                autoFocus
-              />
+              <input className="form-input" placeholder="Search formats…" value={fmtSearch} onChange={e => setFmtSearch(e.target.value)} style={{ flex: 1, fontSize: 13, padding: '8px 12px' }} autoFocus />
               <button className="btn btn-ghost" onClick={toggleAll} style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
                 {allEnabled ? 'Disable all' : 'Enable all'}
               </button>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
-              {/* header row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 56px', gap: 8, padding: '6px 12px', background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 1 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Format</span>
+              {/* TRaSH formats section */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 56px', gap: 8, padding: '6px 12px', background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 2 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TRaSH formats · {visibleTrash.length}</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Score</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>On</span>
               </div>
+              {visibleTrash.length === 0
+                ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>{setupFormats.length === 0 ? 'No TRaSH formats in this profile.' : 'No formats match.'}</div>
+                : visibleTrash.map(f => renderFormatRow(f, false))
+              }
 
-              {visibleFormats.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
-                  {setupFormats.length === 0 ? 'No TRaSH formats in this profile.' : 'No formats match your search.'}
-                </div>
-              ) : visibleFormats.map(f => {
-                const s = formatSetup[f.slug] ?? { score: String(f.recommendedScore), enabled: true }
-                const scoreChanged = s.score !== String(f.recommendedScore)
-                return (
-                  <div key={f.slug} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 56px', gap: 8, alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid var(--border)', opacity: s.enabled ? 1 : 0.45 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>rec: {f.recommendedScore}</div>
-                    </div>
-                    <input
-                      type="number"
-                      value={s.score}
-                      onChange={e => setFormatSetup(prev => ({ ...prev, [f.slug]: { ...s, score: e.target.value } }))}
-                      style={{
-                        width: '100%', padding: '4px 8px', fontSize: 13, textAlign: 'right',
-                        border: `1px solid ${scoreChanged ? 'rgba(var(--accent-rgb),0.5)' : 'var(--border)'}`,
-                        borderRadius: 'var(--radius-sm)', background: 'var(--glass-bg)', color: 'var(--text-primary)',
-                        fontFamily: 'var(--font-mono)',
-                      }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      <label className="form-toggle" style={{ transform: 'scale(0.85)' }}>
-                        <input type="checkbox" checked={s.enabled} onChange={e => setFormatSetup(prev => ({ ...prev, [f.slug]: { ...s, enabled: e.target.checked } }))} />
-                      </label>
-                    </div>
+              {/* User custom formats section */}
+              {allUserFormats.length > 0 && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr 90px 56px', gap: 8, padding: '6px 12px', background: 'var(--glass-bg)', borderTop: '2px solid var(--border)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 33, zIndex: 2 }}>
+                    <span />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      User custom · {visibleUser.length}
+                      <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 6, color: 'var(--accent)' }}>({selectedUser.size} selected)</span>
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Score</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>On</span>
                   </div>
-                )
-              })}
+                  {visibleUser.length === 0
+                    ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>No user formats match.</div>
+                    : visibleUser.map(f => renderFormatRow(f, true))
+                  }
+                </>
+              )}
             </div>
 
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-              {setupFormats.filter(f => formatSetup[f.slug]?.enabled !== false).length} of {setupFormats.length} formats enabled ·{' '}
-              {setupFormats.filter(f => formatSetup[f.slug] && formatSetup[f.slug].score !== String(f.recommendedScore)).length} scores overridden
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+              <span>
+                TRaSH: {setupFormats.filter(f => formatSetup[f.slug]?.enabled !== false).length}/{setupFormats.length} enabled ·{' '}
+                {setupFormats.filter(f => formatSetup[f.slug] && formatSetup[f.slug].score !== String(f.recommendedScore)).length} overridden
+              </span>
+              {allUserFormats.length > 0 && (
+                <span style={{ color: 'var(--accent)' }}>{selectedUser.size} user formats included</span>
+              )}
             </div>
           </>
         )}
 
-        {error && <div className="setup-error" style={{ marginTop: 16 }}>{error}</div>}
+        {error && <div className="setup-error" style={{ marginTop: 12 }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
           {step === 2 && !isEdit ? (

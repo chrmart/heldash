@@ -291,7 +291,7 @@ export const api = {
         const qs = profileSlug ? `?profile_slug=${encodeURIComponent(profileSlug)}` : ''
         return req<void>(`/trash/instances/${instanceId}/user-formats/${encodeURIComponent(slug)}${qs}`, { method: 'DELETE' })
       },
-      patchUserFormat: (instanceId: string, slug: string, data: { profile_slug: string | null }) =>
+      patchUserFormat: (instanceId: string, slug: string, data: { profile_slug?: string | null; score?: number; enabled?: boolean }) =>
         req<void>(`/trash/instances/${instanceId}/user-formats/${encodeURIComponent(slug)}`, { method: 'PATCH', body: JSON.stringify(data) }),
     },
     github: {

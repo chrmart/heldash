@@ -882,18 +882,23 @@ export async function trashRoutes(app: FastifyInstance) {
     },
   )
 
-  // ── PATCH /api/trash/instances/:id/user-formats/:slug — assign to profile ────
+  // ── PATCH /api/trash/instances/:id/user-formats/:slug — assign to profile / update score ──
 
-  interface PatchUserFormatBody { profile_slug: string | null }
+  interface PatchUserFormatBody { profile_slug?: string | null; score?: number; enabled?: boolean }
 
   app.patch<{ Params: { id: string; slug: string }; Body: PatchUserFormatBody }>(
     '/api/trash/instances/:id/user-formats/:slug',
     { preHandler: [app.requireAdmin] },
     async (req, reply) => {
       const { id, slug } = req.params
-      const result = db.prepare(
-        'UPDATE trash_custom_formats SET profile_slug = ?, updated_at = datetime(\'now\') WHERE instance_id = ? AND slug = ?'
-      ).run(req.body.profile_slug, id, slug)
+      const { profile_slug, score, enabled } = req.body
+      const sets: string[] = ["updated_at = datetime('now')"]
+      const vals: unknown[] = []
+      if (profile_slug !== undefined) { sets.push('profile_slug = ?'); vals.push(profile_slug) }
+      if (score !== undefined) { sets.push('score = ?'); vals.push(score) }
+      if (enabled !== undefined) { sets.push('enabled = ?'); vals.push(enabled ? 1 : 0) }
+      vals.push(id, slug)
+      const result = db.prepare(`UPDATE trash_custom_formats SET ${sets.join(', ')} WHERE instance_id = ? AND slug = ?`).run(...vals)
       if (result.changes === 0) return reply.status(404).send({ error: 'User custom format not found' })
       return reply.status(204).send()
     },
