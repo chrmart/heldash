@@ -54,6 +54,7 @@ interface TrashState {
   deleteDeprecated: (instanceId: string, slug: string) => Promise<void>
   importFormats: (instanceId: string, formatIds: number[], profileSlug?: string) => Promise<{ imported: number }>
   removeUserFormat: (instanceId: string, slug: string, profileSlug?: string) => Promise<void>
+  assignUserFormat: (instanceId: string, slug: string, profileSlug: string | null) => Promise<void>
   forceFetchGithub: () => Promise<{ sha: string; filesUpdated: number; formatsUpdated: number }>
 }
 
@@ -167,6 +168,18 @@ export const useTrashStore = create<TrashState>((set, get) => ({
 
   removeUserFormat: async (instanceId, slug, profileSlug) => {
     await api.trash.instances.removeUserFormat(instanceId, slug, profileSlug)
+  },
+
+  assignUserFormat: async (instanceId, slug, profileSlug) => {
+    await api.trash.instances.patchUserFormat(instanceId, slug, { profile_slug: profileSlug })
+    const { loadAllFormats, loadFormats, formats } = get()
+    await loadAllFormats(instanceId)
+    if (profileSlug) await loadFormats(instanceId, profileSlug)
+    // also reload old profile if the format was previously in one
+    const oldProfile = Object.entries(formats)
+      .find(([key, rows]) => key.startsWith(instanceId + ':') && rows.some(r => r.slug === slug))?.[0]
+      ?.split(':')[1]
+    if (oldProfile && oldProfile !== profileSlug) await loadFormats(instanceId, oldProfile)
   },
 
   forceFetchGithub: async () => {

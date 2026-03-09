@@ -589,6 +589,7 @@ export async function trashRoutes(app: FastifyInstance) {
         deprecated: false,
         arrFormatId: r.arr_format_id,
         isUserFormat: true,
+        userProfileSlug: r.profile_slug,
       }))
 
       return [...trashRows, ...userRows]
@@ -877,6 +878,23 @@ export async function trashRoutes(app: FastifyInstance) {
         db.prepare('DELETE FROM trash_custom_formats WHERE instance_id = ? AND slug = ?')
           .run(id, slug)
       }
+      return reply.status(204).send()
+    },
+  )
+
+  // ── PATCH /api/trash/instances/:id/user-formats/:slug — assign to profile ────
+
+  interface PatchUserFormatBody { profile_slug: string | null }
+
+  app.patch<{ Params: { id: string; slug: string }; Body: PatchUserFormatBody }>(
+    '/api/trash/instances/:id/user-formats/:slug',
+    { preHandler: [app.requireAdmin] },
+    async (req, reply) => {
+      const { id, slug } = req.params
+      const result = db.prepare(
+        'UPDATE trash_custom_formats SET profile_slug = ?, updated_at = datetime(\'now\') WHERE instance_id = ? AND slug = ?'
+      ).run(req.body.profile_slug, id, slug)
+      if (result.changes === 0) return reply.status(404).send({ error: 'User custom format not found' })
       return reply.status(204).send()
     },
   )

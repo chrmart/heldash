@@ -291,6 +291,8 @@ export const api = {
         const qs = profileSlug ? `?profile_slug=${encodeURIComponent(profileSlug)}` : ''
         return req<void>(`/trash/instances/${instanceId}/user-formats/${encodeURIComponent(slug)}${qs}`, { method: 'DELETE' })
       },
+      patchUserFormat: (instanceId: string, slug: string, data: { profile_slug: string | null }) =>
+        req<void>(`/trash/instances/${instanceId}/user-formats/${encodeURIComponent(slug)}`, { method: 'PATCH', body: JSON.stringify(data) }),
     },
     github: {
       forceFetch: () => req<{ sha: string; filesUpdated: number; formatsUpdated: number }>('/trash/github/fetch', { method: 'POST', body: JSON.stringify({}) }),

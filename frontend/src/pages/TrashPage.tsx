@@ -478,6 +478,8 @@ function ProfileEditor({ instanceId, profileCfg, profileName, isSyncing, isAdmin
   const [showImport, setShowImport] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [editProfileCfg, setEditProfileCfg] = useState(false)
+  const [selectedUserFormats, setSelectedUserFormats] = useState<Set<string>>(new Set())
+  const [deletingUserFormats, setDeletingUserFormats] = useState(false)
 
   const isDirty = Object.keys(edits).length > 0
   const hasPendingPreview = myPreview !== null && myPreview !== undefined
@@ -487,6 +489,7 @@ function ProfileEditor({ instanceId, profileCfg, profileName, isSyncing, isAdmin
     setEdits({})
     setSearch('')
     setFilter('all')
+    setSelectedUserFormats(new Set())
     setLoadingFormats(true)
     Promise.all([
       loadFormats(instanceId, profileSlug),
@@ -797,37 +800,63 @@ function ProfileEditor({ instanceId, profileCfg, profileName, isSyncing, isAdmin
         {/* User custom formats */}
         {visibleUser.length > 0 && (
           <div>
-            <div style={{ padding: '8px 16px 4px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)', borderTop: visibleTrash.length > 0 ? '2px solid var(--border)' : undefined, position: 'sticky', top: 0, zIndex: 1 }}>
-              User custom formats · {visibleUser.length}
-            </div>
-            {visibleUser.map(f => (
-              <div key={f.slug} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{f.slug}</div>
-                </div>
-                <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', flexShrink: 0, fontWeight: 600 }}>custom</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
-                  {f.arrFormatId !== null ? `Arr ID: ${f.arrFormatId}` : 'pending creation'}
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>
-                  score: {f.score}
-                </span>
-                {isAdmin && (
-                  <button
-                    className="btn btn-ghost btn-icon"
-                    title="Remove from this profile"
-                    style={{ padding: 4, flexShrink: 0, color: 'var(--text-muted)' }}
-                    onClick={async () => {
-                      await removeUserFormat(instanceId, f.slug, profileSlug)
+            <div style={{ padding: '6px 16px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)', borderTop: visibleTrash.length > 0 ? '2px solid var(--border)' : undefined, position: 'sticky', top: 0, zIndex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ flex: 1 }}>User custom formats · {visibleUser.length}</span>
+              {isAdmin && selectedUserFormats.size > 0 && (
+                <button
+                  className="btn btn-ghost"
+                  disabled={deletingUserFormats}
+                  style={{ fontSize: 11, padding: '3px 10px', color: '#f87171', borderColor: '#f8717144', display: 'flex', alignItems: 'center', gap: 4 }}
+                  onClick={async () => {
+                    setDeletingUserFormats(true)
+                    try {
+                      await Promise.all(
+                        Array.from(selectedUserFormats).map(slug =>
+                          removeUserFormat(instanceId, slug, profileSlug)
+                        )
+                      )
+                      setSelectedUserFormats(new Set())
                       await Promise.all([loadFormats(instanceId, profileSlug), loadAllFormats(instanceId)])
-                    }}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            ))}
+                    } finally { setDeletingUserFormats(false) }
+                  }}
+                >
+                  <Trash2 size={11} />
+                  Delete selected ({selectedUserFormats.size})
+                </button>
+              )}
+            </div>
+            {visibleUser.map(f => {
+              const checked = selectedUserFormats.has(f.slug)
+              return (
+                <div key={f.slug} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px', borderBottom: '1px solid var(--border)', background: checked ? 'rgba(var(--accent-rgb),0.04)' : undefined }}>
+                  {isAdmin && (
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedUserFormats(prev => {
+                          const next = new Set(prev)
+                          if (next.has(f.slug)) next.delete(f.slug); else next.add(f.slug)
+                          return next
+                        })
+                      }}
+                      style={{ flexShrink: 0, accentColor: 'var(--accent)', cursor: 'pointer' }}
+                    />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{f.slug}</div>
+                  </div>
+                  <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', flexShrink: 0, fontWeight: 600 }}>custom</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                    {f.arrFormatId !== null ? `Arr ID: ${f.arrFormatId}` : 'pending creation'}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>
+                    score: {f.score}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -899,11 +928,13 @@ function ProfileEditor({ instanceId, profileCfg, profileName, isSyncing, isAdmin
 
 interface BrowseFormatsModalProps {
   instanceId: string
+  profileSlugs: string[]
   onClose: () => void
 }
 
-function BrowseFormatsModal({ instanceId, onClose }: BrowseFormatsModalProps) {
-  const { allFormats, loadAllFormats } = useTrashStore()
+function BrowseFormatsModal({ instanceId, profileSlugs, onClose }: BrowseFormatsModalProps) {
+  const { allFormats, loadAllFormats, assignUserFormat } = useTrashStore()
+  const [assigning, setAssigning] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'trash' | 'custom'>('all')
   const [loading, setLoading] = useState(false)
@@ -1027,9 +1058,23 @@ function BrowseFormatsModal({ instanceId, onClose }: BrowseFormatsModalProps) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                         {f.deprecated && <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: '#f59e0b22', color: '#f59e0b' }}>deprecated</span>}
                         <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', fontWeight: 600 }}>custom</span>
-                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-                          rec: {f.recommendedScore}
-                        </span>
+                        {profileSlugs.length > 0 && (
+                          <select
+                            className="form-input"
+                            value={f.userProfileSlug ?? ''}
+                            disabled={assigning === f.slug}
+                            onChange={async e => {
+                              const val = e.target.value || null
+                              setAssigning(f.slug)
+                              try { await assignUserFormat(instanceId, f.slug, val) }
+                              finally { setAssigning(null) }
+                            }}
+                            style={{ fontSize: 11, padding: '3px 6px', minWidth: 130 }}
+                          >
+                            <option value="">— unlinked —</option>
+                            {profileSlugs.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1285,7 +1330,7 @@ function InstanceEditor({ config, instanceName, isAdmin }: InstanceEditorProps) 
         />
       )}
       {showBrowse && (
-        <BrowseFormatsModal instanceId={id} onClose={() => setShowBrowse(false)} />
+        <BrowseFormatsModal instanceId={id} profileSlugs={profileConfigs.map(p => p.profile_slug)} onClose={() => setShowBrowse(false)} />
       )}
     </div>
   )

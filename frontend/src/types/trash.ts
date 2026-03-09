@@ -47,6 +47,7 @@ export interface TrashFormatRow {
   deprecated: boolean
   arrFormatId: number | null
   isUserFormat?: boolean  // true = user-imported custom format (conditions never overwritten)
+  userProfileSlug?: string | null  // for user custom formats: which profile they're linked to
 }
 
 export interface TrashUserOverride {
