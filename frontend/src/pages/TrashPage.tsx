@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   RefreshCw, Settings2, Check, X, Loader,
   AlertTriangle, Trash2, Download, GitCommit, CheckCircle,
-  XCircle, Info, Play, Plus, Save, ChevronDown, Search,
+  XCircle, Info, Play, Plus, Save, ChevronDown, Search, SlidersHorizontal,
 } from 'lucide-react'
 import { api } from '../api'
 import { useTrashStore } from '../store/useTrashStore'
@@ -381,6 +381,259 @@ function ProfileConfigModal({ instanceId, existing, availableProfiles, alreadyCo
   )
 }
 
+// ── Edit Formats Modal ────────────────────────────────────────────────────────
+//
+// Lets the user edit format scores/enabled/excluded for an EXISTING profile,
+// and manage which user custom formats are assigned to it.
+
+interface EditFormatsModalProps {
+  instanceId: string
+  profileSlug: string
+  profileName: string
+  currentFormats: TrashFormatRow[]   // already-loaded profile formats (from store)
+  onClose: () => void
+}
+
+function EditFormatsModal({ instanceId, profileSlug, profileName, currentFormats, onClose }: EditFormatsModalProps) {
+  const { saveOverrides, loadFormats } = useTrashStore()
+
+  // all = TRaSH + user custom (unfiltered)
+  const [allRows, setAllRows] = useState<TrashFormatRow[]>([])
+  const [loadingFormats, setLoadingFormats] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [fmtSearch, setFmtSearch] = useState('')
+
+  // TRaSH: score + enabled keyed by slug (pre-filled from currentFormats)
+  const [formatSetup, setFormatSetup] = useState<Record<string, FormatSetup>>({})
+  // User custom: selected = assigned to this profile; setup = score/enabled
+  const [selectedUser, setSelectedUser] = useState<Set<string>>(new Set())
+  const [userSetup, setUserSetup] = useState<Record<string, FormatSetup>>({})
+
+  useEffect(() => {
+    api.trash.instances.customFormats(instanceId).then(rows => {
+      setAllRows(rows)
+      const trashOnly = rows.filter(f => !f.isUserFormat)
+      const userOnly = rows.filter(f => f.isUserFormat)
+
+      // Pre-fill TRaSH formats from current profile state
+      const currentBySlug = Object.fromEntries(currentFormats.map(f => [f.slug, f]))
+      const defaults: Record<string, FormatSetup> = {}
+      for (const f of trashOnly) {
+        const cur = currentBySlug[f.slug]
+        defaults[f.slug] = cur
+          ? { score: String(cur.score), enabled: cur.enabled }
+          : { score: String(f.recommendedScore), enabled: true }
+      }
+      setFormatSetup(defaults)
+
+      // Pre-select user formats already linked to this profile
+      const preSelected = new Set(userOnly.filter(f => f.userProfileSlug === profileSlug).map(f => f.slug))
+      setSelectedUser(preSelected)
+      const userDefaults: Record<string, FormatSetup> = {}
+      for (const f of userOnly) userDefaults[f.slug] = { score: String(f.score), enabled: f.enabled }
+      setUserSetup(userDefaults)
+    }).catch(e => setError(e instanceof Error ? e.message : 'Failed to load formats'))
+      .finally(() => setLoadingFormats(false))
+  }, [instanceId, profileSlug])
+
+  const trashFormats = allRows.filter(f => !f.isUserFormat)
+  const userFormats = allRows.filter(f => f.isUserFormat)
+
+  const q = fmtSearch.toLowerCase()
+  const visibleTrash = trashFormats.filter(f => !q || f.name.toLowerCase().includes(q) || f.slug.includes(q))
+  const visibleUser = userFormats.filter(f => !q || f.name.toLowerCase().includes(q) || f.slug.includes(q))
+  const allEnabled = trashFormats.every(f => formatSetup[f.slug]?.enabled !== false)
+
+  function toggleAll() {
+    const next = !allEnabled
+    setFormatSetup(prev => { const c = { ...prev }; for (const f of trashFormats) c[f.slug] = { ...c[f.slug], enabled: next }; return c })
+  }
+
+  async function save() {
+    setSaving(true); setError(null)
+    try {
+      // TRaSH format overrides
+      const overrides = trashFormats.map(f => {
+        const s = formatSetup[f.slug] ?? { score: String(f.recommendedScore), enabled: true }
+        return { slug: f.slug, score: Number(s.score) || 0, enabled: s.enabled, excluded: false }
+      })
+      if (overrides.length > 0) await saveOverrides(instanceId, profileSlug, overrides)
+
+      // User custom formats: assign/unlink
+      await Promise.all(
+        userFormats.map(f => {
+          const shouldLink = selectedUser.has(f.slug)
+          const currentlyLinked = f.userProfileSlug === profileSlug
+          if (shouldLink) {
+            const us = userSetup[f.slug] ?? { score: String(f.score), enabled: f.enabled }
+            return api.trash.instances.patchUserFormat(instanceId, f.slug, {
+              profile_slug: profileSlug,
+              score: Number(us.score) || 0,
+              enabled: us.enabled,
+            })
+          } else if (currentlyLinked) {
+            return api.trash.instances.patchUserFormat(instanceId, f.slug, { profile_slug: null })
+          }
+          return Promise.resolve()
+        })
+      )
+
+      await loadFormats(instanceId, profileSlug)
+      onClose()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="glass"
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 740, maxHeight: '90vh',
+          borderRadius: 'var(--radius-xl)', padding: '32px 32px 28px',
+          animation: 'slide-up var(--transition-base)', position: 'relative',
+          display: 'flex', flexDirection: 'column',
+        }}
+      >
+        <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}><X size={16} /></button>
+
+        <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4, color: 'var(--text-primary)' }}>
+          Configure Formats
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14, fontFamily: 'var(--font-mono)' }}>
+          {profileName} · {trashFormats.length} TRaSH · {userFormats.length} user custom
+        </p>
+
+        {loadingFormats ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 64 }}>
+            <Loader size={20} className="spin" style={{ color: 'var(--text-muted)' }} />
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <input className="form-input" placeholder="Search formats…" value={fmtSearch} onChange={e => setFmtSearch(e.target.value)} style={{ flex: 1, fontSize: 13, padding: '8px 12px' }} autoFocus />
+              <button className="btn btn-ghost" onClick={toggleAll} style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                {allEnabled ? 'Disable all' : 'Enable all'}
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+              {/* TRaSH formats */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 56px', gap: 8, padding: '6px 12px', background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 2 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TRaSH formats · {visibleTrash.length}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Score</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>On</span>
+              </div>
+              {visibleTrash.length === 0
+                ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>{trashFormats.length === 0 ? 'No TRaSH formats in this profile.' : 'No formats match.'}</div>
+                : visibleTrash.map(f => {
+                    const s = formatSetup[f.slug] ?? { score: String(f.recommendedScore), enabled: true }
+                    const scoreChanged = s.score !== String(f.recommendedScore)
+                    return (
+                      <div key={f.slug} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 56px', gap: 8, alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid var(--border)', opacity: s.enabled ? 1 : 0.45 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>rec: {f.recommendedScore}</div>
+                        </div>
+                        <input
+                          type="number"
+                          value={s.score}
+                          onChange={e => setFormatSetup(prev => ({ ...prev, [f.slug]: { ...s, score: e.target.value } }))}
+                          style={{ width: '100%', padding: '4px 8px', fontSize: 13, textAlign: 'right', border: `1px solid ${scoreChanged ? 'rgba(var(--accent-rgb),0.5)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', background: 'var(--glass-bg)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                          <label className="form-toggle" style={{ transform: 'scale(0.85)' }}>
+                            <input type="checkbox" checked={s.enabled} onChange={e => setFormatSetup(prev => ({ ...prev, [f.slug]: { ...s, enabled: e.target.checked } }))} />
+                          </label>
+                        </div>
+                      </div>
+                    )
+                  })
+              }
+
+              {/* User custom formats */}
+              {userFormats.length > 0 && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr 90px 56px', gap: 8, padding: '6px 12px', background: 'var(--glass-bg)', borderTop: '2px solid var(--border)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 33, zIndex: 2 }}>
+                    <span />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      User custom · {visibleUser.length}
+                      <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 6, color: 'var(--accent)' }}>({selectedUser.size} selected)</span>
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Score</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>On</span>
+                  </div>
+                  {visibleUser.length === 0
+                    ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>No user formats match.</div>
+                    : visibleUser.map(f => {
+                        const included = selectedUser.has(f.slug)
+                        const us = userSetup[f.slug] ?? { score: String(f.score), enabled: f.enabled }
+                        return (
+                          <div key={f.slug} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 90px 56px', gap: 8, alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid var(--border)', opacity: included ? 1 : 0.4 }}>
+                            <input
+                              type="checkbox"
+                              checked={included}
+                              onChange={() => setSelectedUser(prev => { const n = new Set(prev); included ? n.delete(f.slug) : n.add(f.slug); return n })}
+                              style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                            />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                {f.userProfileSlug ? `linked → ${f.userProfileSlug}` : 'unlinked'}
+                              </div>
+                            </div>
+                            <input
+                              type="number"
+                              value={us.score}
+                              disabled={!included}
+                              onChange={e => setUserSetup(prev => ({ ...prev, [f.slug]: { ...us, score: e.target.value } }))}
+                              style={{ width: '100%', padding: '4px 8px', fontSize: 13, textAlign: 'right', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--glass-bg)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', opacity: included ? 1 : 0.4 }}
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'center' }}>
+                              <label className="form-toggle" style={{ transform: 'scale(0.85)' }}>
+                                <input type="checkbox" checked={us.enabled} disabled={!included} onChange={e => setUserSetup(prev => ({ ...prev, [f.slug]: { ...us, enabled: e.target.checked } }))} />
+                              </label>
+                            </div>
+                          </div>
+                        )
+                      })
+                  }
+                </>
+              )}
+            </div>
+
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+              <span>
+                TRaSH: {trashFormats.filter(f => formatSetup[f.slug]?.enabled !== false).length}/{trashFormats.length} enabled ·{' '}
+                {trashFormats.filter(f => formatSetup[f.slug] && formatSetup[f.slug].score !== String(f.recommendedScore)).length} overridden
+              </span>
+              {userFormats.length > 0 && (
+                <span style={{ color: 'var(--accent)' }}>{selectedUser.size} user formats included</span>
+              )}
+            </div>
+          </>
+        )}
+
+        {error && <div className="setup-error" style={{ marginTop: 12 }}>{error}</div>}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+          <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving || loadingFormats} style={{ flex: 1, gap: 8, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+            {saving ? <Loader size={15} className="spin" /> : <Check size={15} />}
+            Save changes
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ── Import Formats Modal ──────────────────────────────────────────────────────
 
 interface ImportModalProps {
@@ -721,6 +974,7 @@ function ProfileEditor({ instanceId, profileCfg, profileName, isSyncing, isAdmin
   const [showImport, setShowImport] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [editProfileCfg, setEditProfileCfg] = useState(false)
+  const [showEditFormats, setShowEditFormats] = useState(false)
   const [selectedUserFormats, setSelectedUserFormats] = useState<Set<string>>(new Set())
   const [deletingUserFormats, setDeletingUserFormats] = useState(false)
 
@@ -901,7 +1155,13 @@ function ProfileEditor({ instanceId, profileCfg, profileName, isSyncing, isAdmin
           {isAdmin && (
             <button className="btn btn-ghost btn-sm" onClick={() => setEditProfileCfg(true)} title="Edit sync settings" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <Settings2 size={13} />
-              Edit
+              Settings
+            </button>
+          )}
+          {isAdmin && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowEditFormats(true)} title="Configure format scores and assignments" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <SlidersHorizontal size={13} />
+              Formats
             </button>
           )}
           {isDirty && isAdmin && (
@@ -1160,6 +1420,15 @@ function ProfileEditor({ instanceId, profileCfg, profileName, isSyncing, isAdmin
           availableProfiles={[]}
           alreadyConfiguredSlugs={new Set()}
           onClose={() => setEditProfileCfg(false)}
+        />
+      )}
+      {showEditFormats && (
+        <EditFormatsModal
+          instanceId={instanceId}
+          profileSlug={profileSlug}
+          profileName={profileName}
+          currentFormats={myFormats}
+          onClose={() => setShowEditFormats(false)}
         />
       )}
     </div>
