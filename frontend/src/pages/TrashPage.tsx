@@ -5,6 +5,7 @@ import {
   AlertTriangle, Trash2, Download, GitCommit, CheckCircle,
   XCircle, Info, Play, Plus, Save, ChevronDown, Search,
 } from 'lucide-react'
+import { api } from '../api'
 import { useTrashStore } from '../store/useTrashStore'
 import { useArrStore } from '../store/useArrStore'
 import type {
@@ -53,26 +54,68 @@ interface ProfileConfigModalProps {
   onClose: () => void
 }
 
+type FormatSetup = { score: string; enabled: boolean }
+
 function ProfileConfigModal({ instanceId, existing, availableProfiles, alreadyConfiguredSlugs, onClose }: ProfileConfigModalProps) {
-  const { addProfileConfig, updateProfileConfig, loadProfiles } = useTrashStore()
+  const { addProfileConfig, updateProfileConfig, loadProfiles, saveOverrides } = useTrashStore()
   const isEdit = !!existing
+  const [step, setStep] = useState<1 | 2>(1)
   const [profileSlug, setProfileSlug] = useState(existing?.profile_slug ?? '')
   const [syncMode, setSyncMode] = useState<'auto' | 'manual' | 'notify'>(existing?.sync_mode ?? 'notify')
   const [intervalHours, setIntervalHours] = useState(existing?.sync_interval_hours ?? 24)
   const [enabled, setEnabled] = useState(existing?.enabled !== false)
   const [saving, setSaving] = useState(false)
+  const [loadingFormats, setLoadingFormats] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // step 2 state
+  const [setupFormats, setSetupFormats] = useState<TrashFormatRow[]>([])
+  const [formatSetup, setFormatSetup] = useState<Record<string, FormatSetup>>({})
+  const [fmtSearch, setFmtSearch] = useState('')
 
   useEffect(() => { loadProfiles(instanceId).catch(() => {}) }, [instanceId])
 
+  const selectable = availableProfiles.filter(p => !alreadyConfiguredSlugs.has(p.slug) || p.slug === existing?.profile_slug)
+
+  async function goToStep2() {
+    if (!profileSlug) { setError('Please select a profile'); return }
+    setError(null)
+    setLoadingFormats(true)
+    try {
+      const rows = await api.trash.instances.customFormats(instanceId, profileSlug)
+      const trashOnly = rows.filter(f => !f.isUserFormat)
+      setSetupFormats(trashOnly)
+      const defaults: Record<string, FormatSetup> = {}
+      for (const f of trashOnly) defaults[f.slug] = { score: String(f.recommendedScore), enabled: true }
+      setFormatSetup(defaults)
+      setStep(2)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load formats')
+    } finally {
+      setLoadingFormats(false)
+    }
+  }
+
   async function save() {
-    if (!isEdit && !profileSlug) { setError('Please select a profile'); return }
     setSaving(true); setError(null)
     try {
       if (isEdit) {
         await updateProfileConfig(instanceId, existing!.profile_slug, { sync_mode: syncMode, sync_interval_hours: intervalHours, enabled })
       } else {
         await addProfileConfig(instanceId, { profile_slug: profileSlug, sync_mode: syncMode, sync_interval_hours: intervalHours, enabled })
+        // save overrides for any format where score != recommended or enabled = false
+        const overrides = setupFormats
+          .filter(f => {
+            const s = formatSetup[f.slug]
+            return s && (String(f.recommendedScore) !== s.score || !s.enabled)
+          })
+          .map(f => {
+            const s = formatSetup[f.slug]
+            return { slug: f.slug, score: Number(s.score) || 0, enabled: s.enabled, excluded: false }
+          })
+        if (overrides.length > 0) {
+          await saveOverrides(instanceId, profileSlug, overrides)
+        }
       }
       onClose()
     } catch (e: unknown) {
@@ -82,55 +125,189 @@ function ProfileConfigModal({ instanceId, existing, availableProfiles, alreadyCo
     }
   }
 
-  const selectable = availableProfiles.filter(p => !alreadyConfiguredSlugs.has(p.slug) || p.slug === existing?.profile_slug)
+  const visibleFormats = setupFormats.filter(f =>
+    !fmtSearch || f.name.toLowerCase().includes(fmtSearch.toLowerCase()) || f.slug.includes(fmtSearch.toLowerCase())
+  )
+  const allEnabled = setupFormats.every(f => formatSetup[f.slug]?.enabled !== false)
+
+  function toggleAll() {
+    const next = !allEnabled
+    setFormatSetup(prev => {
+      const copy = { ...prev }
+      for (const f of setupFormats) copy[f.slug] = { ...copy[f.slug], enabled: next }
+      return copy
+    })
+  }
 
   return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div
         className="glass"
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 480, borderRadius: 'var(--radius-xl)', padding: '40px 40px 36px', animation: 'slide-up var(--transition-base)', position: 'relative' }}
+        style={{
+          width: '100%',
+          maxWidth: step === 2 ? 740 : 480,
+          maxHeight: step === 2 ? '90vh' : undefined,
+          borderRadius: 'var(--radius-xl)',
+          padding: step === 2 ? '32px 32px 28px' : '40px 40px 36px',
+          animation: 'slide-up var(--transition-base)',
+          position: 'relative',
+          display: 'flex', flexDirection: 'column',
+        }}
       >
         <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}><X size={16} /></button>
-        <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4, color: 'var(--text-primary)' }}>{isEdit ? 'Edit Profile' : 'Add Profile'}</h2>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 28, fontFamily: 'var(--font-mono)' }}>{instanceId}</p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {!isEdit && (
+        {/* step indicator */}
+        {!isEdit && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
+            {(['Settings', 'Custom Formats'] as const).map((label, i) => (
+              <React.Fragment key={label}>
+                <span style={{
+                  fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99,
+                  background: step === i + 1 ? 'rgba(var(--accent-rgb),0.15)' : 'var(--glass-bg)',
+                  color: step === i + 1 ? 'var(--accent)' : 'var(--text-muted)',
+                  border: `1px solid ${step === i + 1 ? 'rgba(var(--accent-rgb),0.3)' : 'var(--border)'}`,
+                }}>
+                  {i + 1}. {label}
+                </span>
+                {i === 0 && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>›</span>}
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+
+        <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4, color: 'var(--text-primary)' }}>
+          {isEdit ? 'Edit Profile' : step === 1 ? 'Add Profile' : `${availableProfiles.find(p => p.slug === profileSlug)?.name ?? profileSlug}`}
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: step === 2 ? 16 : 28, fontFamily: 'var(--font-mono)' }}>
+          {step === 2 ? `${setupFormats.length} TRaSH formats · adjust scores before adding` : instanceId}
+        </p>
+
+        {/* ── Step 1: Settings ── */}
+        {step === 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {!isEdit && (
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Quality Profile</label>
+                <select className="form-input" value={profileSlug} onChange={e => { setProfileSlug(e.target.value); setError(null) }} style={{ fontSize: 14, padding: '10px 12px' }}>
+                  <option value="">— Select a profile —</option>
+                  {selectable.map(p => <option key={p.slug} value={p.slug}>{p.name} ({p.formatCount} formats)</option>)}
+                </select>
+              </div>
+            )}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Quality Profile</label>
-              <select className="form-input" value={profileSlug} onChange={e => setProfileSlug(e.target.value)} style={{ fontSize: 14, padding: '10px 12px' }}>
-                <option value="">— Select a profile —</option>
-                {selectable.map(p => <option key={p.slug} value={p.slug}>{p.name} ({p.formatCount} formats)</option>)}
+              <label className="form-label">Sync Mode</label>
+              <select className="form-input" value={syncMode} onChange={e => setSyncMode(e.target.value as typeof syncMode)} style={{ fontSize: 14, padding: '10px 12px' }}>
+                <option value="notify">Notify — preview changes before applying</option>
+                <option value="auto">Auto — apply automatically on schedule</option>
+                <option value="manual">Manual — only sync when triggered</option>
               </select>
             </div>
-          )}
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Sync Mode</label>
-            <select className="form-input" value={syncMode} onChange={e => setSyncMode(e.target.value as typeof syncMode)} style={{ fontSize: 14, padding: '10px 12px' }}>
-              <option value="notify">Notify — preview changes before applying</option>
-              <option value="auto">Auto — apply automatically on schedule</option>
-              <option value="manual">Manual — only sync when triggered</option>
-            </select>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Sync Interval (hours)</label>
+              <input className="form-input" type="number" min={1} max={168} value={intervalHours} onChange={e => setIntervalHours(Number(e.target.value))} style={{ fontSize: 14, padding: '10px 12px' }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <label className="form-toggle"><input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /></label>
+              <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>Enabled</span>
+            </div>
           </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Sync Interval (hours)</label>
-            <input className="form-input" type="number" min={1} max={168} value={intervalHours} onChange={e => setIntervalHours(Number(e.target.value))} style={{ fontSize: 14, padding: '10px 12px' }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <label className="form-toggle"><input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /></label>
-            <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>Enabled</span>
-          </div>
-        </div>
+        )}
+
+        {/* ── Step 2: Format setup ── */}
+        {step === 2 && (
+          <>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <input
+                className="form-input"
+                placeholder="Search formats…"
+                value={fmtSearch}
+                onChange={e => setFmtSearch(e.target.value)}
+                style={{ flex: 1, fontSize: 13, padding: '8px 12px' }}
+                autoFocus
+              />
+              <button className="btn btn-ghost" onClick={toggleAll} style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                {allEnabled ? 'Disable all' : 'Enable all'}
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+              {/* header row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 56px', gap: 8, padding: '6px 12px', background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 1 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Format</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Score</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>On</span>
+              </div>
+
+              {visibleFormats.length === 0 ? (
+                <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
+                  {setupFormats.length === 0 ? 'No TRaSH formats in this profile.' : 'No formats match your search.'}
+                </div>
+              ) : visibleFormats.map(f => {
+                const s = formatSetup[f.slug] ?? { score: String(f.recommendedScore), enabled: true }
+                const scoreChanged = s.score !== String(f.recommendedScore)
+                return (
+                  <div key={f.slug} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 56px', gap: 8, alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid var(--border)', opacity: s.enabled ? 1 : 0.45 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>rec: {f.recommendedScore}</div>
+                    </div>
+                    <input
+                      type="number"
+                      value={s.score}
+                      onChange={e => setFormatSetup(prev => ({ ...prev, [f.slug]: { ...s, score: e.target.value } }))}
+                      style={{
+                        width: '100%', padding: '4px 8px', fontSize: 13, textAlign: 'right',
+                        border: `1px solid ${scoreChanged ? 'rgba(var(--accent-rgb),0.5)' : 'var(--border)'}`,
+                        borderRadius: 'var(--radius-sm)', background: 'var(--glass-bg)', color: 'var(--text-primary)',
+                        fontFamily: 'var(--font-mono)',
+                      }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <label className="form-toggle" style={{ transform: 'scale(0.85)' }}>
+                        <input type="checkbox" checked={s.enabled} onChange={e => setFormatSetup(prev => ({ ...prev, [f.slug]: { ...s, enabled: e.target.checked } }))} />
+                      </label>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+              {setupFormats.filter(f => formatSetup[f.slug]?.enabled !== false).length} of {setupFormats.length} formats enabled ·{' '}
+              {setupFormats.filter(f => formatSetup[f.slug] && formatSetup[f.slug].score !== String(f.recommendedScore)).length} scores overridden
+            </div>
+          </>
+        )}
 
         {error && <div className="setup-error" style={{ marginTop: 16 }}>{error}</div>}
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 28 }}>
-          <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>Cancel</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving} style={{ flex: 1, gap: 8, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
-            {saving ? <Loader size={15} className="spin" /> : <Check size={15} />}
-            {isEdit ? 'Save changes' : 'Add profile'}
-          </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+          {step === 2 && !isEdit ? (
+            <>
+              <button className="btn btn-ghost" onClick={() => setStep(1)} style={{ padding: '11px 20px', fontSize: 14 }}>Back</button>
+              <button className="btn btn-ghost" onClick={onClose} style={{ padding: '11px 20px', fontSize: 14 }}>Cancel</button>
+              <button className="btn btn-primary" onClick={save} disabled={saving} style={{ flex: 1, gap: 8, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+                {saving ? <Loader size={15} className="spin" /> : <Check size={15} />}
+                Add profile
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>Cancel</button>
+              {isEdit ? (
+                <button className="btn btn-primary" onClick={save} disabled={saving} style={{ flex: 1, gap: 8, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+                  {saving ? <Loader size={15} className="spin" /> : <Check size={15} />}
+                  Save changes
+                </button>
+              ) : (
+                <button className="btn btn-primary" onClick={goToStep2} disabled={loadingFormats || !profileSlug} style={{ flex: 1, gap: 8, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
+                  {loadingFormats ? <Loader size={15} className="spin" /> : null}
+                  {loadingFormats ? 'Loading formats…' : 'Next →'}
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>,
