@@ -18,7 +18,7 @@ interface Props {
 export function Sidebar({ page, onNavigate }: Props) {
   const { settings, services, isAdmin, isAuthenticated, authUser, userGroups } = useStore()
   const { instances } = useArrStore()
-  const { widgets, loadStats } = useWidgetStore()
+  const { widgets, loadStats, startPolling, stopPolling } = useWidgetStore()
 
   const userGroupData = userGroups.find(g => g.id === authUser?.groupId)
   const canSeeDocker = isAdmin || (userGroupData?.docker_access ?? false)
@@ -57,10 +57,9 @@ export function Sidebar({ page, onNavigate }: Props) {
   // ── Widget polling ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!sidebarStatsKey) return
-    const ids = sidebarStatsKey.split(',')
-    ids.forEach(id => loadStats(id).catch(() => {}))
-    const interval = setInterval(() => ids.forEach(id => loadStats(id).catch(() => {})), 10_000)
-    return () => clearInterval(interval)
+    const pollable = sidebarWidgets.filter(w => w.type !== 'docker_overview' && w.type !== 'custom_button')
+    pollable.forEach(w => { loadStats(w.id).catch(() => {}); startPolling(w.id, w.type) })
+    return () => pollable.forEach(w => stopPolling(w.id))
   }, [sidebarStatsKey])
 
   useEffect(() => {

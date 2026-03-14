@@ -877,16 +877,9 @@ function WidgetCard({
   isOnDashboard: boolean
 }) {
   const { isAdmin } = useStore()
-  const { stats, loadStats, setAdGuardProtection, setPiholeProtection } = useWidgetStore()
+  const { stats, setAdGuardProtection, setPiholeProtection } = useWidgetStore()
   const s = stats[widget.id]
   const [toggling, setToggling] = useState(false)
-
-  useEffect(() => {
-    if (widget.type === 'docker_overview' || widget.type === 'custom_button') return
-    loadStats(widget.id).catch(() => {})
-    const interval = setInterval(() => loadStats(widget.id).catch(() => {}), 10_000)
-    return () => clearInterval(interval)
-  }, [widget.id, widget.type])
 
   const handleProtectionToggle = async () => {
     if (!isAdmin || widget.type !== 'adguard_home' || !s) return
@@ -1139,13 +1132,23 @@ interface Props {
 
 export function WidgetsPage({ showAddForm, onFormClose }: Props) {
   const { isAdmin } = useStore()
-  const { widgets, loadWidgets, createWidget, updateWidget, deleteWidget, uploadWidgetIcon } = useWidgetStore()
+  const { widgets, loadWidgets, loadStats, createWidget, updateWidget, deleteWidget, uploadWidgetIcon, startPollingAll, stopPollingAll } = useWidgetStore()
   const { isOnDashboard, addWidget, removeByRef } = useDashboardStore()
   const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
     loadWidgets().catch(() => {})
   }, [])
+
+  const widgetIds = widgets.map(w => w.id).join(',')
+
+  useEffect(() => {
+    const pollable = widgets.filter(w => w.type !== 'docker_overview' && w.type !== 'custom_button')
+    if (pollable.length === 0) return
+    Promise.all(pollable.map(w => loadStats(w.id))).catch(() => {})
+    startPollingAll(pollable.map(w => ({ id: w.id, type: w.type })))
+    return () => stopPollingAll()
+  }, [widgetIds])
 
   const handleCreate = async (data: { name: string; type: string; config: object; display_location: 'topbar' | 'sidebar' | 'none'; iconData?: { data: string; contentType: string } | null }) => {
     const { iconData, ...widgetData } = data

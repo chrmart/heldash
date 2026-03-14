@@ -240,20 +240,13 @@ function DashboardWidgetCard({ item, editMode, groups }: {
 }) {
   const { isAdmin } = useStore()
   const { removeItem, moveItemToGroup } = useDashboardStore()
-  const { stats, loadStats, setAdGuardProtection, setPiholeProtection } = useWidgetStore()
+  const { stats, setAdGuardProtection, setPiholeProtection } = useWidgetStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id, disabled: !editMode,
   })
   const [showHandle, setShowHandle] = useState(false)
   const [toggling, setToggling] = useState(false)
   const s = stats[item.widget.id]
-
-  useEffect(() => {
-    if (item.widget.type === 'docker_overview' || item.widget.type === 'custom_button') return
-    loadStats(item.widget.id).catch(() => {})
-    const interval = setInterval(() => loadStats(item.widget.id).catch(() => {}), 10_000)
-    return () => clearInterval(interval)
-  }, [item.widget.id])
 
   const handleAdGuardToggle = async () => {
     if (!isAdmin || item.widget.type !== 'adguard_home' || !s) return
@@ -661,6 +654,7 @@ export function Dashboard({ onEdit }: Props) {
   const { isAdmin } = useStore()
   const { instances, loadInstances, loadAllStats } = useArrStore()
   const { items, groups, editMode, guestMode, loading, reorder, reorderGroups, createGroup } = useDashboardStore()
+  const { loadStats, startPollingAll, stopPollingAll } = useWidgetStore()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -679,6 +673,22 @@ export function Dashboard({ onEdit }: Props) {
       loadAllStats().catch(() => {})
     }
   }, [arrItemCount])
+
+  // Centralized widget polling
+  const widgetItemIds = [...items, ...groups.flatMap(g => g.items)]
+    .filter(i => i.type === 'widget')
+    .map(i => (i as DashboardWidgetItem).widget.id)
+    .join(',')
+
+  useEffect(() => {
+    const widgetItems = [...items, ...groups.flatMap(g => g.items)]
+      .filter(i => i.type === 'widget') as DashboardWidgetItem[]
+    const pollable = widgetItems.filter(i => i.widget.type !== 'docker_overview' && i.widget.type !== 'custom_button')
+    if (pollable.length === 0) return
+    Promise.all(pollable.map(i => loadStats(i.widget.id))).catch(() => {})
+    startPollingAll(pollable.map(i => ({ id: i.widget.id, type: i.widget.type })))
+    return () => stopPollingAll()
+  }, [widgetItemIds])
 
   const isPlaceholder = (type: string) =>
     type === 'placeholder' || type === 'placeholder_app' || type === 'placeholder_widget' || type === 'placeholder_row'

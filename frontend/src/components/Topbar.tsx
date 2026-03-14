@@ -27,7 +27,7 @@ const ACCENTS: { value: ThemeAccent; label: string; color: string }[] = [
 export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheckAll, checking, onLogin }: Props) {
   const { settings, setThemeMode, setThemeAccent, isAuthenticated, isAdmin, authUser, logout, loadAll } = useStore()
   const { loadDashboard, editMode, setEditMode, addPlaceholder, guestMode, setGuestMode } = useDashboardStore()
-  const { widgets, stats, loadWidgets, loadStats } = useWidgetStore()
+  const { widgets, stats, loadWidgets, loadStats, startPolling, stopPolling } = useWidgetStore()
   const { containers, loadContainers } = useDockerStore()
   const mode = settings?.theme_mode ?? 'dark'
   const accent = settings?.theme_accent ?? 'cyan'
@@ -59,15 +59,12 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
     loadWidgets().catch(() => {})
   }, [isAuthenticated, authUser?.id])
 
-  // Poll stats for server_status + adguard_home topbar widgets
+  // Poll stats for topbar widgets
   useEffect(() => {
     if (!statsWidgetKey) return
-    const ids = statsWidgetKey.split(',')
-    ids.forEach(id => loadStats(id).catch(() => {}))
-    const interval = setInterval(() => {
-      ids.forEach(id => loadStats(id).catch(() => {}))
-    }, 10_000)
-    return () => clearInterval(interval)
+    const pollable = topbarWidgets.filter(w => w.type !== 'docker_overview' && w.type !== 'custom_button')
+    pollable.forEach(w => { loadStats(w.id).catch(() => {}); startPolling(w.id, w.type) })
+    return () => pollable.forEach(w => stopPolling(w.id))
   }, [statsWidgetKey])
 
   // Poll container list for docker_overview topbar widgets

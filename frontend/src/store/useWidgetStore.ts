@@ -2,6 +2,21 @@ import { create } from 'zustand'
 import { api } from '../api'
 import type { Widget, WidgetStats } from '../types'
 
+// ── Centralized polling state (module scope, non-reactive) ────────────────────
+const intervalMap = new Map<string, ReturnType<typeof setInterval>>()
+const refCountMap = new Map<string, number>()
+
+const POLL_INTERVALS: Record<string, number> = {
+  server_status: 2000,
+  adguard_home: 30000,
+  pihole: 30000,
+  docker_overview: 30000,
+  nginx_pm: 60000,
+  home_assistant: 30000,
+  home_assistant_energy: 30000,
+  calendar: 300000,
+}
+
 interface WidgetState {
   widgets: Widget[]
   stats: Record<string, WidgetStats>
@@ -17,6 +32,10 @@ interface WidgetState {
   triggerButton: (widgetId: string, buttonId: string) => Promise<void>
   haToggle: (widgetId: string, entityId: string, currentState: string) => Promise<void>
   setPiholeProtection: (widgetId: string, enabled: boolean) => Promise<void>
+  startPolling: (widgetId: string, widgetType: string) => void
+  stopPolling: (widgetId: string) => void
+  startPollingAll: (widgets: { id: string; type: string }[]) => void
+  stopPollingAll: () => void
 }
 
 export const useWidgetStore = create<WidgetState>((set, get) => ({
@@ -86,5 +105,36 @@ export const useWidgetStore = create<WidgetState>((set, get) => ({
   setPiholeProtection: async (widgetId, enabled) => {
     await api.widgets.setPiholeProtection(widgetId, enabled)
     await get().loadStats(widgetId)
+  },
+
+  startPolling: (widgetId, widgetType) => {
+    const count = (refCountMap.get(widgetId) ?? 0) + 1
+    refCountMap.set(widgetId, count)
+    if (count === 1) {
+      const ms = POLL_INTERVALS[widgetType] ?? 30000
+      const id = setInterval(() => { get().loadStats(widgetId).catch(() => {}) }, ms)
+      intervalMap.set(widgetId, id)
+    }
+  },
+
+  stopPolling: (widgetId) => {
+    const count = (refCountMap.get(widgetId) ?? 1) - 1
+    if (count <= 0) {
+      const id = intervalMap.get(widgetId)
+      if (id !== undefined) clearInterval(id)
+      intervalMap.delete(widgetId)
+      refCountMap.delete(widgetId)
+    } else {
+      refCountMap.set(widgetId, count)
+    }
+  },
+
+  startPollingAll: (widgets) => {
+    widgets.forEach(w => get().startPolling(w.id, w.type))
+  },
+
+  stopPollingAll: () => {
+    const ids = [...intervalMap.keys()]
+    ids.forEach(id => get().stopPolling(id))
   },
 }))

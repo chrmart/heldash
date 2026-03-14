@@ -193,7 +193,7 @@ function InstanceForm({
 
 function InstancesTab({ showAddForm: showFromParent, onFormClose }: { showAddForm?: boolean; onFormClose?: () => void }) {
   const { isAdmin } = useStore()
-  const { instances, loadInstances, loadAllStats, createInstance, updateInstance, deleteInstance, reorderInstances } = useArrStore()
+  const { instances, loadInstances, loadAllStats, loadSabQueue, createInstance, updateInstance, deleteInstance, reorderInstances } = useArrStore()
   const { addArrInstance, removeByRef, isOnDashboard, getDashboardItemId, removeItem } = useDashboardStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -209,6 +209,16 @@ function InstancesTab({ showAddForm: showFromParent, onFormClose }: { showAddFor
   useEffect(() => {
     loadInstances().then(() => loadAllStats()).catch(() => {})
   }, [])
+
+  const sabIds = instances.filter(i => i.type === 'sabnzbd' && i.enabled).map(i => i.id).join(',')
+
+  useEffect(() => {
+    if (!sabIds) return
+    const ids = sabIds.split(',')
+    ids.forEach(id => loadSabQueue(id).catch(() => {}))
+    const interval = setInterval(() => ids.forEach(id => loadSabQueue(id).catch(() => {})), 2000)
+    return () => clearInterval(interval)
+  }, [sabIds])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   const sorted = [...instances].sort((a, b) => a.position - b.position)
