@@ -19,6 +19,7 @@ interface TmdbState {
   loadGenres: () => Promise<void>
   loadWatchProviders: () => Promise<void>
   loadTvDetail: (tmdbId: number) => Promise<void>
+  clearSearch: () => void
 }
 
 export const useTmdbStore = create<TmdbState>((set, get) => ({
@@ -61,15 +62,15 @@ export const useTmdbStore = create<TmdbState>((set, get) => ({
   },
 
   search: async (query, page = 1, language, append = false) => {
-    try {
-      const data = await api.tmdb.search(query, page, language)
-      set(state => {
-        const prev = state.searchResults
-        const results = append && prev ? [...prev.results, ...data.results] : data.results
-        return { searchResults: { ...data, results } }
-      })
-    } catch { /* keep previous state */ }
+    const data = await api.tmdb.search(query, page, language)
+    set(state => {
+      const prev = state.searchResults
+      const results = append && prev ? [...prev.results, ...data.results] : data.results
+      return { searchResults: { ...data, results } }
+    })
   },
+
+  clearSearch: () => set({ searchResults: null }),
 
   loadGenres: async () => {
     if (get().genres) return  // already loaded (backend caches 24h anyway)

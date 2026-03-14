@@ -181,6 +181,7 @@ function App() {
                 <MediaPage
                   showAddForm={showAddInstance}
                   onFormClose={() => setShowAddInstance(false)}
+                  onNavigate={p => setPage(p)}
                 />
               )}
               {page === 'widgets' && (

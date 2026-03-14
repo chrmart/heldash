@@ -19,13 +19,13 @@ type MediaTab = 'instances' | 'library' | 'calendar' | 'indexers' | 'discover' |
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
-function TabBar({ active, onChange, showDiscover }: { active: MediaTab; onChange: (t: MediaTab) => void; showDiscover: boolean }) {
+function TabBar({ active, onChange }: { active: MediaTab; onChange: (t: MediaTab) => void }) {
   const tabs: { id: MediaTab; label: string; icon: React.ReactNode }[] = [
     { id: 'instances',  label: 'Instances',  icon: <LayoutGrid size={13} /> },
     { id: 'library',    label: 'Library',    icon: <Database size={13} /> },
     { id: 'calendar',   label: 'Calendar',   icon: <CalendarDays size={13} /> },
     { id: 'indexers',   label: 'Indexers',   icon: <Search size={13} /> },
-    ...(showDiscover ? [{ id: 'discover' as MediaTab, label: 'Discover', icon: <Compass size={13} /> }] : []),
+    { id: 'discover' as MediaTab, label: 'Discover', icon: <Compass size={13} /> },
     { id: 'trash' as MediaTab, label: 'TRaSH', icon: <Sliders size={13} /> },
   ]
   return (
@@ -1134,12 +1134,12 @@ const DEFAULT_FILTERS: TmdbFilters = {
   sortBy: 'popularity.desc',
 }
 
-function DiscoverTab() {
+function DiscoverTab({ hasTmdbKey, onNavigate }: { hasTmdbKey: boolean; onNavigate: (page: string) => void }) {
   const { instances, seerrRequests, discoverRequest, loadSeerrRequests } = useArrStore()
   const {
     trending, discoverMovies, discoverTv, searchResults, genres, watchProviders, tvDetail,
     loadTrending, loadDiscoverMovies, loadDiscoverTv, search: searchTmdb,
-    loadGenres, loadWatchProviders, loadTvDetail,
+    loadGenres, loadWatchProviders, loadTvDetail, clearSearch,
   } = useTmdbStore()
 
   const [loading, setLoading] = useState(false)
@@ -1147,6 +1147,7 @@ function DiscoverTab() {
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filters, setFilters] = useState<TmdbFilters>({ ...DEFAULT_FILTERS })
   const [requesting, setRequesting] = useState<string | null>(null)
@@ -1230,7 +1231,12 @@ function DiscoverTab() {
     const timer = setTimeout(async () => {
       setPage(1)
       setLoading(true)
-      await searchTmdb(searchQuery, 1, filters.language || undefined)
+      try {
+        await searchTmdb(searchQuery, 1, filters.language || undefined)
+        setSearchError(null)
+      } catch (e) {
+        setSearchError(e instanceof Error ? e.message : 'Search failed')
+      }
       setLoading(false)
     }, 500)
     return () => clearTimeout(timer)
@@ -1303,13 +1309,14 @@ function DiscoverTab() {
   })()
 
   // Determine per-item request status (from Seerr requests if available)
-  const getItemStatus = (item: TmdbResult): 'available' | 'pending' | null => {
+  const getItemStatus = (item: TmdbResult): 'available' | 'pending' | 'missing_seasons' | null => {
     if (!seerrInstance) return null
     const requests = seerrRequests[seerrInstance.id]?.results ?? []
     const mt = item.media_type as 'movie' | 'tv'
     const req = requests.find(r => r.media.mediaType === mt && r.media.tmdbId === item.id)
     if (!req) return null
     if (req.media.status === 5) return 'available'
+    if (req.media.status === 4) return 'missing_seasons'
     return 'pending'
   }
 
@@ -1357,6 +1364,23 @@ function DiscoverTab() {
         setTvDetailLoading(false)
       }
     }
+  }
+
+  if (!hasTmdbKey) {
+    return (
+      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 48, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, minHeight: 300 }}>
+        <Search size={40} style={{ color: 'var(--text-muted)', opacity: 0.4 }} />
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>TMDB API Key required</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+            Add your free TMDB API key in Settings → General to enable Discover.
+          </p>
+          <button className="btn btn-primary btn-sm" onClick={() => onNavigate('settings')}>
+            Go to Settings
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1415,7 +1439,12 @@ function DiscoverTab() {
             type="text"
             placeholder="Search movies and TV shows…"
             value={searchInput}
-            onChange={e => { setSearchInput(e.target.value); setSearchQuery(e.target.value) }}
+            onChange={e => {
+              const v = e.target.value
+              setSearchInput(v)
+              setSearchQuery(v)
+              if (!v) { clearSearch(); setSearchError(null) }
+            }}
             className="form-input"
             style={{ flex: 1, minWidth: 180, fontSize: 13, padding: '6px 8px' }}
             autoFocus
@@ -1435,6 +1464,11 @@ function DiscoverTab() {
           </button>
         </div>
       </div>
+
+      {/* Search error */}
+      {tab === 'search' && searchError && (
+        <p style={{ fontSize: 12, color: '#ef4444', margin: '-8px 0 0' }}>{searchError}</p>
+      )}
 
       {/* Collapsible filter panel */}
       {filtersOpen && (
@@ -1611,12 +1645,13 @@ function DiscoverTab() {
           const rating = item.vote_average ? Math.round(item.vote_average * 10) / 10 : null
           const overview = item.overview ? item.overview.slice(0, 100) + (item.overview.length > 100 ? '...' : '') : ''
           const itemStatus = getItemStatus(item)
-          const canRequest = !!seerrInstance && itemStatus !== 'available'
+          const canRequest = !!seerrInstance && (itemStatus === null || itemStatus === 'missing_seasons')
 
           const btnLabel = requesting === `${item.media_type}-${item.id}`
             ? 'Requesting…'
             : itemStatus === 'available' ? '✓ Available'
             : itemStatus === 'pending' ? '⏳ Requested'
+            : itemStatus === 'missing_seasons' ? 'Request missing seasons'
             : '+ Request'
 
           return (
@@ -2568,9 +2603,10 @@ function ComingSoonTab({ label }: { label: string }) {
 interface Props {
   showAddForm?: boolean
   onFormClose?: () => void
+  onNavigate?: (page: string) => void
 }
 
-export function MediaPage({ showAddForm: showFromParent, onFormClose }: Props) {
+export function MediaPage({ showAddForm: showFromParent, onFormClose, onNavigate }: Props) {
   const { settings } = useStore()
   const [activeTab, setActiveTab] = useState<MediaTab>('instances')
 
@@ -2589,7 +2625,7 @@ export function MediaPage({ showAddForm: showFromParent, onFormClose }: Props) {
         <h2 style={{ fontSize: 18, fontWeight: 600, flex: 1 }}>Media</h2>
       </div>
 
-      <TabBar active={activeTab} onChange={setActiveTab} showDiscover={hasTmdbKey} />
+      <TabBar active={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'instances' && (
         <InstancesTab showAddForm={showFromParent} onFormClose={onFormClose} />
@@ -2597,7 +2633,7 @@ export function MediaPage({ showAddForm: showFromParent, onFormClose }: Props) {
       {activeTab === 'library' && <LibraryTab />}
       {activeTab === 'calendar' && <CalendarTab />}
       {activeTab === 'indexers' && <IndexersTab />}
-      {activeTab === 'discover' && <DiscoverTab />}
+      {activeTab === 'discover' && <DiscoverTab hasTmdbKey={hasTmdbKey} onNavigate={onNavigate ?? (() => {})} />}
       {activeTab === 'trash' && <TRaSHTab />}
     </div>
   )
