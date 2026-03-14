@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Component } from 'react'
+import type { ErrorInfo, ReactNode } from 'react'
 import { useStore } from './store/useStore'
 import { useDashboardStore } from './store/useDashboardStore'
 import { Sidebar } from './components/Sidebar'
@@ -13,10 +14,36 @@ import { HaPage } from './pages/HaPage'
 import { SetupPage } from './pages/SetupPage'
 import { ServiceModal } from './components/ServiceModal'
 import { LoginModal } from './components/LoginModal'
+import { ToastProvider } from './components/Toast'
 import type { Service } from './types'
 import { calcAutoTheme } from './utils'
 
-export default function App() {
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+  componentDidCatch(_err: Error, _info: ErrorInfo) {}
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+          <div className="glass" style={{ padding: 32, borderRadius: 'var(--radius-xl)', maxWidth: 420, width: '100%', textAlign: 'center' }}>
+            <h3 style={{ marginBottom: 12 }}>Something went wrong</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>{this.state.error.message}</p>
+            <button className="btn btn-primary" onClick={() => window.location.reload()}>Reload</button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+function App() {
   const { loadAll, checkAllServices, checkAuth, settings, authReady, needsSetup, isAdmin, isAuthenticated, authUser, userGroups, myBackground, loadMyBackground } = useStore()
   const { loadDashboard } = useDashboardStore()
   const [page, setPage] = useState('dashboard')
@@ -116,6 +143,7 @@ export default function App() {
   }
 
   return (
+    <ToastProvider>
     <>
       {/* User-assigned background image */}
       {myBackground && (
@@ -190,5 +218,14 @@ export default function App() {
         <LoginModal onClose={() => setShowLogin(false)} />
       )}
     </>
+    </ToastProvider>
+  )
+}
+
+export default function AppWithBoundary() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   )
 }

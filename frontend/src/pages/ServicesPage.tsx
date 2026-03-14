@@ -39,7 +39,7 @@ function SortableGroupSection({
   isAdmin: boolean
 }) {
   const { addService, removeItem, isOnDashboard } = useDashboardStore()
-  const { updateService } = useStore()
+  const { updateService, deleteService } = useStore()
   const { items: dashboardItems } = useDashboardStore()
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: section.id || section.label,
@@ -48,7 +48,6 @@ function SortableGroupSection({
 
   const handleDelete = (service: Service) => {
     if (confirm(`Delete "${service.name}"?`)) {
-      const { deleteService } = useStore()
       deleteService(service.id)
     }
   }

@@ -264,6 +264,12 @@ function applySchema(db: Database.Database) {
       ('auth_mode', '"local"'),
       ('auto_theme_enabled', 'false'),
       ('auto_theme_light_start', '"08:00"'),
-      ('auto_theme_dark_start', '"20:00"');
+      ('auto_theme_dark_start', '"20:00"'),
+      ('design_border_radius', '"default"'),
+      ('design_glass_blur', '"medium"'),
+      ('design_density', '"comfortable"'),
+      ('design_animations', '"full"'),
+      ('design_sidebar_style', '"default"'),
+      ('design_custom_css', '""');
   `)
 }

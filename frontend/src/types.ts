@@ -38,6 +38,12 @@ export interface Settings {
   auto_theme_enabled?: boolean
   auto_theme_light_start?: string  // HH:MM e.g. "08:00"
   auto_theme_dark_start?: string   // HH:MM e.g. "20:00"
+  design_border_radius?: 'sharp' | 'default' | 'rounded'
+  design_glass_blur?: 'subtle' | 'medium' | 'strong'
+  design_density?: 'compact' | 'comfortable' | 'spacious'
+  design_animations?: 'full' | 'reduced' | 'none'
+  design_sidebar_style?: 'default' | 'minimal' | 'floating'
+  design_custom_css?: string
 }
 
 export interface AuthUser {

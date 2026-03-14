@@ -1,17 +1,19 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
 import { useWidgetStore } from '../store/useWidgetStore'
-import { Plus, Trash2, Users, Shield, Pencil, X, Check, Eye, EyeOff, Settings, KeyRound, Upload, ImageIcon } from 'lucide-react'
-import type { UserRecord, UserGroup, Service, Background } from '../types'
+import { Plus, Trash2, Users, Shield, Pencil, X, Check, Eye, EyeOff, Settings, KeyRound, Upload, ImageIcon, Palette, AlertTriangle } from 'lucide-react'
+import type { UserRecord, UserGroup, Service, Background, Settings as SettingsType } from '../types'
 import type { ArrInstance } from '../types/arr'
+import { useToast } from '../components/Toast'
 
-type SettingsTab = 'general' | 'users' | 'groups' | 'oidc'
+type SettingsTab = 'general' | 'design' | 'users' | 'groups' | 'oidc'
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 function TabBar({ active, onChange }: { active: SettingsTab; onChange: (t: SettingsTab) => void }) {
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: 'general', label: 'General', icon: <Settings size={13} /> },
+    { id: 'design',  label: 'Design',  icon: <Palette size={13} /> },
     { id: 'users',   label: 'Users',   icon: <Users size={13} /> },
     { id: 'groups',  label: 'Groups',  icon: <Shield size={13} /> },
     { id: 'oidc',    label: 'OIDC / SSO', icon: <KeyRound size={13} /> },
@@ -275,6 +277,46 @@ function GroupVisibilityEditor({
   )
 }
 
+// ── Toggle button group ────────────────────────────────────────────────────────
+function ToggleGroup<T extends string>({
+  options, value, onChange,
+}: {
+  options: { value: T; label: string; sub?: string }[]
+  value: T
+  onChange: (v: T) => void
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {options.map(o => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 13,
+            fontWeight: value === o.value ? 600 : 400,
+            background: value === o.value ? 'rgba(var(--accent-rgb), 0.12)' : 'var(--glass-bg)',
+            color: value === o.value ? 'var(--accent)' : 'var(--text-secondary)',
+            border: value === o.value ? '1px solid rgba(var(--accent-rgb), 0.25)' : '1px solid var(--glass-border)',
+            cursor: 'pointer',
+            transition: 'all 150ms ease',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          {o.label}
+          {o.sub && <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>{o.sub}</span>}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ── Main Settings page ────────────────────────────────────────────────────────
 export function SettingsPage() {
   const {
@@ -289,6 +331,7 @@ export function SettingsPage() {
   } = useStore()
   const { instances: arrInstances, loadInstances } = useArrStore()
   const { widgets, loadWidgets } = useWidgetStore()
+  const { toast } = useToast()
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
 
@@ -324,6 +367,30 @@ export function SettingsPage() {
   const [bgUploading, setBgUploading] = useState(false)
   const [bgError, setBgError] = useState('')
   const bgFileRef = useRef<HTMLInputElement>(null)
+
+  // Design settings — sync when settings load
+  const [customCss, setCustomCss] = useState(settings?.design_custom_css ?? '')
+  useEffect(() => { setCustomCss(settings?.design_custom_css ?? '') }, [settings?.design_custom_css])
+  const customCssTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const saveDesign = useCallback(async (patch: Partial<SettingsType>) => {
+    try {
+      await updateSettings(patch)
+      toast({ message: 'Settings saved', type: 'success', duration: 1500 })
+    } catch { /* ignore */ }
+  }, [updateSettings, toast])
+
+  const handleDesignChange = useCallback(<K extends keyof SettingsType>(key: K, value: SettingsType[K]) => {
+    saveDesign({ [key]: value })
+  }, [saveDesign])
+
+  const handleCustomCssChange = useCallback((value: string) => {
+    setCustomCss(value)
+    if (customCssTimer.current) clearTimeout(customCssTimer.current)
+    customCssTimer.current = setTimeout(() => {
+      saveDesign({ design_custom_css: value })
+    }, 500)
+  }, [saveDesign])
 
   useEffect(() => {
     if (isAdmin) {
@@ -498,72 +565,6 @@ export function SettingsPage() {
             </div>
           </section>
 
-          {/* Background Images */}
-          <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
-            <h3 style={{ marginBottom: 4, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <ImageIcon size={15} /> Background Images
-            </h3>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
-              Upload background images and assign them to user groups via Settings → Groups.
-            </p>
-
-            {/* Existing backgrounds list */}
-            {backgrounds.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
-                {backgrounds.map(bg => (
-                  <div key={bg.id} className="glass" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
-                    <img
-                      src={bg.file_path}
-                      alt={bg.name}
-                      style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 'var(--radius-sm)', flexShrink: 0, border: '1px solid var(--glass-border)' }}
-                    />
-                    <span style={{ flex: 1, fontSize: 13 }}>{bg.name}</span>
-                    <button
-                      className="btn btn-danger btn-icon btn-sm"
-                      onClick={() => { if (confirm(`Delete background "${bg.name}"?`)) deleteBackground(bg.id) }}
-                      style={{ padding: '4px', width: 28, height: 28, flexShrink: 0 }}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Upload new background */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  className="form-input"
-                  placeholder="Background name"
-                  value={bgName}
-                  onChange={e => setBgName(e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                  <Upload size={13} />
-                  {bgFile ? bgFile.name : 'Choose image'}
-                  <input
-                    ref={bgFileRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/bmp"
-                    style={{ display: 'none' }}
-                    onChange={e => {
-                      const f = e.target.files?.[0]
-                      if (f && f.size > 10 * 1024 * 1024) { setBgError('Max 10 MB'); return }
-                      setBgError('')
-                      setBgFile(f ?? null)
-                    }}
-                  />
-                </label>
-                <button className="btn btn-primary" onClick={handleBgUpload} disabled={bgUploading} style={{ flexShrink: 0 }}>
-                  <Plus size={14} /> {bgUploading ? '…' : 'Upload'}
-                </button>
-              </div>
-              {bgError && <div style={{ fontSize: 12, color: 'var(--status-offline)' }}>{bgError}</div>}
-            </div>
-          </section>
-
           {/* App Groups */}
           <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
             <h3 style={{ marginBottom: 20, fontSize: 15, fontWeight: 600 }}>App Groups</h3>
@@ -592,6 +593,162 @@ export function SettingsPage() {
               </>
             )}
           </section>
+        </div>
+      )}
+
+      {/* ── Design ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'design' && isAdmin && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Appearance */}
+          <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
+            <h3 style={{ marginBottom: 20, fontSize: 15, fontWeight: 600 }}>Appearance</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Corner Style</div>
+                <ToggleGroup
+                  options={[
+                    { value: 'sharp' as const, label: 'Sharp' },
+                    { value: 'default' as const, label: 'Default' },
+                    { value: 'rounded' as const, label: 'Rounded' },
+                  ]}
+                  value={settings?.design_border_radius ?? 'default'}
+                  onChange={v => handleDesignChange('design_border_radius', v)}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Background Blur</div>
+                <ToggleGroup
+                  options={[
+                    { value: 'subtle' as const, label: 'Subtle', sub: 'Crisp' },
+                    { value: 'medium' as const, label: 'Medium', sub: 'Balanced' },
+                    { value: 'strong' as const, label: 'Strong', sub: 'Dreamy' },
+                  ]}
+                  value={settings?.design_glass_blur ?? 'medium'}
+                  onChange={v => handleDesignChange('design_glass_blur', v)}
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Layout & Density */}
+          <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
+            <h3 style={{ marginBottom: 20, fontSize: 15, fontWeight: 600 }}>Layout &amp; Density</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Spacing</div>
+                <ToggleGroup
+                  options={[
+                    { value: 'compact' as const, label: 'Compact' },
+                    { value: 'comfortable' as const, label: 'Comfortable' },
+                    { value: 'spacious' as const, label: 'Spacious' },
+                  ]}
+                  value={settings?.design_density ?? 'comfortable'}
+                  onChange={v => handleDesignChange('design_density', v)}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Sidebar Style</div>
+                <ToggleGroup
+                  options={[
+                    { value: 'default' as const, label: 'Default' },
+                    { value: 'minimal' as const, label: 'Minimal' },
+                    { value: 'floating' as const, label: 'Floating' },
+                  ]}
+                  value={settings?.design_sidebar_style ?? 'default'}
+                  onChange={v => handleDesignChange('design_sidebar_style', v)}
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Motion */}
+          <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
+            <h3 style={{ marginBottom: 20, fontSize: 15, fontWeight: 600 }}>Motion</h3>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Animation Level</div>
+              <ToggleGroup
+                options={[
+                  { value: 'full' as const, label: 'Full' },
+                  { value: 'reduced' as const, label: 'Reduced' },
+                  { value: 'none' as const, label: 'None' },
+                ]}
+                value={settings?.design_animations ?? 'full'}
+                onChange={v => handleDesignChange('design_animations', v)}
+              />
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>
+                Reduced and None also respect system <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>prefers-reduced-motion</code>.
+              </p>
+            </div>
+          </section>
+
+          {/* Backgrounds */}
+          <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
+            <h3 style={{ marginBottom: 4, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <ImageIcon size={15} /> Background Images
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              Upload background images and assign them to user groups via Settings → Groups.
+            </p>
+            {backgrounds.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                {backgrounds.map(bg => (
+                  <div key={bg.id} className="glass" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
+                    <img src={bg.file_path} alt={bg.name} style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 'var(--radius-sm)', flexShrink: 0, border: '1px solid var(--glass-border)' }} />
+                    <span style={{ flex: 1, fontSize: 13 }}>{bg.name}</span>
+                    <button className="btn btn-danger btn-icon btn-sm" onClick={() => { if (confirm(`Delete background "${bg.name}"?`)) deleteBackground(bg.id) }} style={{ padding: '4px', width: 28, height: 28, flexShrink: 0 }}>
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className="form-input" placeholder="Background name" value={bgName} onChange={e => setBgName(e.target.value)} style={{ flex: 1 }} />
+                <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  <Upload size={13} />
+                  {bgFile ? bgFile.name : 'Choose image'}
+                  <input
+                    ref={bgFileRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/bmp"
+                    style={{ display: 'none' }}
+                    onChange={e => {
+                      const f = e.target.files?.[0]
+                      if (f && f.size > 10 * 1024 * 1024) { setBgError('Max 10 MB'); return }
+                      setBgError('')
+                      setBgFile(f ?? null)
+                    }}
+                  />
+                </label>
+                <button className="btn btn-primary" onClick={handleBgUpload} disabled={bgUploading} style={{ flexShrink: 0 }}>
+                  <Plus size={14} /> {bgUploading ? '…' : 'Upload'}
+                </button>
+              </div>
+              {bgError && <div style={{ fontSize: 12, color: 'var(--status-offline)' }}>{bgError}</div>}
+            </div>
+          </section>
+
+          {/* Custom CSS */}
+          <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
+            <h3 style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>Custom CSS</h3>
+            <div style={{ marginBottom: 12 }}>
+              <span className="badge-warning">
+                <AlertTriangle size={12} /> Incorrect CSS may break the interface
+              </span>
+            </div>
+            <textarea
+              className="form-input"
+              rows={12}
+              value={customCss}
+              onChange={e => handleCustomCssChange(e.target.value)}
+              placeholder="/* Add custom CSS overrides here */"
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%', resize: 'vertical' }}
+            />
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Applied globally for all users.</p>
+          </section>
+
         </div>
       )}
 

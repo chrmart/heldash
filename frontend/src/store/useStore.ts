@@ -440,4 +440,16 @@ function applyTheme(settings: Settings) {
     : settings.theme_mode
   root.setAttribute('data-theme', mode)
   root.setAttribute('data-accent', settings.theme_accent)
+  root.setAttribute('data-radius',     settings.design_border_radius ?? 'default')
+  root.setAttribute('data-blur',       settings.design_glass_blur    ?? 'medium')
+  root.setAttribute('data-density',    settings.design_density       ?? 'comfortable')
+  root.setAttribute('data-animations', settings.design_animations    ?? 'full')
+  root.setAttribute('data-sidebar',    settings.design_sidebar_style ?? 'default')
+  let el = document.getElementById('heldash-custom-css') as HTMLStyleElement | null
+  if (!el) {
+    el = document.createElement('style')
+    el.id = 'heldash-custom-css'
+    document.head.appendChild(el)
+  }
+  el.textContent = settings.design_custom_css ?? ''
 }
