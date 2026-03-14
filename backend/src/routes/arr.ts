@@ -548,8 +548,8 @@ export async function arrRoutes(app: FastifyInstance) {
     }
   )
 
-  // GET /api/arr/:id/discover/movies?page=1&sortBy=popularity.desc
-  app.get<{ Params: { id: string }; Querystring: { page?: string; sortBy?: string } }>(
+  // GET /api/arr/:id/discover/movies?page=1&sortBy=popularity.desc[&language=de&genre=28,12&watchProviders=8,9&watchRegion=DE&voteAverageGte=7.0&primaryReleaseDateGte=2020-01-01&primaryReleaseDateLte=2024-12-31]
+  app.get<{ Params: { id: string }; Querystring: { page?: string; sortBy?: string; language?: string; genre?: string; watchProviders?: string; watchRegion?: string; voteAverageGte?: string; primaryReleaseDateGte?: string; primaryReleaseDateLte?: string } }>(
     '/api/arr/:id/discover/movies',
     async (req, reply) => {
       const row = await resolveInstance(req, reply, req.params.id)
@@ -558,15 +558,24 @@ export async function arrRoutes(app: FastifyInstance) {
       try {
         const page = Math.max(1, parseInt(req.query.page ?? '1', 10))
         const sortBy = req.query.sortBy ?? 'popularity.desc'
-        return await new SeerrClient(row.url, row.api_key).getDiscoverMovies(page, sortBy)
+        const filters = {
+          language: req.query.language,
+          genre: req.query.genre,
+          watchProviders: req.query.watchProviders,
+          watchRegion: req.query.watchRegion,
+          voteAverageGte: req.query.voteAverageGte,
+          primaryReleaseDateGte: req.query.primaryReleaseDateGte,
+          primaryReleaseDateLte: req.query.primaryReleaseDateLte,
+        }
+        return await new SeerrClient(row.url, row.api_key).getDiscoverMovies(page, sortBy, filters)
       } catch (e: any) {
         return reply.status(502).send({ error: 'Upstream error', detail: e.message })
       }
     }
   )
 
-  // GET /api/arr/:id/discover/tv?page=1&sortBy=popularity.desc
-  app.get<{ Params: { id: string }; Querystring: { page?: string; sortBy?: string } }>(
+  // GET /api/arr/:id/discover/tv?page=1&sortBy=popularity.desc[&language=de&genre=28,12&watchProviders=8,9&watchRegion=DE&voteAverageGte=7.0&primaryReleaseDateGte=2020-01-01&primaryReleaseDateLte=2024-12-31]
+  app.get<{ Params: { id: string }; Querystring: { page?: string; sortBy?: string; language?: string; genre?: string; watchProviders?: string; watchRegion?: string; voteAverageGte?: string; primaryReleaseDateGte?: string; primaryReleaseDateLte?: string } }>(
     '/api/arr/:id/discover/tv',
     async (req, reply) => {
       const row = await resolveInstance(req, reply, req.params.id)
@@ -575,7 +584,16 @@ export async function arrRoutes(app: FastifyInstance) {
       try {
         const page = Math.max(1, parseInt(req.query.page ?? '1', 10))
         const sortBy = req.query.sortBy ?? 'popularity.desc'
-        return await new SeerrClient(row.url, row.api_key).getDiscoverTv(page, sortBy)
+        const filters = {
+          language: req.query.language,
+          genre: req.query.genre,
+          watchProviders: req.query.watchProviders,
+          watchRegion: req.query.watchRegion,
+          voteAverageGte: req.query.voteAverageGte,
+          primaryReleaseDateGte: req.query.primaryReleaseDateGte,
+          primaryReleaseDateLte: req.query.primaryReleaseDateLte,
+        }
+        return await new SeerrClient(row.url, row.api_key).getDiscoverTv(page, sortBy, filters)
       } catch (e: any) {
         return reply.status(502).send({ error: 'Upstream error', detail: e.message })
       }
@@ -597,8 +615,8 @@ export async function arrRoutes(app: FastifyInstance) {
     }
   )
 
-  // GET /api/arr/:id/discover/search?query=<search-term>
-  app.get<{ Params: { id: string }; Querystring: { query: string } }>(
+  // GET /api/arr/:id/discover/search?query=<search-term>[&language=de&page=1]
+  app.get<{ Params: { id: string }; Querystring: { query: string; language?: string; page?: string } }>(
     '/api/arr/:id/discover/search',
     async (req, reply) => {
       const row = await resolveInstance(req, reply, req.params.id)
@@ -606,7 +624,8 @@ export async function arrRoutes(app: FastifyInstance) {
       if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
       if (!req.query.query?.trim()) return reply.status(400).send({ error: 'Query required' })
       try {
-        return await new SeerrClient(row.url, row.api_key).search(req.query.query)
+        const page = Math.max(1, parseInt(req.query.page ?? '1', 10))
+        return await new SeerrClient(row.url, row.api_key).search(req.query.query, req.query.language, page)
       } catch (e: any) {
         return reply.status(502).send({ error: 'Upstream error', detail: e.message })
       }
@@ -625,6 +644,57 @@ export async function arrRoutes(app: FastifyInstance) {
       try {
         const result = await new SeerrClient(row.url, row.api_key).requestMedia(req.body.mediaType, req.body.mediaId, req.body.seasons)
         return result
+      } catch (e: any) {
+        return reply.status(502).send({ error: 'Upstream error', detail: e.message })
+      }
+    }
+  )
+
+  // GET /api/arr/:id/genres/:mediaType — movie or tv
+  app.get<{ Params: { id: string; mediaType: string } }>(
+    '/api/arr/:id/genres/:mediaType',
+    async (req, reply) => {
+      const row = await resolveInstance(req, reply, req.params.id)
+      if (!row) return
+      if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
+      const mt = req.params.mediaType
+      if (mt !== 'movie' && mt !== 'tv') return reply.status(400).send({ error: 'mediaType must be movie or tv' })
+      try {
+        return await new SeerrClient(row.url, row.api_key).getGenres(mt)
+      } catch (e: any) {
+        return reply.status(502).send({ error: 'Upstream error', detail: e.message })
+      }
+    }
+  )
+
+  // GET /api/arr/:id/watchproviders/:mediaType — movie or tv
+  app.get<{ Params: { id: string; mediaType: string } }>(
+    '/api/arr/:id/watchproviders/:mediaType',
+    async (req, reply) => {
+      const row = await resolveInstance(req, reply, req.params.id)
+      if (!row) return
+      if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
+      const mt = req.params.mediaType
+      if (mt !== 'movie' && mt !== 'tv') return reply.status(400).send({ error: 'mediaType must be movie or tv' })
+      try {
+        return await new SeerrClient(row.url, row.api_key).getWatchProviders(mt)
+      } catch (e: any) {
+        return reply.status(502).send({ error: 'Upstream error', detail: e.message })
+      }
+    }
+  )
+
+  // GET /api/arr/:id/tv/:tmdbId — full TV detail with seasons and per-season availability
+  app.get<{ Params: { id: string; tmdbId: string } }>(
+    '/api/arr/:id/tv/:tmdbId',
+    async (req, reply) => {
+      const row = await resolveInstance(req, reply, req.params.id)
+      if (!row) return
+      if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
+      const tmdbId = parseInt(req.params.tmdbId, 10)
+      if (isNaN(tmdbId)) return reply.status(400).send({ error: 'Invalid tmdbId' })
+      try {
+        return await new SeerrClient(row.url, row.api_key).getTvDetailFull(tmdbId)
       } catch (e: any) {
         return reply.status(502).send({ error: 'Upstream error', detail: e.message })
       }

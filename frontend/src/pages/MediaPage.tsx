@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
 import { useDashboardStore } from '../store/useDashboardStore'
@@ -7,14 +7,13 @@ import type { DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, Compass, Database, AlertTriangle, BookMarked } from 'lucide-react'
+import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, Compass, Database, AlertTriangle } from 'lucide-react'
 import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrStats } from '../types/arr'
+import type { SeerrSearchResult, SeerrTvDetail, DiscoverFilters, DiscoverServerFilters } from '../types/seerr'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
-import TrashPage from './TrashPage'
-
 // ── Tab type ──────────────────────────────────────────────────────────────────
 
-type MediaTab = 'instances' | 'library' | 'calendar' | 'indexers' | 'discover' | 'trash'
+type MediaTab = 'instances' | 'library' | 'calendar' | 'indexers' | 'discover'
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
@@ -25,7 +24,6 @@ function TabBar({ active, onChange, showDiscover }: { active: MediaTab; onChange
     { id: 'calendar',   label: 'Calendar',   icon: <CalendarDays size={13} /> },
     { id: 'indexers',   label: 'Indexers',   icon: <Search size={13} /> },
     ...(showDiscover ? [{ id: 'discover' as MediaTab, label: 'Discover', icon: <Compass size={13} /> }] : []),
-    { id: 'trash',      label: 'TRaSH Guides', icon: <BookMarked size={13} /> },
   ]
   return (
     <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -1087,65 +1085,172 @@ function LibraryTab() {
 
 // ── Discover tab (Seerr) ───────────────────────────────────────────────────────
 
+const DISCOVER_LANGUAGES = [
+  { code: '', label: 'Any language' },
+  { code: 'en', label: 'English' },
+  { code: 'de', label: 'German' },
+  { code: 'fr', label: 'French' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'it', label: 'Italian' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'ru', label: 'Russian' },
+  { code: 'nl', label: 'Dutch' },
+  { code: 'pl', label: 'Polish' },
+  { code: 'sv', label: 'Swedish' },
+  { code: 'tr', label: 'Turkish' },
+]
+
+const SORT_OPTIONS = [
+  { label: 'Popularity', value: 'popularity.desc' },
+  { label: 'Rating', value: 'vote_average.desc' },
+  { label: 'Release date', value: 'release_date.desc' },
+  { label: 'Title A–Z', value: 'original_title.asc' },
+]
+
+const DEFAULT_FILTERS: DiscoverFilters = {
+  mediaType: 'all',
+  language: '',
+  genreIds: [],
+  watchProviderIds: [],
+  voteAverageGte: 0,
+  releaseYearFrom: '',
+  releaseYearTo: '',
+  sortBy: 'popularity.desc',
+}
+
+function getSeasonStatus(seasonNumber: number, tvDetail: SeerrTvDetail): number {
+  return tvDetail.mediaInfo?.seasons?.find(s => s.seasonNumber === seasonNumber)?.status ?? 0
+}
+
 function DiscoverTab() {
-  const { instances, discoverMovies, discoverTv, discoverTrending, discoverSearch, seerrRequests, loadDiscoverMovies, loadDiscoverTv, loadDiscoverTrending, loadDiscoverSearch, discoverRequest, loadSeerrRequests } = useArrStore()
+  const {
+    instances, discoverMovies, discoverTv, discoverTrending, discoverSearch,
+    seerrRequests, genres, watchProviders, tvDetails,
+    loadDiscoverMovies, loadDiscoverTv, loadDiscoverTrending, loadDiscoverSearch,
+    loadGenres, loadWatchProviders, loadTvDetail,
+    discoverRequest, loadSeerrRequests,
+  } = useArrStore()
+
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<'trending' | 'movies' | 'tv' | 'search'>('trending')
   const [page, setPage] = useState(1)
-  const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filters, setFilters] = useState<DiscoverFilters>({ ...DEFAULT_FILTERS })
   const [requesting, setRequesting] = useState<string | null>(null)
-  const [sortBy, setSortBy] = useState('popularity.desc')
-  const [confirmRequest, setConfirmRequest] = useState<{ item: any; mediaType: 'movie' | 'tv'; mediaId: number } | null>(null)
+  const [confirmRequest, setConfirmRequest] = useState<{ item: SeerrSearchResult; mediaType: 'movie' | 'tv'; mediaId: number } | null>(null)
   const [selectedSeasons, setSelectedSeasons] = useState<number[]>([])
+  const [tvDetailLoading, setTvDetailLoading] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   const seerrInstances = instances.filter(i => i.type === 'seerr' && i.enabled)
   const selected = seerrInstances[0]
 
-  // Load all data on mount in parallel
+  // Serialize filters to a stable string for use in effect deps
+  const filtersJson = JSON.stringify(filters)
+
+  // Build server filters from the current filters state
+  const buildServerFilters = (f: DiscoverFilters): DiscoverServerFilters => ({
+    language: f.language || undefined,
+    genreIds: f.genreIds.length > 0 ? f.genreIds : undefined,
+    watchProviderIds: f.watchProviderIds.length > 0 ? f.watchProviderIds : undefined,
+    voteAverageGte: f.voteAverageGte > 0 ? f.voteAverageGte : undefined,
+    releaseYearFrom: f.releaseYearFrom || undefined,
+    releaseYearTo: f.releaseYearTo || undefined,
+  })
+
+  // Track whether initial load for the current selected instance has completed
+  const hasMounted = useRef(false)
+
+  // Initial load: trending + both discover tabs + requests + genres + providers
   useEffect(() => {
     if (!selected) return
+    hasMounted.current = false
+    setPage(1)
+    const sf = buildServerFilters(DEFAULT_FILTERS)
     const load = async () => {
       setLoading(true)
       await Promise.all([
         loadDiscoverTrending(selected.id),
-        loadDiscoverMovies(selected.id, 1, sortBy),
-        loadDiscoverTv(selected.id, 1, sortBy),
-        loadSeerrRequests(selected.id, 'all'), // Load all requests to check for already-requested items
+        loadDiscoverMovies(selected.id, 1, DEFAULT_FILTERS.sortBy, sf),
+        loadDiscoverTv(selected.id, 1, DEFAULT_FILTERS.sortBy, sf),
+        loadSeerrRequests(selected.id, 'all'),
+        loadGenres(selected.id),
+        loadWatchProviders(selected.id),
       ])
+      setLoading(false)
+      hasMounted.current = true
+    }
+    load()
+  }, [selected?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload movies/tv when filters change (skip on initial mount — covered above)
+  useEffect(() => {
+    if (!hasMounted.current || !selected) return
+    if (tab !== 'movies' && tab !== 'tv') return
+    setPage(1)
+    const sf = buildServerFilters(filters)
+    const load = async () => {
+      setLoading(true)
+      if (tab === 'movies') await loadDiscoverMovies(selected.id, 1, filters.sortBy, sf)
+      else await loadDiscoverTv(selected.id, 1, filters.sortBy, sf)
       setLoading(false)
     }
     load()
-  }, [selected?.id, sortBy])
+  }, [filtersJson]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-dismiss notification after 4 seconds
+  // Reload when tab switches to movies/tv (picks up any filter changes made on other tabs)
+  useEffect(() => {
+    if (!hasMounted.current || !selected) return
+    if (tab !== 'movies' && tab !== 'tv') return
+    setPage(1)
+    const sf = buildServerFilters(filters)
+    const load = async () => {
+      setLoading(true)
+      if (tab === 'movies') await loadDiscoverMovies(selected.id, 1, filters.sortBy, sf)
+      else await loadDiscoverTv(selected.id, 1, filters.sortBy, sf)
+      setLoading(false)
+    }
+    load()
+  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Search debounce (also re-fires when language filter changes)
+  useEffect(() => {
+    if (tab !== 'search' || !selected || !searchQuery.trim()) return
+    const timer = setTimeout(async () => {
+      setPage(1)
+      setLoading(true)
+      await loadDiscoverSearch(selected.id, searchQuery, filters.language || undefined)
+      setLoading(false)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [tab, searchQuery, selected?.id, filters.language]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-dismiss notification
   useEffect(() => {
     if (!notification) return
     const timer = setTimeout(() => setNotification(null), 4000)
     return () => clearTimeout(timer)
   }, [notification])
 
-  // Load specific page when pagination changes
+  // Initialize selectedSeasons when TV detail loads in the modal
   useEffect(() => {
-    if (!selected || page === 1) return
-    const load = async () => {
-      if (tab === 'movies') await loadDiscoverMovies(selected.id, page, sortBy)
-      else if (tab === 'tv') await loadDiscoverTv(selected.id, page, sortBy)
-    }
-    load()
-  }, [tab, page, selected?.id, sortBy])
-
-  // Handle search: trigger API call when search query changes
-  useEffect(() => {
-    if (tab !== 'search' || !selected || !searchQuery.trim()) return
-    const timer = setTimeout(async () => {
-      setLoading(true)
-      await loadDiscoverSearch(selected.id, searchQuery)
-      setLoading(false)
-    }, 300) // Debounce
-    return () => clearTimeout(timer)
-  }, [searchQuery, selected?.id, tab])
+    if (!confirmRequest || confirmRequest.mediaType !== 'tv') return
+    const tvDetail = tvDetails[String(confirmRequest.mediaId)]
+    if (!tvDetail) return
+    const realSeasons = tvDetail.seasons.filter(s => s.seasonNumber > 0)
+    const preSelected = realSeasons
+      .filter(s => {
+        const status = getSeasonStatus(s.seasonNumber, tvDetail)
+        return status !== 5 && status !== 2 && status !== 3
+      })
+      .map(s => s.seasonNumber)
+    setSelectedSeasons(preSelected)
+  }, [confirmRequest?.mediaId, tvDetails]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!selected) {
     return (
@@ -1155,143 +1260,352 @@ function DiscoverTab() {
     )
   }
 
-  // Get data based on active tab
-  let data: any
-  if (tab === 'search') {
-    data = discoverSearch[selected.id]
-  } else if (tab === 'trending') {
-    data = discoverTrending[selected.id]
-  } else if (tab === 'movies') {
-    data = discoverMovies[selected.id]
-  } else {
-    data = discoverTv[selected.id]
-  }
+  // Resolve raw results for the active tab
+  const rawResults: SeerrSearchResult[] = tab === 'search'
+    ? (discoverSearch[selected.id]?.results ?? [])
+    : tab === 'trending'
+    ? (discoverTrending[selected.id]?.results ?? [])
+    : tab === 'movies'
+    ? (discoverMovies[selected.id]?.results ?? [])
+    : (discoverTv[selected.id]?.results ?? [])
 
-  const allResults = data?.results ?? []
+  // Total pages for Load More
+  const totalPages = tab === 'movies'
+    ? (discoverMovies[selected.id]?.pageInfo?.pages ?? 1)
+    : tab === 'tv'
+    ? (discoverTv[selected.id]?.pageInfo?.pages ?? 1)
+    : tab === 'search'
+    ? (discoverSearch[selected.id]?.pageInfo?.pages ?? 1)
+    : 1
 
-  // Helper: resolve media status from mediaInfo (direct) or requests list (fallback)
-  // Returns: 'available' | 'partial' | 'processing' | 'pending' | null
-  const getItemStatus = (item: any): 'available' | 'partial' | 'processing' | 'pending' | null => {
-    const s = item.mediaInfo?.status as number | undefined
+  // Client-side filtering (mediaType, rating, genre) for trending/search; sort for all client-side tabs
+  const allResults: SeerrSearchResult[] = (() => {
+    let results = [...rawResults]
+
+    if ((tab === 'trending' || tab === 'search')) {
+      if (filters.mediaType !== 'all') {
+        results = results.filter(r => r.mediaType === filters.mediaType)
+      }
+      if (filters.voteAverageGte > 0) {
+        results = results.filter(r => (r.voteAverage ?? 0) >= filters.voteAverageGte)
+      }
+      if (filters.genreIds.length > 0) {
+        results = results.filter(r => r.genreIds?.some(g => filters.genreIds.includes(g)))
+      }
+      // Client-side sort for trending/search
+      switch (filters.sortBy) {
+        case 'vote_average.desc':
+          results.sort((a, b) => (b.voteAverage ?? 0) - (a.voteAverage ?? 0))
+          break
+        case 'release_date.desc':
+          results.sort((a, b) =>
+            (b.releaseDate ?? b.firstAirDate ?? '').localeCompare(a.releaseDate ?? a.firstAirDate ?? '')
+          )
+          break
+        case 'original_title.asc':
+          results.sort((a, b) =>
+            (a.originalTitle ?? a.title ?? a.name ?? '').localeCompare(b.originalTitle ?? b.title ?? b.name ?? '')
+          )
+          break
+      }
+    }
+    return results
+  })()
+
+  // Determine per-item media status
+  const getItemStatus = (item: SeerrSearchResult): 'available' | 'partial' | 'processing' | 'pending' | null => {
+    const s = item.mediaInfo?.status
     if (s === 5) return 'available'
     if (s === 4) return 'partial'
     if (s === 3) return 'processing'
     if (s === 2) return 'pending'
-    // Fallback: check recently-submitted requests (covers items requested this session)
     const requests = seerrRequests[selected.id]?.results ?? []
     if (requests.some(r => r.media.mediaType === item.mediaType && r.media.tmdbId === item.id)) return 'pending'
     return null
   }
 
+  // Which genres to show in filter panel
+  const genreList = tab === 'tv'
+    ? (genres[selected.id]?.tv ?? [])
+    : (genres[selected.id]?.movie ?? [])
+
+  const providerList = tab === 'tv'
+    ? (watchProviders[selected.id]?.tv ?? [])
+    : (watchProviders[selected.id]?.movie ?? [])
+
+  const activeFilterCount = [
+    filters.mediaType !== 'all',
+    !!filters.language,
+    filters.genreIds.length > 0,
+    filters.watchProviderIds.length > 0,
+    filters.voteAverageGte > 0,
+    !!filters.releaseYearFrom || !!filters.releaseYearTo,
+  ].filter(Boolean).length
+
+  const handleLoadMore = async () => {
+    const nextPage = page + 1
+    setPage(nextPage)
+    const sf = buildServerFilters(filters)
+    setLoading(true)
+    if (tab === 'movies') {
+      await loadDiscoverMovies(selected.id, nextPage, filters.sortBy, sf, true)
+    } else if (tab === 'tv') {
+      await loadDiscoverTv(selected.id, nextPage, filters.sortBy, sf, true)
+    } else if (tab === 'search' && searchQuery.trim()) {
+      await loadDiscoverSearch(selected.id, searchQuery, filters.language || undefined, nextPage, true)
+    }
+    setLoading(false)
+  }
+
+  const openRequestModal = async (item: SeerrSearchResult) => {
+    setConfirmRequest({ item, mediaType: item.mediaType, mediaId: item.id })
+    setSelectedSeasons([])
+    if (item.mediaType === 'tv') {
+      // Fetch TV detail if not cached
+      if (!tvDetails[String(item.id)]) {
+        setTvDetailLoading(true)
+        await loadTvDetail(selected.id, item.id)
+        setTvDetailLoading(false)
+      }
+      // selectedSeasons will be initialized by the effect above when tvDetails updates
+    }
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'relative' }}>
+
       {/* Notification Toast */}
       {notification && (
-        <div
-          style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 500,
-            padding: '12px 16px',
-            borderRadius: 'var(--radius-md)',
-            fontSize: 13,
-            fontWeight: 500,
-            backgroundColor: notification.type === 'success'
-              ? 'rgba(34, 197, 94, 0.1)'
-              : 'rgba(239, 68, 68, 0.1)',
-            color: notification.type === 'success'
-              ? '#22c55e'
-              : '#ef4444',
-            border: `1px solid ${notification.type === 'success'
-              ? 'rgba(34, 197, 94, 0.3)'
-              : 'rgba(239, 68, 68, 0.3)'}`,
-            animation: 'slideDown 200ms ease',
-          }}
-        >
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 500,
+          padding: '12px 16px', borderRadius: 'var(--radius-md)',
+          fontSize: 13, fontWeight: 500,
+          backgroundColor: notification.type === 'success' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+          color: notification.type === 'success' ? '#22c55e' : '#ef4444',
+          border: `1px solid ${notification.type === 'success' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+        }}>
           {notification.message}
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* Tab bar + sort + search + filters toggle */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Tabs */}
         <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2 }}>
           {(['trending', 'movies', 'tv', 'search'] as const).map(t => (
             <button
               key={t}
-              onClick={() => {
-                setTab(t)
-                setPage(1)
-                if (t !== 'search') {
-                  setSearchInput('')
-                  setSearchQuery('')
-                }
-              }}
+              onClick={() => { setTab(t); setPage(1); if (t !== 'search') { setSearchInput(''); setSearchQuery('') } }}
               style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '7px 14px',
-                borderRadius: 'var(--radius-md)',
+                padding: '7px 14px', borderRadius: 'var(--radius-md)',
                 fontSize: 13, fontWeight: tab === t ? 600 : 400,
                 background: tab === t ? 'rgba(var(--accent-rgb), 0.12)' : 'transparent',
                 color: tab === t ? 'var(--accent)' : 'var(--text-secondary)',
                 border: tab === t ? '1px solid rgba(var(--accent-rgb), 0.25)' : '1px solid transparent',
-                cursor: 'pointer',
-                transition: 'all 150ms ease',
-                textTransform: 'capitalize',
+                cursor: 'pointer', transition: 'all 150ms ease', textTransform: 'capitalize',
                 fontFamily: 'var(--font-sans)',
               }}
             >
-              {t === 'search' && '🔍'}
-              {t !== 'search' && ' '}
               {t}
             </button>
           ))}
         </div>
 
-        {tab !== 'trending' && tab !== 'search' && (
-          <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2 }}>
-            {[
-              { label: 'Popular', value: 'popularity.desc' },
-              { label: 'Top Rated', value: 'vote_average.desc' },
-              { label: 'Latest', value: 'release_date.desc' },
-            ].map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => { setSortBy(opt.value); setPage(1) }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '7px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: 13, fontWeight: sortBy === opt.value ? 600 : 400,
-                  background: sortBy === opt.value ? 'rgba(var(--accent-rgb), 0.12)' : 'transparent',
-                  color: sortBy === opt.value ? 'var(--accent)' : 'var(--text-secondary)',
-                  border: sortBy === opt.value ? '1px solid rgba(var(--accent-rgb), 0.25)' : '1px solid transparent',
-                  cursor: 'pointer',
-                  transition: 'all 150ms ease',
-                  fontFamily: 'var(--font-sans)',
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+        {/* Sort dropdown */}
+        <select
+          value={filters.sortBy}
+          onChange={e => setFilters(f => ({ ...f, sortBy: e.target.value }))}
+          className="form-input"
+          style={{ fontSize: 13, padding: '6px 8px', width: 'auto' }}
+        >
+          {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+
+        {/* Search input — only active on search tab */}
+        {tab === 'search' && (
+          <input
+            type="text"
+            placeholder="Search movies and TV shows…"
+            value={searchInput}
+            onChange={e => { setSearchInput(e.target.value); setSearchQuery(e.target.value) }}
+            className="form-input"
+            style={{ flex: 1, minWidth: 180, fontSize: 13, padding: '6px 8px' }}
+            autoFocus
+          />
         )}
 
-        <input
-          type="text"
-          placeholder={tab === 'search' ? 'Search for movies and TV shows…' : 'Filter results…'}
-          value={tab === 'search' ? searchInput : ''}
-          onChange={e => {
-            if (tab === 'search') {
-              setSearchInput(e.target.value)
-              setSearchQuery(e.target.value)
-            }
-          }}
-          className="form-input"
-          style={{ flex: 1, minWidth: 150, fontSize: 13, padding: '5px 8px' }}
-          disabled={tab !== 'search'}
-        />
-        {loading && <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
+          {loading && <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />}
+          {/* Filters toggle */}
+          <button
+            onClick={() => setFiltersOpen(o => !o)}
+            className={activeFilterCount > 0 ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+            style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+            <span style={{ fontSize: 10, lineHeight: 1 }}>{filtersOpen ? '▲' : '▼'}</span>
+          </button>
+        </div>
       </div>
 
+      {/* Collapsible filter panel */}
+      {filtersOpen && (
+        <div className="glass" style={{ borderRadius: 'var(--radius-lg)', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Row 1: media type, language, rating, years */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+
+            {/* Media type toggle */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>Type</span>
+              <div style={{ display: 'flex', gap: 2 }}>
+                {(['all', 'movie', 'tv'] as const).map(mt => (
+                  <button
+                    key={mt}
+                    onClick={() => setFilters(f => ({ ...f, mediaType: mt }))}
+                    style={{
+                      padding: '5px 10px', borderRadius: 'var(--radius-md)', fontSize: 12,
+                      background: filters.mediaType === mt ? 'rgba(var(--accent-rgb), 0.2)' : 'rgba(var(--text-rgb), 0.08)',
+                      color: filters.mediaType === mt ? 'var(--accent)' : 'var(--text-secondary)',
+                      border: filters.mediaType === mt ? '1px solid rgba(var(--accent-rgb), 0.4)' : '1px solid transparent',
+                      cursor: 'pointer', transition: 'all 150ms ease', fontFamily: 'var(--font-sans)',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {mt === 'all' ? 'All' : mt === 'movie' ? 'Movies' : 'TV'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Language */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>Language</span>
+              <select
+                value={filters.language}
+                onChange={e => setFilters(f => ({ ...f, language: e.target.value }))}
+                className="form-input"
+                style={{ fontSize: 12, padding: '5px 8px', width: 'auto' }}
+              >
+                {DISCOVER_LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+              </select>
+            </div>
+
+            {/* Min rating slider */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                Min rating{filters.voteAverageGte > 0 ? `: ${filters.voteAverageGte.toFixed(1)}` : ': any'}
+              </span>
+              <input
+                type="range" min={0} max={10} step={0.5}
+                value={filters.voteAverageGte}
+                onChange={e => setFilters(f => ({ ...f, voteAverageGte: parseFloat(e.target.value) }))}
+                style={{ width: 120, accentColor: 'var(--accent)', cursor: 'pointer' }}
+              />
+            </div>
+
+            {/* Year range */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>Year</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  type="text" placeholder="from" maxLength={4}
+                  value={filters.releaseYearFrom}
+                  onChange={e => { if (/^\d{0,4}$/.test(e.target.value)) setFilters(f => ({ ...f, releaseYearFrom: e.target.value })) }}
+                  className="form-input"
+                  style={{ width: 60, fontSize: 12, padding: '5px 8px' }}
+                />
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>–</span>
+                <input
+                  type="text" placeholder="to" maxLength={4}
+                  value={filters.releaseYearTo}
+                  onChange={e => { if (/^\d{0,4}$/.test(e.target.value)) setFilters(f => ({ ...f, releaseYearTo: e.target.value })) }}
+                  className="form-input"
+                  style={{ width: 60, fontSize: 12, padding: '5px 8px' }}
+                />
+              </div>
+            </div>
+
+            {/* Reset button */}
+            {activeFilterCount > 0 && (
+              <button
+                onClick={() => setFilters({ ...DEFAULT_FILTERS })}
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: 12, alignSelf: 'flex-end' }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          {/* Row 2: Genres */}
+          {genreList.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>Genres</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {genreList.map(g => {
+                  const active = filters.genreIds.includes(g.id)
+                  return (
+                    <button
+                      key={g.id}
+                      onClick={() => setFilters(f => ({
+                        ...f,
+                        genreIds: active ? f.genreIds.filter(id => id !== g.id) : [...f.genreIds, g.id],
+                      }))}
+                      style={{
+                        padding: '4px 10px', borderRadius: 'var(--radius-md)', fontSize: 12,
+                        background: active ? 'rgba(var(--accent-rgb), 0.2)' : 'rgba(var(--text-rgb), 0.08)',
+                        color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                        border: active ? '1px solid rgba(var(--accent-rgb), 0.4)' : '1px solid transparent',
+                        cursor: 'pointer', transition: 'all 150ms ease', fontFamily: 'var(--font-sans)',
+                      }}
+                    >
+                      {g.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Row 3: Streaming providers */}
+          {providerList.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>Streaming service</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {providerList.map(p => {
+                  const active = filters.watchProviderIds.includes(p.id)
+                  const logoUrl = p.logoPath ? `https://image.tmdb.org/t/p/w45${p.logoPath}` : null
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setFilters(f => ({
+                        ...f,
+                        watchProviderIds: active ? f.watchProviderIds.filter(id => id !== p.id) : [...f.watchProviderIds, p.id],
+                      }))}
+                      title={p.name}
+                      style={{
+                        padding: 4, borderRadius: 'var(--radius-md)',
+                        background: active ? 'rgba(var(--accent-rgb), 0.2)' : 'rgba(var(--text-rgb), 0.06)',
+                        border: active ? '2px solid var(--accent)' : '2px solid transparent',
+                        cursor: 'pointer', transition: 'all 150ms ease',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      {logoUrl
+                        ? <img src={logoUrl} alt={p.name} style={{ width: 32, height: 32, borderRadius: 6, display: 'block' }} />
+                        : <span style={{ fontSize: 11, padding: '4px 8px', color: active ? 'var(--accent)' : 'var(--text-secondary)' }}>{p.name}</span>
+                      }
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Empty state */}
       {allResults.length === 0 && !loading && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
@@ -1300,33 +1614,37 @@ function DiscoverTab() {
         </div>
       )}
 
+      {/* Results grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 }}>
-        {allResults.map((item: any) => {
+        {allResults.map(item => {
           const posterUrl = item.posterPath ? `https://image.tmdb.org/t/p/w300${item.posterPath}` : null
-          const backdropUrl = item.backdropPath ? `https://image.tmdb.org/t/p/w500${item.backdropPath}` : null
-          const title = item.title || item.name || 'Unknown'
-          const year = item.releaseDate?.slice(0, 4) || item.firstAirDate?.slice(0, 4) || ''
+          const title = item.title ?? item.name ?? 'Unknown'
+          const year = item.releaseDate?.slice(0, 4) ?? item.firstAirDate?.slice(0, 4) ?? ''
           const rating = item.voteAverage ? Math.round(item.voteAverage * 10) / 10 : null
-          const overview = item.overview?.slice(0, 100) + (item.overview?.length > 100 ? '...' : '') || ''
+          const overview = item.overview ? item.overview.slice(0, 100) + (item.overview.length > 100 ? '...' : '') : ''
           const itemStatus = getItemStatus(item)
-          const alreadyRequested = itemStatus !== null
+          const canRequest = itemStatus === null || itemStatus === 'partial'
+
+          const btnLabel = requesting === `${item.mediaType}-${item.id}`
+            ? 'Requesting…'
+            : itemStatus === 'available' ? '✓ Available'
+            : itemStatus === 'processing' ? '⟳ Processing'
+            : itemStatus === 'pending' ? '⏳ Requested'
+            : itemStatus === 'partial' ? '◐ Request missing'
+            : '+ Request'
 
           return (
             <div
               key={`${item.mediaType}-${item.id}`}
               className="glass"
               style={{
-                borderRadius: 'var(--radius-lg)',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 0,
+                borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+                display: 'flex', flexDirection: 'column',
                 transition: 'all 200ms ease',
-                cursor: 'pointer',
               }}
               onMouseEnter={e => {
                 ;(e.currentTarget as HTMLElement).style.transform = 'translateY(-4px)'
-                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.3)'
+                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.3)'
               }}
               onMouseLeave={e => {
                 ;(e.currentTarget as HTMLElement).style.transform = 'none'
@@ -1334,87 +1652,58 @@ function DiscoverTab() {
               }}
             >
               {/* Poster */}
-              <div
-                style={{
-                  aspectRatio: '2 / 3',
-                  background: posterUrl ? undefined : 'linear-gradient(135deg, rgba(var(--accent-rgb), 0.2), rgba(var(--text-rgb), 0.1))',
-                  backgroundImage: posterUrl ? `url(${posterUrl})` : undefined,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  position: 'relative',
-                }}
-              >
+              <div style={{
+                aspectRatio: '2/3',
+                background: posterUrl ? undefined : 'linear-gradient(135deg, rgba(var(--accent-rgb),0.2), rgba(var(--text-rgb),0.1))',
+                backgroundImage: posterUrl ? `url(${posterUrl})` : undefined,
+                backgroundSize: 'cover', backgroundPosition: 'center',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
+              }}>
                 {!posterUrl && <span style={{ fontSize: 32 }}>{item.mediaType === 'movie' ? '🎬' : '📺'}</span>}
 
-                {/* Rating Badge */}
+                {/* Media type badge */}
+                <div style={{
+                  position: 'absolute', top: 8, left: 8,
+                  background: 'rgba(0,0,0,0.7)', color: 'var(--accent)',
+                  padding: '3px 7px', borderRadius: 'var(--radius-sm)',
+                  fontSize: 10, fontWeight: 600, textTransform: 'uppercase', backdropFilter: 'blur(8px)',
+                }}>
+                  {item.mediaType === 'movie' ? 'Movie' : 'TV'}
+                </div>
+
+                {/* Rating badge */}
                 {rating !== null && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 8,
-                      right: 8,
-                      background: 'rgba(0, 0, 0, 0.7)',
-                      color: rating >= 7 ? '#22c55e' : rating >= 5 ? '#eab308' : '#ef4444',
-                      padding: '4px 8px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      backdropFilter: 'blur(8px)',
-                    }}
-                  >
+                  <div style={{
+                    position: 'absolute', top: 8, right: 8,
+                    background: 'rgba(0,0,0,0.7)',
+                    color: rating >= 7 ? '#22c55e' : rating >= 5 ? '#eab308' : '#ef4444',
+                    padding: '3px 7px', borderRadius: 'var(--radius-sm)',
+                    fontSize: 11, fontWeight: 600, backdropFilter: 'blur(8px)',
+                  }}>
                     ★ {rating}
                   </div>
                 )}
 
-                {/* Status Badge */}
+                {/* Status badge */}
                 {itemStatus && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: 8,
-                      right: 8,
-                      background: itemStatus === 'available' || itemStatus === 'partial'
-                        ? 'rgba(34, 197, 94, 0.9)'
-                        : itemStatus === 'processing'
-                        ? 'rgba(59, 130, 246, 0.9)'
-                        : 'rgba(234, 179, 8, 0.9)',
-                      color: '#fff',
-                      padding: '4px 8px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: 10,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      backdropFilter: 'blur(8px)',
-                    }}
-                  >
+                  <div style={{
+                    position: 'absolute', bottom: 8, right: 8,
+                    background: itemStatus === 'available'
+                      ? 'rgba(34,197,94,0.9)'
+                      : itemStatus === 'partial'
+                      ? 'rgba(234,179,8,0.9)'
+                      : itemStatus === 'processing'
+                      ? 'rgba(59,130,246,0.9)'
+                      : 'rgba(234,179,8,0.9)',
+                    color: '#fff', padding: '3px 7px', borderRadius: 'var(--radius-sm)',
+                    fontSize: 10, fontWeight: 600, textTransform: 'uppercase', backdropFilter: 'blur(8px)',
+                  }}>
                     {itemStatus === 'available' ? '✓ Available'
                       : itemStatus === 'partial' ? '◐ Partial'
                       : itemStatus === 'processing' ? '⟳ Processing'
                       : '⏳ Requested'}
                   </div>
                 )}
-
-                {/* Media Type Badge */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 8,
-                    left: 8,
-                    background: 'rgba(0, 0, 0, 0.7)',
-                    color: 'var(--accent)',
-                    padding: '4px 8px',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: 10,
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    backdropFilter: 'blur(8px)',
-                  }}
-                >
-                  {item.mediaType === 'movie' ? 'Movie' : 'TV'}
-                </div>
               </div>
 
               {/* Info */}
@@ -1434,27 +1723,15 @@ function DiscoverTab() {
 
                 <button
                   onClick={e => {
-                    if (alreadyRequested) return
                     e.stopPropagation()
-                    setConfirmRequest({ item, mediaType: item.mediaType, mediaId: item.id })
-                    setSelectedSeasons(item.mediaType === 'tv' ? [1] : [])
+                    if (!canRequest) return
+                    openRequestModal(item)
                   }}
-                  disabled={requesting === `${item.mediaType}-${item.id}` || alreadyRequested}
-                  className={alreadyRequested ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}
-                  style={{
-                    fontSize: 12,
-                    padding: '6px 12px',
-                    marginTop: 'auto',
-                    opacity: alreadyRequested ? 0.6 : 1,
-                  }}
+                  disabled={!canRequest || requesting === `${item.mediaType}-${item.id}`}
+                  className={canRequest ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+                  style={{ fontSize: 12, padding: '6px 12px', marginTop: 'auto', opacity: canRequest ? 1 : 0.6 }}
                 >
-                  {requesting === `${item.mediaType}-${item.id}`
-                    ? 'Requesting...'
-                    : itemStatus === 'available' ? '✓ Available'
-                    : itemStatus === 'partial' ? '◐ Partial'
-                    : itemStatus === 'processing' ? '⟳ Processing'
-                    : itemStatus === 'pending' ? '⏳ Requested'
-                    : '+ Request'}
+                  {btnLabel}
                 </button>
               </div>
             </div>
@@ -1462,109 +1739,143 @@ function DiscoverTab() {
         })}
       </div>
 
-      {tab !== 'trending' && allResults.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+      {/* Load more */}
+      {tab !== 'trending' && allResults.length > 0 && page < totalPages && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
           <button
-            onClick={() => setPage(Math.max(1, page - 1))}
-            disabled={page === 1}
+            onClick={handleLoadMore}
+            disabled={loading}
             className="btn btn-ghost btn-sm"
-            style={{ fontSize: 12 }}
+            style={{ fontSize: 12, minWidth: 120 }}
           >
-            Previous
-          </button>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)', alignSelf: 'center' }}>Page {page}</span>
-          <button
-            onClick={() => setPage(page + 1)}
-            className="btn btn-ghost btn-sm"
-            style={{ fontSize: 12 }}
-          >
-            Next
+            {loading ? 'Loading…' : 'Load more'}
           </button>
         </div>
       )}
 
-      {/* Request Confirmation Modal */}
+      {/* Request modal */}
       {confirmRequest && (
         <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          backdropFilter: 'blur(4px)',
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, backdropFilter: 'blur(4px)',
         }} onClick={() => setConfirmRequest(null)}>
           <div className="glass" style={{
-            borderRadius: 'var(--radius-xl)',
-            padding: 24,
-            maxWidth: 400,
-            maxHeight: '80vh',
-            overflowY: 'auto',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+            borderRadius: 'var(--radius-xl)', padding: 24,
+            width: 420, maxWidth: 'calc(100vw - 32px)',
+            maxHeight: '80vh', overflowY: 'auto',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
           }} onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Confirm Request</h3>
 
-            {/* Item Preview */}
+            {/* Preview */}
             <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
               {confirmRequest.item.posterPath && (
                 <img
                   src={`https://image.tmdb.org/t/p/w92${confirmRequest.item.posterPath}`}
                   alt=""
-                  style={{ width: 60, borderRadius: 'var(--radius-md)', objectFit: 'cover' }}
+                  style={{ width: 60, borderRadius: 'var(--radius-md)', objectFit: 'cover', flexShrink: 0 }}
                 />
               )}
               <div>
-                <p style={{ fontSize: 14, fontWeight: 500 }}>
-                  {confirmRequest.item.title || confirmRequest.item.name}
+                <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+                  {confirmRequest.item.title ?? confirmRequest.item.name}
                 </p>
                 <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {confirmRequest.mediaType === 'movie' ? '🎬 Movie' : '📺 TV Series'}
+                  {confirmRequest.mediaType === 'movie' ? 'Movie' : 'TV Series'}
+                  {(confirmRequest.item.releaseDate ?? confirmRequest.item.firstAirDate) &&
+                    ` · ${(confirmRequest.item.releaseDate ?? confirmRequest.item.firstAirDate ?? '').slice(0, 4)}`}
                 </p>
               </div>
             </div>
 
-            {/* Season Selection for TV */}
-            {confirmRequest.mediaType === 'tv' && (
-              <div style={{ marginBottom: 16 }}>
-                <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Request Seasons:</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(season => (
-                    <button
-                      key={season}
-                      onClick={() => {
-                        setSelectedSeasons(prev =>
-                          prev.includes(season)
-                            ? prev.filter(s => s !== season)
-                            : [...prev, season]
-                        )
-                      }}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: 'var(--radius-md)',
-                        fontSize: 12,
-                        background: selectedSeasons.includes(season)
-                          ? 'rgba(var(--accent-rgb), 0.3)'
-                          : 'rgba(var(--text-rgb), 0.1)',
-                        color: selectedSeasons.includes(season)
-                          ? 'var(--accent)'
-                          : 'var(--text-secondary)',
-                        border: selectedSeasons.includes(season)
-                          ? '1px solid var(--accent)'
-                          : '1px solid transparent',
-                        cursor: 'pointer',
-                        transition: 'all 150ms ease',
-                        fontFamily: 'var(--font-sans)',
-                      }}
-                    >
-                      S{season}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Season selection for TV */}
+            {confirmRequest.mediaType === 'tv' && (() => {
+              const tvDetail = tvDetails[String(confirmRequest.mediaId)]
+              if (tvDetailLoading) {
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading seasons…</span>
+                  </div>
+                )
+              }
+              if (!tvDetail) {
+                return (
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                    Could not load season list. The request will include all seasons.
+                  </p>
+                )
+              }
+              const realSeasons = tvDetail.seasons.filter(s => s.seasonNumber > 0)
+              const missingSeasons = realSeasons.filter(s => {
+                const status = getSeasonStatus(s.seasonNumber, tvDetail)
+                return status !== 5 && status !== 2 && status !== 3
+              })
+              return (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>Seasons</span>
+                    {missingSeasons.length > 0 && (
+                      <button
+                        onClick={() => setSelectedSeasons(missingSeasons.map(s => s.seasonNumber))}
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: 11 }}
+                      >
+                        Select all missing
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {realSeasons.map(s => {
+                      const status = getSeasonStatus(s.seasonNumber, tvDetail)
+                      const isAvailable = status === 5
+                      const isPending = status === 2 || status === 3
+                      const isDisabled = isAvailable || isPending
+                      const isSelected = selectedSeasons.includes(s.seasonNumber)
+                      const statusLabel = isAvailable ? 'Available' : isPending ? 'Pending' : null
 
-            {/* Action Buttons */}
+                      return (
+                        <button
+                          key={s.seasonNumber}
+                          disabled={isDisabled}
+                          onClick={() => {
+                            if (isDisabled) return
+                            setSelectedSeasons(prev =>
+                              prev.includes(s.seasonNumber)
+                                ? prev.filter(n => n !== s.seasonNumber)
+                                : [...prev, s.seasonNumber]
+                            )
+                          }}
+                          style={{
+                            padding: '6px 10px', borderRadius: 'var(--radius-md)', fontSize: 12,
+                            background: isDisabled
+                              ? 'rgba(var(--text-rgb), 0.05)'
+                              : isSelected
+                              ? 'rgba(var(--accent-rgb), 0.25)'
+                              : 'rgba(var(--text-rgb), 0.1)',
+                            color: isDisabled
+                              ? 'var(--text-muted)'
+                              : isSelected
+                              ? 'var(--accent)'
+                              : 'var(--text-secondary)',
+                            border: isSelected && !isDisabled ? '1px solid var(--accent)' : '1px solid transparent',
+                            cursor: isDisabled ? 'default' : 'pointer',
+                            opacity: isDisabled ? 0.5 : 1,
+                            transition: 'all 150ms ease', fontFamily: 'var(--font-sans)',
+                          }}
+                        >
+                          S{s.seasonNumber}
+                          {statusLabel && <span style={{ fontSize: 10, marginLeft: 4, opacity: 0.75 }}>· {statusLabel}</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Actions */}
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={() => setConfirmRequest(null)}
@@ -1575,31 +1886,31 @@ function DiscoverTab() {
               </button>
               <button
                 onClick={async () => {
-                  if (!selected) return
                   const key = `${confirmRequest.mediaType}-${confirmRequest.item.id}`
                   setRequesting(key)
                   try {
+                    const seasons = confirmRequest.mediaType === 'tv' && selectedSeasons.length > 0
+                      ? selectedSeasons
+                      : undefined
                     await discoverRequest(
                       selected.id,
                       confirmRequest.mediaType,
                       confirmRequest.mediaId,
-                      confirmRequest.mediaType === 'tv' ? selectedSeasons : undefined
+                      seasons,
                     )
-                    setNotification({
-                      type: 'success',
-                      message: `✓ ${confirmRequest.mediaType === 'movie' ? 'Movie' : 'Series'} requested!`
-                    })
+                    setNotification({ type: 'success', message: `✓ ${confirmRequest.mediaType === 'movie' ? 'Movie' : 'Series'} requested!` })
                     setConfirmRequest(null)
                   } catch (e: any) {
-                    setNotification({
-                      type: 'error',
-                      message: `Error: ${e.message || 'Request failed'}`
-                    })
+                    setNotification({ type: 'error', message: `Error: ${e.message ?? 'Request failed'}` })
                   } finally {
                     setRequesting(null)
                   }
                 }}
-                disabled={confirmRequest.mediaType === 'tv' && selectedSeasons.length === 0}
+                disabled={
+                  confirmRequest.mediaType === 'tv' &&
+                  !!tvDetails[String(confirmRequest.mediaId)] &&
+                  selectedSeasons.length === 0
+                }
                 className="btn btn-primary btn-sm"
                 style={{ flex: 1, fontSize: 12 }}
               >
@@ -1659,7 +1970,6 @@ export function MediaPage({ showAddForm: showFromParent, onFormClose }: Props) {
       {activeTab === 'calendar' && <CalendarTab />}
       {activeTab === 'indexers' && <IndexersTab />}
       {activeTab === 'discover' && <DiscoverTab />}
-      {activeTab === 'trash' && <TrashPage embedded isAdmin={isAdmin} />}
     </div>
   )
 }

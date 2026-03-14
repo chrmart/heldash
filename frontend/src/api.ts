@@ -1,6 +1,6 @@
 import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull } from './types'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse } from './types/arr'
-import type { TrashInstanceConfig, TrashProfileConfig, TrashProfileSummary, TrashFormatRow, TrashPreview, TrashSyncLogEntry, TrashDeprecatedFormat, TrashImportableFormat, TrashUserOverride, TrashNamingScheme, TrashInstanceNamingConfig, TrashQualitySize, TrashInstanceQualitySizeConfig, TrashCfGroup } from './types/trash'
+import type { SeerrTvDetail, SeerrDiscoverResponse, DiscoverServerFilters } from './types/seerr'
 
 const BASE = '/api'
 
@@ -129,19 +129,44 @@ export const api = {
       req<void>(`/arr/${id}/requests/${requestId}`, { method: 'DELETE' }),
     movies: (id: string) => req<any[]>(`/arr/${id}/movies`),
     series: (id: string) => req<any[]>(`/arr/${id}/series`),
-    discoverMovies: (id: string, page = 1, sortBy = 'popularity.desc') => {
+    discoverMovies: (id: string, page = 1, sortBy = 'popularity.desc', filters?: DiscoverServerFilters) => {
       const params = new URLSearchParams({ page: String(page), sortBy })
-      return req<any>(`/arr/${id}/discover/movies?${params}`)
+      if (filters?.language) params.set('language', filters.language)
+      if (filters?.genreIds?.length) params.set('genre', filters.genreIds.join(','))
+      if (filters?.watchProviderIds?.length) {
+        params.set('watchProviders', filters.watchProviderIds.join(','))
+        params.set('watchRegion', 'DE')
+      }
+      if (filters?.voteAverageGte) params.set('voteAverageGte', String(filters.voteAverageGte))
+      if (filters?.releaseYearFrom) params.set('primaryReleaseDateGte', `${filters.releaseYearFrom}-01-01`)
+      if (filters?.releaseYearTo) params.set('primaryReleaseDateLte', `${filters.releaseYearTo}-12-31`)
+      return req<SeerrDiscoverResponse>(`/arr/${id}/discover/movies?${params}`)
     },
-    discoverTv: (id: string, page = 1, sortBy = 'popularity.desc') => {
+    discoverTv: (id: string, page = 1, sortBy = 'popularity.desc', filters?: DiscoverServerFilters) => {
       const params = new URLSearchParams({ page: String(page), sortBy })
-      return req<any>(`/arr/${id}/discover/tv?${params}`)
+      if (filters?.language) params.set('language', filters.language)
+      if (filters?.genreIds?.length) params.set('genre', filters.genreIds.join(','))
+      if (filters?.watchProviderIds?.length) {
+        params.set('watchProviders', filters.watchProviderIds.join(','))
+        params.set('watchRegion', 'DE')
+      }
+      if (filters?.voteAverageGte) params.set('voteAverageGte', String(filters.voteAverageGte))
+      if (filters?.releaseYearFrom) params.set('primaryReleaseDateGte', `${filters.releaseYearFrom}-01-01`)
+      if (filters?.releaseYearTo) params.set('primaryReleaseDateLte', `${filters.releaseYearTo}-12-31`)
+      return req<SeerrDiscoverResponse>(`/arr/${id}/discover/tv?${params}`)
     },
-    discoverTrending: (id: string) => req<any>(`/arr/${id}/discover/trending`),
-    discoverSearch: (id: string, query: string) => {
-      const params = new URLSearchParams({ query })
-      return req<any>(`/arr/${id}/discover/search?${params}`)
+    discoverTrending: (id: string) => req<SeerrDiscoverResponse>(`/arr/${id}/discover/trending`),
+    discoverSearch: (id: string, query: string, language?: string, page = 1) => {
+      const params = new URLSearchParams({ query, page: String(page) })
+      if (language) params.set('language', language)
+      return req<SeerrDiscoverResponse>(`/arr/${id}/discover/search?${params}`)
     },
+    discoverGenres: (id: string, mediaType: 'movie' | 'tv') =>
+      req<{ genres: { id: number; name: string }[] }>(`/arr/${id}/genres/${mediaType}`),
+    discoverWatchProviders: (id: string, mediaType: 'movie' | 'tv') =>
+      req<{ results: { id: number; name: string; logoPath: string }[] }>(`/arr/${id}/watchproviders/${mediaType}`),
+    discoverTvDetail: (id: string, tmdbId: number) =>
+      req<SeerrTvDetail>(`/arr/${id}/tv/${tmdbId}`),
     discoverRequest: (id: string, mediaType: 'movie' | 'tv', mediaId: number, seasons?: number[]) =>
       req<any>(`/arr/${id}/discover/request`, { method: 'POST', body: JSON.stringify({ mediaType, mediaId, seasons }) }),
   },
@@ -240,75 +265,6 @@ export const api = {
         req<HaPanel>(`/ha/panels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
       delete: (id: string) => req<void>(`/ha/panels/${id}`, { method: 'DELETE' }),
       reorder: (ids: string[]) => req<{ ok: boolean }>('/ha/panels/reorder', { method: 'PATCH', body: JSON.stringify({ ids }) }),
-    },
-  },
-
-  trash: {
-    instances: {
-      list: () => req<TrashInstanceConfig[]>('/trash/instances'),
-      configure: (instanceId: string, data: {
-        sync_mode?: 'auto' | 'manual' | 'notify'
-        sync_interval_hours?: number
-        enabled?: boolean
-      }) => req<{ ok: boolean }>(`/trash/instances/${instanceId}/configure`, { method: 'POST', body: JSON.stringify(data) }),
-      profileConfigs: (instanceId: string) =>
-        req<TrashProfileConfig[]>(`/trash/instances/${instanceId}/profile-configs`),
-      addProfileConfig: (instanceId: string, data: {
-        profile_slug: string
-        sync_mode?: 'auto' | 'manual' | 'notify'
-        sync_interval_hours?: number
-        enabled?: boolean
-      }) => req<{ id: string; ok: boolean }>(`/trash/instances/${instanceId}/profile-configs`, { method: 'POST', body: JSON.stringify(data) }),
-      updateProfileConfig: (instanceId: string, profileSlug: string, data: {
-        sync_mode?: 'auto' | 'manual' | 'notify'
-        sync_interval_hours?: number
-        enabled?: boolean
-      }) => req<{ ok: boolean }>(`/trash/instances/${instanceId}/profile-configs/${encodeURIComponent(profileSlug)}`, { method: 'PATCH', body: JSON.stringify(data) }),
-      deleteProfileConfig: (instanceId: string, profileSlug: string) =>
-        req<void>(`/trash/instances/${instanceId}/profile-configs/${encodeURIComponent(profileSlug)}`, { method: 'DELETE' }),
-      profiles: (instanceId: string) => req<TrashProfileSummary[]>(`/trash/instances/${instanceId}/profiles`),
-      customFormats: (instanceId: string, profileSlug?: string) =>
-        req<TrashFormatRow[]>(`/trash/instances/${instanceId}/custom-formats${profileSlug ? `?profile_slug=${encodeURIComponent(profileSlug)}` : ''}`),
-      overrides: (instanceId: string, profileSlug: string) =>
-        req<TrashUserOverride[]>(`/trash/instances/${instanceId}/overrides?profile_slug=${encodeURIComponent(profileSlug)}`),
-      saveOverrides: (instanceId: string, profileSlug: string, overrides: Array<{ slug: string; score?: number | null; enabled?: boolean; excluded?: boolean }>) =>
-        req<{ ok: boolean }>(`/trash/instances/${instanceId}/overrides`, { method: 'PUT', body: JSON.stringify({ profile_slug: profileSlug, overrides }) }),
-      sync: (instanceId: string, profileSlug?: string) =>
-        req<{ ok: boolean }>(`/trash/instances/${instanceId}/sync${profileSlug ? `?profile_slug=${encodeURIComponent(profileSlug)}` : ''}`, { method: 'POST', body: JSON.stringify({}) }),
-      preview: (instanceId: string, profileSlug?: string) =>
-        req<TrashPreview>(`/trash/instances/${instanceId}/preview${profileSlug ? `?profile_slug=${encodeURIComponent(profileSlug)}` : ''}`),
-      applyPreview: (instanceId: string, previewId: string) =>
-        req<{ ok: boolean }>(`/trash/instances/${instanceId}/apply/${previewId}`, { method: 'POST', body: JSON.stringify({}) }),
-      log: (instanceId: string, profileSlug?: string) =>
-        req<TrashSyncLogEntry[]>(`/trash/instances/${instanceId}/log${profileSlug ? `?profile_slug=${encodeURIComponent(profileSlug)}` : ''}`),
-      deprecated: (instanceId: string) => req<TrashDeprecatedFormat[]>(`/trash/instances/${instanceId}/deprecated`),
-      deleteDeprecated: (instanceId: string, slug: string) =>
-        req<{ ok: boolean }>(`/trash/instances/${instanceId}/deprecated/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
-      importFormats: (instanceId: string) => req<TrashImportableFormat[]>(`/trash/instances/${instanceId}/import-formats`),
-      doImportFormats: (instanceId: string, formatIds: number[], profileSlug?: string) =>
-        req<{ imported: number }>(`/trash/instances/${instanceId}/import-formats`, { method: 'POST', body: JSON.stringify({ format_ids: formatIds, profile_slug: profileSlug }) }),
-      removeUserFormat: (instanceId: string, slug: string, profileSlug?: string) => {
-        const qs = profileSlug ? `?profile_slug=${encodeURIComponent(profileSlug)}` : ''
-        return req<void>(`/trash/instances/${instanceId}/user-formats/${encodeURIComponent(slug)}${qs}`, { method: 'DELETE' })
-      },
-      patchUserFormat: (instanceId: string, slug: string, data: { profile_slug?: string | null; score?: number; enabled?: boolean }) =>
-        req<void>(`/trash/instances/${instanceId}/user-formats/${encodeURIComponent(slug)}`, { method: 'PATCH', body: JSON.stringify(data) }),
-      cfGroups: (instanceId: string) => req<TrashCfGroup[]>(`/trash/instances/${instanceId}/cf-groups`),
-      namingSchemes: (instanceId: string) => req<TrashNamingScheme[]>(`/trash/instances/${instanceId}/naming-schemes`),
-      namingConfig: (instanceId: string) => req<TrashInstanceNamingConfig | null>(`/trash/instances/${instanceId}/naming-config`),
-      setNamingConfig: (instanceId: string, data: Partial<TrashInstanceNamingConfig>) =>
-        req<{ ok: boolean }>(`/trash/instances/${instanceId}/naming-config`, { method: 'PUT', body: JSON.stringify(data) }),
-      syncNaming: (instanceId: string) =>
-        req<{ ok: boolean }>(`/trash/instances/${instanceId}/sync-naming`, { method: 'POST', body: JSON.stringify({}) }),
-      qualitySizes: (instanceId: string) => req<TrashQualitySize[]>(`/trash/instances/${instanceId}/quality-sizes`),
-      qualitySizeConfig: (instanceId: string) => req<TrashInstanceQualitySizeConfig | null>(`/trash/instances/${instanceId}/quality-size-config`),
-      setQualitySizeConfig: (instanceId: string, data: { quality_size_slug: string | null }) =>
-        req<{ ok: boolean }>(`/trash/instances/${instanceId}/quality-size-config`, { method: 'PUT', body: JSON.stringify(data) }),
-      syncQualitySize: (instanceId: string) =>
-        req<{ ok: boolean; updated: number }>(`/trash/instances/${instanceId}/sync-quality-size`, { method: 'POST', body: JSON.stringify({}) }),
-    },
-    github: {
-      forceFetch: () => req<{ sha: string; filesUpdated: number; formatsUpdated: number }>('/trash/github/fetch', { method: 'POST', body: JSON.stringify({}) }),
     },
   },
 

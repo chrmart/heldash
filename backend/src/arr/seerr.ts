@@ -69,6 +69,51 @@ export interface SeerrDiscoverResponse {
   results: SeerrDiscoverResult[]
 }
 
+interface SeerrGenreItem {
+  id: number
+  name: string
+}
+
+interface SeerrWatchProviderItem {
+  displayPriority: number
+  logoPath: string
+  id: number
+  name: string
+}
+
+export interface SeerrMediaSeasonStatus {
+  seasonNumber: number
+  status: number
+}
+
+export interface SeerrTvDetailRaw {
+  id: number
+  name: string
+  seasons: {
+    id: number
+    name: string
+    seasonNumber: number
+    episodeCount: number
+    airDate?: string
+  }[]
+  mediaInfo?: {
+    id: number
+    status: number
+    seasons?: SeerrMediaSeasonStatus[]
+    requests?: { id: number; status: number; seasons?: { seasonNumber: number }[] }[]
+  }
+}
+
+interface DiscoverFilterParams {
+  language?: string
+  genre?: string
+  watchProviders?: string
+  watchRegion?: string
+  voteAverageGte?: string
+  primaryReleaseDateGte?: string
+  primaryReleaseDateLte?: string
+}
+
 export class SeerrClient extends ArrBaseClient {
   constructor(baseUrl: string, apiKey: string) {
     super(baseUrl, apiKey, 'v1')
@@ -114,24 +159,61 @@ export class SeerrClient extends ArrBaseClient {
     return this.get<{ title: string }>(`movie/${tmdbId}`)
   }
 
+  // Kept for backward compatibility with request enrichment
   getTvDetails(tmdbId: number): Promise<{ name: string }> {
     return this.get<{ name: string }>(`tv/${tmdbId}`)
   }
 
-  getDiscoverMovies(page = 1, sortBy = 'popularity.desc'): Promise<SeerrDiscoverResponse> {
-    return this.get<SeerrDiscoverResponse>('discover/movies', { page: String(page), sortBy })
+  // Full TV detail with season list and per-season availability
+  getTvDetailFull(tmdbId: number): Promise<SeerrTvDetailRaw> {
+    return this.get<SeerrTvDetailRaw>(`tv/${tmdbId}`)
   }
 
-  getDiscoverTv(page = 1, sortBy = 'popularity.desc'): Promise<SeerrDiscoverResponse> {
-    return this.get<SeerrDiscoverResponse>('discover/tv', { page: String(page), sortBy })
+  getGenres(mediaType: 'movie' | 'tv'): Promise<{ genres: SeerrGenreItem[] }> {
+    return this.get<{ genres: SeerrGenreItem[] }>(`genres/${mediaType}`)
+  }
+
+  getWatchProviders(mediaType: 'movie' | 'tv'): Promise<{ results: SeerrWatchProviderItem[] }> {
+    const endpoint = mediaType === 'movie' ? 'watchproviders/movies' : 'watchproviders/tv'
+    return this.get<{ results: SeerrWatchProviderItem[] }>(endpoint, { watchRegion: 'DE' })
+  }
+
+  getDiscoverMovies(page = 1, sortBy = 'popularity.desc', filters?: DiscoverFilterParams): Promise<SeerrDiscoverResponse> {
+    const params: Record<string, string> = { page: String(page), sortBy }
+    if (filters) {
+      if (filters.language) params.language = filters.language
+      if (filters.genre) params.genre = filters.genre
+      if (filters.watchProviders) params.watchProviders = filters.watchProviders
+      if (filters.watchRegion) params.watchRegion = filters.watchRegion
+      if (filters.voteAverageGte) params.voteAverageGte = filters.voteAverageGte
+      if (filters.primaryReleaseDateGte) params.primaryReleaseDateGte = filters.primaryReleaseDateGte
+      if (filters.primaryReleaseDateLte) params.primaryReleaseDateLte = filters.primaryReleaseDateLte
+    }
+    return this.get<SeerrDiscoverResponse>('discover/movies', params)
+  }
+
+  getDiscoverTv(page = 1, sortBy = 'popularity.desc', filters?: DiscoverFilterParams): Promise<SeerrDiscoverResponse> {
+    const params: Record<string, string> = { page: String(page), sortBy }
+    if (filters) {
+      if (filters.language) params.language = filters.language
+      if (filters.genre) params.genre = filters.genre
+      if (filters.watchProviders) params.watchProviders = filters.watchProviders
+      if (filters.watchRegion) params.watchRegion = filters.watchRegion
+      if (filters.voteAverageGte) params.voteAverageGte = filters.voteAverageGte
+      if (filters.primaryReleaseDateGte) params.primaryReleaseDateGte = filters.primaryReleaseDateGte
+      if (filters.primaryReleaseDateLte) params.primaryReleaseDateLte = filters.primaryReleaseDateLte
+    }
+    return this.get<SeerrDiscoverResponse>('discover/tv', params)
   }
 
   getTrending(): Promise<SeerrDiscoverResponse> {
     return this.get<SeerrDiscoverResponse>('discover/trending')
   }
 
-  search(query: string): Promise<SeerrDiscoverResponse> {
-    return this.get<SeerrDiscoverResponse>('search', { query })
+  search(query: string, language?: string, page = 1): Promise<SeerrDiscoverResponse> {
+    const params: Record<string, string> = { query, page: String(page) }
+    if (language) params.language = language
+    return this.get<SeerrDiscoverResponse>('search', params)
   }
 
   requestMedia(mediaType: 'movie' | 'tv', mediaId: number, seasons?: number[]): Promise<unknown> {
