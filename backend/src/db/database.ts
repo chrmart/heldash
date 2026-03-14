@@ -261,6 +261,9 @@ function applySchema(db: Database.Database) {
       ('theme_accent', '"cyan"'),
       ('dashboard_title', '"HELDASH"'),
       ('auth_enabled', 'true'),
-      ('auth_mode', '"local"');
+      ('auth_mode', '"local"'),
+      ('auto_theme_enabled', 'false'),
+      ('auto_theme_light_start', '"08:00"'),
+      ('auto_theme_dark_start', '"20:00"');
   `)
 }

@@ -46,6 +46,14 @@ Coded by Claude.ai because iam to stupid to code but can wirte prompts lol
 - 🖼️ Media cards inherit the icon from a matching app (matched by URL)
 - 🔒 API keys stored server-side only — never exposed to the browser
 
+**Seerr / Discover**
+- 🔎 **Discover tab** — browse trending movies and TV shows, search by title
+- 🎛️ Advanced filters — genre, streaming service (with logos), language, rating, release year
+- 📺 Real season selection — shows actual available / pending / missing seasons per series
+- 📥 Request movies and individual seasons directly from the dashboard
+- 🟢 Smart request button — shows availability status (Available / Pending / Request missing seasons)
+- ➕ Pagination — load more results inline
+
 **Docker**
 - 🐳 Docker page — live container list with CPU/RAM stats, state badges, and uptime
 - 📋 Sortable container table (click column headers: name, image, status, uptime, CPU/memory)
@@ -62,17 +70,6 @@ Coded by Claude.ai because iam to stupid to code but can wirte prompts lol
 - 📡 State colors — on/open/unlocked/playing/home/active = green; off/closed/locked/… = gray
 - 🔒 Long-Lived Access Tokens stored server-side only — never exposed to the browser
 - 🏷️ Custom labels per panel — falls back to HA `friendly_name` → `entity_id`
-
-**TRaSH Guides Sync**
-- 📋 **TRaSH Guides integration** — sync custom formats and quality profiles for Radarr/Sonarr
-- 🔄 Three sync modes: **Auto** (apply immediately), **Notify** (review diff first), **Manual** (on demand)
-- 👁️ Change preview — diff view showing exactly what will be added, updated, or deprecated before applying
-- 🎚️ Per-format score overrides — set custom scores or disable individual formats per instance
-- 📉 Soft deprecation — formats removed from TRaSH get score 0, tracked in deprecated list, never hard-deleted
-- 🔧 Auto repair — daily drift detection corrects scores and conditions that diverged from TRaSH recommendations
-- 📥 Import from Arr — pull existing custom formats already in Radarr/Sonarr into HELDASH tracking
-- 📜 Sync audit log — per-instance history of every sync with status, duration, and change counts
-- ⚡ Incremental GitHub fetch — only downloads changed files (per-file SHA comparison), not the full repo
 
 **Widgets**
 - 🖥️ Server Status — live CPU, RAM, and disk usage with progress bars (Linux hosts)
@@ -106,6 +103,7 @@ Coded by Claude.ai because iam to stupid to code but can wirte prompts lol
 - 🎨 **Typography**: Geist (body) + Space Mono (display) — distinctive, modern
 - ♿ **Full Accessibility**: `prefers-reduced-motion` compliance, WCAG AA+ contrast ratios
 - 🌓 **Themes**: Light/Dark mode + 3 accent colors (Cyan, Orange, Magenta)
+- 🕐 **Auto Theme** — automatically switches between light and dark mode on a configurable time schedule (e.g. light from 08:00, dark from 20:00)
 - ✨ **Micro-interactions**: Cubic-bezier easing (smooth, bounce), strategic animations
 - 🎯 **Sidebar**: Gradient hover overlay, active state with glow, 2px translate
 - 💫 **Status Indicators**: Online (dual-pulse ring + border), Offline (breathing), Unknown (static)
@@ -185,6 +183,7 @@ Import it via Community Applications → Import to get a pre-filled container se
 - [x] App management + status checks
 - [x] Groups / categories
 - [x] Light/Dark + accent themes
+- [x] Auto Theme — time-based light/dark switching
 - [x] Drag & Drop reordering
 - [x] Local user authentication
 - [x] User groups (Admin, Guest, custom)
@@ -213,7 +212,7 @@ Import it via Community Applications → Import to get a pre-filled container se
 - [x] **Smart Dashboard Grid** — 20-column layout, 10 apps per row, widgets 2×2 sized
 - [x] **Services Page Toggles** — one-click dashboard add/remove and health check toggle
 - [x] **Home Assistant Integration** — multi-instance, entity browser, panel grid, real-time WebSocket state updates, toggle support
-- [x] **TRaSH Guides Sync** — custom formats + quality profile sync for Radarr/Sonarr; notify/auto/manual modes; preview, overrides, repair, import, audit log
+- [x] **Seerr / Discover** — media request management, trending browse, advanced filters, season selection, smart request button
 - [ ] OIDC / SSO via voidauth or Authentik (UI prepared)
 - [ ] Torrent Client Integration (qBittorrent, Transmission, Deluge)
-- [ ] More integrations (Immich, Jellyfin, Emby, Pi-hole, etc.)
+- [ ] More integrations (Immich, Jellyfin, Emby, etc.)

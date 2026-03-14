@@ -1,5 +1,5 @@
 import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull } from './types'
-import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse } from './types/arr'
+import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse, RadarrMovie, SonarrSeries } from './types/arr'
 import type { SeerrTvDetail, SeerrDiscoverResponse, DiscoverServerFilters } from './types/seerr'
 
 const BASE = '/api'
@@ -127,15 +127,15 @@ export const api = {
       req<SeerrRequest>(`/arr/${id}/requests/${requestId}/decline`, { method: 'POST', body: JSON.stringify({}) }),
     seerrDelete: (id: string, requestId: number) =>
       req<void>(`/arr/${id}/requests/${requestId}`, { method: 'DELETE' }),
-    movies: (id: string) => req<any[]>(`/arr/${id}/movies`),
-    series: (id: string) => req<any[]>(`/arr/${id}/series`),
+    movies: (id: string) => req<RadarrMovie[]>(`/arr/${id}/movies`),
+    series: (id: string) => req<SonarrSeries[]>(`/arr/${id}/series`),
     discoverMovies: (id: string, page = 1, sortBy = 'popularity.desc', filters?: DiscoverServerFilters) => {
       const params = new URLSearchParams({ page: String(page), sortBy })
       if (filters?.language) params.set('language', filters.language)
       if (filters?.genreIds?.length) params.set('genre', filters.genreIds.join(','))
       if (filters?.watchProviderIds?.length) {
         params.set('watchProviders', filters.watchProviderIds.join(','))
-        params.set('watchRegion', 'DE')
+        params.set('watchRegion', navigator.language?.split('-')[1]?.toUpperCase() ?? 'US')
       }
       if (filters?.voteAverageGte) params.set('voteAverageGte', String(filters.voteAverageGte))
       if (filters?.releaseYearFrom) params.set('primaryReleaseDateGte', `${filters.releaseYearFrom}-01-01`)
@@ -148,7 +148,7 @@ export const api = {
       if (filters?.genreIds?.length) params.set('genre', filters.genreIds.join(','))
       if (filters?.watchProviderIds?.length) {
         params.set('watchProviders', filters.watchProviderIds.join(','))
-        params.set('watchRegion', 'DE')
+        params.set('watchRegion', navigator.language?.split('-')[1]?.toUpperCase() ?? 'US')
       }
       if (filters?.voteAverageGte) params.set('voteAverageGte', String(filters.voteAverageGte))
       if (filters?.releaseYearFrom) params.set('primaryReleaseDateGte', `${filters.releaseYearFrom}-01-01`)
@@ -168,7 +168,7 @@ export const api = {
     discoverTvDetail: (id: string, tmdbId: number) =>
       req<SeerrTvDetail>(`/arr/${id}/tv/${tmdbId}`),
     discoverRequest: (id: string, mediaType: 'movie' | 'tv', mediaId: number, seasons?: number[]) =>
-      req<any>(`/arr/${id}/discover/request`, { method: 'POST', body: JSON.stringify({ mediaType, mediaId, seasons }) }),
+      req<unknown>(`/arr/${id}/discover/request`, { method: 'POST', body: JSON.stringify({ mediaType, mediaId, seasons }) }),
   },
 
   widgets: {

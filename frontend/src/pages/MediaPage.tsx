@@ -1240,7 +1240,7 @@ function DiscoverTab() {
   // Initialize selectedSeasons when TV detail loads in the modal
   useEffect(() => {
     if (!confirmRequest || confirmRequest.mediaType !== 'tv') return
-    const tvDetail = tvDetails[String(confirmRequest.mediaId)]
+    const tvDetail = tvDetails[`${selected.id}:${confirmRequest.mediaId}`]
     if (!tvDetail) return
     const realSeasons = tvDetail.seasons.filter(s => s.seasonNumber > 0)
     const preSelected = realSeasons
@@ -1362,7 +1362,7 @@ function DiscoverTab() {
     setSelectedSeasons([])
     if (item.mediaType === 'tv') {
       // Fetch TV detail if not cached
-      if (!tvDetails[String(item.id)]) {
+      if (!tvDetails[`${selected.id}:${item.id}`]) {
         setTvDetailLoading(true)
         await loadTvDetail(selected.id, item.id)
         setTvDetailLoading(false)
@@ -1791,7 +1791,7 @@ function DiscoverTab() {
 
             {/* Season selection for TV */}
             {confirmRequest.mediaType === 'tv' && (() => {
-              const tvDetail = tvDetails[String(confirmRequest.mediaId)]
+              const tvDetail = tvDetails[`${selected.id}:${confirmRequest.mediaId}`]
               if (tvDetailLoading) {
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
@@ -1908,7 +1908,7 @@ function DiscoverTab() {
                 }}
                 disabled={
                   confirmRequest.mediaType === 'tv' &&
-                  !!tvDetails[String(confirmRequest.mediaId)] &&
+                  !!tvDetails[`${selected.id}:${confirmRequest.mediaId}`] &&
                   selectedSeasons.length === 0
                 }
                 className="btn btn-primary btn-sm"

@@ -201,3 +201,29 @@ export interface ProwlarrIndexer {
   protocol: string
   privacy: string
 }
+
+// ── Library (Radarr movies / Sonarr series) ───────────────────────────────────
+export interface RadarrMovie {
+  id: number
+  title: string
+  monitored: boolean
+  hasFile: boolean
+  sizeOnDisk: number
+  year?: number
+  inCinemas?: string
+  digitalRelease?: string
+  images?: { coverType: string; remoteUrl: string }[]
+}
+
+export interface SonarrSeries {
+  id: number
+  title: string
+  monitored: boolean
+  statistics: {
+    episodeFileCount: number
+    totalEpisodeCount: number
+    episodeCount?: number
+    sizeOnDisk: number
+  }
+  images?: { coverType: string; remoteUrl: string }[]
+}

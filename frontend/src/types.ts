@@ -8,9 +8,6 @@ export interface Service {
   description: string | null
   tags: string[] // parsed from JSON string
   position_x: number
-  position_y: number
-  width: number
-  height: number
   check_enabled: boolean
   check_url: string | null
   check_interval: number
@@ -38,10 +35,9 @@ export interface Settings {
   dashboard_title: string
   auth_enabled: boolean
   auth_mode: 'none' | 'local' | 'oidc'
-  auto_theme_enabled: boolean
-  auto_theme_light_start: string  // HH:MM e.g. "08:00"
-  auto_theme_dark_start: string   // HH:MM e.g. "20:00"
-  [key: string]: any
+  auto_theme_enabled?: boolean
+  auto_theme_light_start?: string  // HH:MM e.g. "08:00"
+  auto_theme_dark_start?: string   // HH:MM e.g. "20:00"
 }
 
 export interface AuthUser {
