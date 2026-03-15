@@ -8,7 +8,7 @@ import {
 } from '@dnd-kit/sortable'
 import {
   Plus, Trash2, Pencil, X, Check, Loader, TestTube2,
-  Search, ChevronDown, ChevronRight, Home, Sun, Zap, ZapOff, Flame, BatteryCharging,
+  Search, ChevronDown, ChevronRight, Home, Sun, Zap, ZapOff, Flame, BatteryCharging, Settings,
 } from 'lucide-react'
 
 import { useHaStore } from '../store/useHaStore'
@@ -206,6 +206,76 @@ function InstanceFormModal({ instance, onClose, onSaved }: InstanceFormProps) {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Manage Instances Modal ─────────────────────────────────────────────────────
+
+interface ManageInstancesModalProps {
+  instances: HaInstance[]
+  onClose: () => void
+  onAdd: () => void
+  onEdit: (inst: HaInstance) => void
+  onDelete: (id: string) => void
+}
+
+function ManageInstancesModal({ instances, onClose, onAdd, onEdit, onDelete }: ManageInstancesModalProps) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="glass"
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 480,
+          borderRadius: 'var(--radius-xl)',
+          padding: '32px',
+          animation: 'slide-up var(--transition-base)',
+          position: 'relative',
+        }}
+      >
+        <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}>
+          <X size={16} />
+        </button>
+        <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 20, color: 'var(--text-primary)' }}>
+          Manage Instances
+        </h2>
+
+        {instances.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>No instances configured yet.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+            {instances.map(inst => (
+              <div
+                key={inst.id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 14px', borderRadius: 'var(--radius-md)',
+                  background: 'var(--surface-2)',
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{inst.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inst.url}</div>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: inst.enabled ? 'var(--status-online)' : 'var(--text-muted)' }}>
+                  {inst.enabled ? '● on' : '● off'}
+                </span>
+                <button className="btn btn-ghost btn-icon" style={{ width: 28, height: 28 }} onClick={() => onEdit(inst)} data-tooltip="Edit">
+                  <Pencil size={13} />
+                </button>
+                <button className="btn btn-ghost btn-icon" style={{ width: 28, height: 28, color: 'var(--status-offline)' }} onClick={() => onDelete(inst.id)} data-tooltip="Delete">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button className="btn btn-primary" onClick={onAdd} style={{ width: '100%', gap: 6, justifyContent: 'center' }}>
+          <Plus size={14} /> Add Instance
+        </button>
       </div>
     </div>
   )
@@ -416,12 +486,11 @@ function EntityBrowserModal({ instances, panels, onClose, onAdd }: EntityBrowser
         </div>
 
         {/* Domain filter tabs */}
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+        <div className="tabs" style={{ overflowX: 'auto', flexShrink: 0 }}>
           {BROWSER_TABS.filter(tab => tab === 'All' || tabCounts[tab] > 0).map(tab => (
             <button
               key={tab}
-              className="ha-tab-btn"
-              style={activeTab === tab ? { background: 'var(--accent)', color: 'var(--bg-primary)', borderColor: 'var(--accent)' } : {}}
+              className={`tab${activeTab === tab ? ' active' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
               {tab}
@@ -822,12 +891,20 @@ export function HaPage() {
   const [showBrowser, setShowBrowser] = useState(false)
   const [showEnergyPicker, setShowEnergyPicker] = useState(false)
   const [editPanel, setEditPanel] = useState<HaPanel | null>(null)
+  const [showManageModal, setShowManageModal] = useState(false)
+  const [activeInstanceId, setActiveInstanceId] = useState<string | null>(null)
 
   // Load initial data
   useEffect(() => {
     loadInstances().catch(() => {})
     loadPanels().catch(() => {})
   }, [])
+
+  // Set initial active instance once instances load
+  useEffect(() => {
+    const first = instances.find(i => i.enabled)
+    if (activeInstanceId === null && first) setActiveInstanceId(first.id)
+  }, [instances.length])
 
   // Subscribe to real-time state updates for all instances referenced in panels.
   // On mount: fetch initial bulk state snapshot, then open SSE stream from the
@@ -864,8 +941,9 @@ export function HaPage() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   const enabledInstances = instances.filter(i => i.enabled)
-  const energyPanels = panels.filter(p => p.panel_type === 'energy')
-  const regularPanels = panels.filter(p => p.panel_type !== 'energy')
+  const visiblePanels = activeInstanceId ? panels.filter(p => p.instance_id === activeInstanceId) : panels
+  const energyPanels = visiblePanels.filter(p => p.panel_type === 'energy')
+  const regularPanels = visiblePanels.filter(p => p.panel_type !== 'energy')
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
@@ -890,14 +968,48 @@ export function HaPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <Home size={20} style={{ color: 'var(--accent)' }} />
           <h1 style={{ margin: 0, fontSize: 20, fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
             Home Assistant
           </h1>
+          {/* Instance selector */}
+          {enabledInstances.length === 1 && (
+            <span style={{
+              fontSize: 12, padding: '3px 10px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--glass-border)', color: 'var(--text-secondary)',
+              background: 'var(--surface-2)',
+            }}>
+              {enabledInstances[0].name}
+            </span>
+          )}
+          {enabledInstances.length > 1 && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {enabledInstances.map(inst => (
+                <button
+                  key={inst.id}
+                  onClick={() => setActiveInstanceId(inst.id)}
+                  style={{
+                    fontSize: 12, padding: '3px 10px', borderRadius: 'var(--radius-sm)',
+                    border: '1px solid',
+                    cursor: 'pointer',
+                    background: activeInstanceId === inst.id ? 'var(--accent-subtle)' : 'transparent',
+                    color: activeInstanceId === inst.id ? 'var(--accent)' : 'var(--text-secondary)',
+                    borderColor: activeInstanceId === inst.id
+                      ? 'hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.3)'
+                      : 'var(--glass-border)',
+                    fontWeight: activeInstanceId === inst.id ? 600 : 400,
+                    transition: 'all var(--transition-fast)',
+                  }}
+                >
+                  {inst.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {enabledInstances.length > 0 && (
             <>
               <button className="btn btn-ghost" onClick={() => setShowEnergyPicker(true)} style={{ gap: 6 }}>
@@ -911,41 +1023,19 @@ export function HaPage() {
             </>
           )}
           {isAdmin && (
-            <button className="btn btn-primary" onClick={() => { setEditInstance(null); setShowInstanceForm(true) }} style={{ gap: 6 }}>
-              <Plus size={15} />
-              Add Instance
-            </button>
+            <>
+              <button className="btn btn-ghost" onClick={() => setShowManageModal(true)} style={{ gap: 6 }}>
+                <Settings size={14} />
+                Manage
+              </button>
+              <button className="btn btn-primary" onClick={() => { setEditInstance(null); setShowInstanceForm(true) }} style={{ gap: 6 }}>
+                <Plus size={15} />
+                Add Instance
+              </button>
+            </>
           )}
         </div>
       </div>
-
-      {/* Instances management (admin only) */}
-      {isAdmin && instances.length > 0 && (
-        <div className="glass" style={{ borderRadius: 'var(--radius-lg)', padding: '16px 20px', marginBottom: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 12 }}>
-            Instances
-          </div>
-          <div className="card-grid" style={{ gap: 8 }}>
-            {instances.map(inst => (
-              <div key={inst.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{inst.name}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 10, fontFamily: 'var(--font-mono)' }}>{inst.url}</span>
-                </div>
-                <span style={{ fontSize: 11, color: inst.enabled ? 'var(--status-online)' : 'var(--text-muted)', fontWeight: 600 }}>
-                  {inst.enabled ? '● Enabled' : '● Disabled'}
-                </span>
-                <button className="btn btn-ghost btn-icon" style={{ width: 28, height: 28 }} onClick={() => { setEditInstance(inst); setShowInstanceForm(true) }}>
-                  <Pencil size={13} />
-                </button>
-                <button className="btn btn-ghost btn-icon" style={{ width: 28, height: 28, color: 'var(--status-offline)' }} onClick={() => deleteInstance(inst.id)}>
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Empty state */}
       {instances.length === 0 && (
@@ -965,7 +1055,7 @@ export function HaPage() {
       )}
 
       {/* Panels grid (empty) */}
-      {instances.length > 0 && panels.length === 0 && (
+      {instances.length > 0 && visiblePanels.length === 0 && (
         <div style={{ textAlign: 'center', padding: '32px 24px', color: 'var(--text-muted)' }}>
           <p style={{ fontSize: 14, marginBottom: 12 }}>No panels added yet.</p>
           {enabledInstances.length > 0 && (
@@ -1048,6 +1138,16 @@ export function HaPage() {
         <EditPanelModal
           panel={editPanel}
           onClose={() => setEditPanel(null)}
+        />
+      )}
+
+      {showManageModal && (
+        <ManageInstancesModal
+          instances={instances}
+          onClose={() => setShowManageModal(false)}
+          onAdd={() => { setShowManageModal(false); setEditInstance(null); setShowInstanceForm(true) }}
+          onEdit={inst => { setShowManageModal(false); setEditInstance(inst); setShowInstanceForm(true) }}
+          onDelete={id => deleteInstance(id)}
         />
       )}
     </div>

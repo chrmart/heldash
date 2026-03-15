@@ -133,6 +133,8 @@ function ToggleBtn({ isOn, busy, onToggle }: { isOn: boolean; busy: boolean; onT
 function LightCard({ panel, entity, instanceId }: { panel: HaPanel; entity: HaEntityFull; instanceId: string }) {
   const { callService } = useHaStore()
   const [busy, setBusy] = useState(false)
+  const [localBrightness, setLocalBrightness] = useState<number | null>(null)
+  const [localColorTemp, setLocalColorTemp] = useState<number | null>(null)
   const brightRef = useRef<ReturnType<typeof setTimeout>>()
   const tempRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -149,18 +151,26 @@ function LightCard({ panel, entity, instanceId }: { panel: HaPanel; entity: HaEn
   }
 
   const handleBrightness = (val: number) => {
+    setLocalBrightness(val)
     clearTimeout(brightRef.current)
     brightRef.current = setTimeout(() => {
       callService(instanceId, 'light', 'turn_on', panel.entity_id, { brightness: val }).catch(() => {})
+      setLocalBrightness(null)
     }, 300)
   }
 
   const handleColorTemp = (val: number) => {
+    setLocalColorTemp(val)
     clearTimeout(tempRef.current)
     tempRef.current = setTimeout(() => {
       callService(instanceId, 'light', 'turn_on', panel.entity_id, { color_temp_kelvin: val }).catch(() => {})
+      setLocalColorTemp(null)
     }, 300)
   }
+
+  const displayBrightness = localBrightness ?? brightness
+  const colorTempK = colorTemp !== undefined ? Math.round(1_000_000 / colorTemp) : undefined
+  const displayColorTempK = localColorTemp ?? colorTempK
 
   return (
     <div>
@@ -170,24 +180,24 @@ function LightCard({ panel, entity, instanceId }: { panel: HaPanel; entity: HaEn
         </span>
         <ToggleBtn isOn={isOn} busy={busy} onToggle={toggle} />
       </div>
-      {isOn && brightness !== undefined && (
+      {isOn && displayBrightness !== undefined && (
         <div style={{ marginTop: 10 }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-            Brightness {Math.round((brightness / 255) * 100)}%
+            Brightness {Math.round((displayBrightness / 255) * 100)}%
           </div>
           <input
             type="range" className="ha-slider" min={0} max={255}
-            defaultValue={brightness}
+            value={displayBrightness}
             onChange={e => handleBrightness(Number(e.target.value))}
           />
         </div>
       )}
-      {isOn && colorTemp !== undefined && (
+      {isOn && displayColorTempK !== undefined && (
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Color Temp</div>
           <input
             type="range" className="ha-slider" min={minK} max={maxK}
-            defaultValue={Math.round(1_000_000 / colorTemp)}
+            value={displayColorTempK}
             onChange={e => handleColorTemp(Number(e.target.value))}
           />
         </div>
