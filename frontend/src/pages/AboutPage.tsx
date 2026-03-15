@@ -4,7 +4,7 @@ import { LS_ABOUT_TAB } from '../constants'
 import { api } from '../api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type AboutTab = 'overview' | 'setup' | 'docker' | 'media' | 'trash' | 'ha' | 'widgets' | 'design'
+type AboutTab = 'overview' | 'setup' | 'docker' | 'media' | 'recyclarr' | 'cfmanager' | 'ha' | 'widgets' | 'design'
 
 // ── CodeBlock ─────────────────────────────────────────────────────────────────
 function CodeBlock({ children }: { children: string }) {
@@ -410,7 +410,7 @@ function TabMedia() {
   )
 }
 
-// ── Tab 5: TRaSH / Recyclarr ──────────────────────────────────────────────────
+// ── Tab 5: Recyclarr ──────────────────────────────────────────────────────────
 function TabTrash() {
   return (
     <>
@@ -555,7 +555,104 @@ radarr:
   )
 }
 
-// ── Tab 6: Home Assistant ─────────────────────────────────────────────────────
+// ── Tab 6: CF-Manager ─────────────────────────────────────────────────────────
+function TabCFManager() {
+  return (
+    <>
+      <DocSection title="CF-Manager">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>
+          Custom Formats direkt in Radarr und Sonarr verwalten —
+          ohne die Oberfläche der Arr-Instanzen zu öffnen.
+          Daten werden live aus der Instanz geladen.
+        </p>
+      </DocSection>
+
+      <DocSection title="Instanz auswählen">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>
+          Pill-Buttons oben — eine Schaltfläche pro Radarr/Sonarr-Instanz.
+          Prowlarr, SABnzbd und Seerr werden nicht unterstützt.
+        </p>
+      </DocSection>
+
+      <DocSection title="Custom Formats verwalten (linke Spalte)">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          Liste aller CFs die in der Instanz vorhanden sind.
+          Suchfeld zum Filtern nach Name.
+        </p>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Pro CF wird angezeigt</p>
+        <ul style={{ margin: '0 0 16px', paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>Name</li>
+          <li>Anzahl Conditions <span className="badge badge-neutral" style={{ fontSize: 11 }}>badge-neutral</span></li>
+          <li>Score pro Qualitätsprofil <span className="badge badge-success" style={{ fontSize: 11, marginRight: 4 }}>positiv</span><span className="badge badge-error" style={{ fontSize: 11 }}>negativ</span></li>
+          <li><span className="badge badge-accent" style={{ fontSize: 11 }}>Recyclarr: geschützt</span> wenn der CF-Name in der Recyclarr Ausnahmen-Liste (<code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>reset_unmatched_scores.except</code>) steht</li>
+        </ul>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Aktionen (nur Admins)</p>
+        <ul style={{ margin: '0 0 16px', paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>Stift-Icon → CF bearbeiten</li>
+          <li>Papierkorb-Icon → CF löschen (mit Bestätigung)</li>
+        </ul>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
+          <strong>"+ Erstellen"</strong> Button (nur Admins) → Neues CF anlegen
+        </p>
+      </DocSection>
+
+      <DocSection title="CF erstellen / bearbeiten">
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Felder</p>
+        <ul style={{ margin: '0 0 16px', paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>Name (Pflicht)</li>
+          <li>"Umbenennen wenn angewendet" Toggle</li>
+        </ul>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Conditions</p>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 8px' }}>
+          Pro Condition: Typ, Name, Negate, Pflicht, Wert<br />
+          + Condition hinzufügen / × entfernen
+        </p>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Unterstützte Typen</p>
+        <ul style={{ margin: '0 0 16px', paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>Release-Titel (Regex)</li>
+          <li>Sprache</li>
+          <li>Quelle</li>
+          <li>Auflösung</li>
+          <li>Release-Gruppe</li>
+          <li>Qualitäts-Modifier</li>
+          <li>Dateigröße</li>
+          <li>Indexer-Flag</li>
+        </ul>
+        <span className="badge badge-neutral">Änderungen werden direkt in Radarr/Sonarr gespeichert.</span>
+      </DocSection>
+
+      <DocSection title="Scores im Qualitätsprofil setzen (rechte Spalte)">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          Tabs — ein Tab pro Qualitätsprofil in der Instanz.
+          Mehrere Profile pro Instanz werden vollständig unterstützt.
+        </p>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 16px' }}>
+          Pro Profil: Tabelle aller CFs mit aktuellem Score.
+          Score-Eingabe pro CF — positiv, negativ oder 0.
+          <strong>"Alle Scores speichern"</strong> speichert alle Änderungen auf einmal.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span className="badge badge-warning">Scores die von Recyclarr verwaltet werden können beim nächsten Sync überschrieben werden — außer der CF-Name steht in der Ausnahmen-Liste unter Recyclarr → Advanced Settings.</span>
+          <span className="badge badge-accent">Recyclarr: geschützt neben CFs die in der Ausnahmen-Liste stehen — diese Scores werden nicht überschrieben.</span>
+        </div>
+      </DocSection>
+
+      <DocSection title="Zusammenspiel mit Recyclarr">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          Empfohlener Workflow für eigene CFs (z.B. Tdarr):
+        </p>
+        <ol style={{ margin: 0, paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>CF hier im CF-Manager erstellen (Name + Conditions)</li>
+          <li>Score im gewünschten Qualitätsprofil setzen</li>
+          <li>In <strong>Recyclarr → Instanz → Advanced Settings</strong> des Profils: CF-Namen zur Ausnahmen-Liste hinzufügen</li>
+          <li>Recyclarr überschreibt diesen Score beim Sync nicht mehr</li>
+        </ol>
+      </DocSection>
+    </>
+  )
+}
+
+// ── Tab 7: Home Assistant ─────────────────────────────────────────────────────
 function TabHA() {
   return (
     <>
@@ -585,6 +682,36 @@ function TabHA() {
           <li>Entity suchen und auswählen → Panel wird hinzugefügt</li>
           <li>Panels per Drag & Drop anordnen</li>
         </ol>
+      </DocSection>
+
+      <DocSection title="Räume / Areas">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          Voraussetzung: Areas müssen in Home Assistant konfiguriert sein
+          (<strong>Einstellungen → Bereiche &amp; Zonen → Bereiche</strong>)
+        </p>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Ansicht wechseln</p>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 16px' }}>
+          Oben auf der Home Assistant Seite: Toggle <strong>"Flach"</strong> | <strong>"Nach Raum"</strong><br />
+          Preference wird lokal gespeichert
+        </p>
+        <SimpleTable
+          headers={['Ansicht', 'Beschreibung']}
+          rows={[
+            ['Flach', 'Alle Panels in einem Grid — bisheriges Verhalten'],
+            ['Nach Raum', 'Panels werden nach HA-Bereich gruppiert. Jeder Raum als eigener Abschnitt mit Raumname. Panels ohne Raum-Zuweisung erscheinen unter "Ohne Raum". Reihenfolge: alphabetisch, "Ohne Raum" immer zuletzt. Auf Mobile: Räume kollabierbar per Tipp auf den Header'],
+          ]}
+        />
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '16px 0 8px' }}>Raum automatisch erkennen</p>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 16px' }}>
+          Beim Hinzufügen eines Panels wird der Raum automatisch
+          aus der HA Entity-Registry übernommen (falls konfiguriert).
+        </p>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Raum manuell zuweisen</p>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 16px' }}>
+          Panel bearbeiten (Stift-Icon) → <strong>"Raum"</strong> Dropdown<br />
+          "Kein Raum" = Panel erscheint in "Ohne Raum"
+        </p>
+        <span className="badge badge-neutral">Wenn keine Areas in HA konfiguriert sind, wird der Toggle ausgeblendet und die Flach-Ansicht verwendet.</span>
       </DocSection>
 
       <DocSection title="Unterstützte Entity-Typen">
@@ -789,14 +916,15 @@ function TabDesign() {
 }
 
 // ── AboutPage ─────────────────────────────────────────────────────────────────
-const TAB_ORDER: AboutTab[] = ['overview', 'setup', 'docker', 'media', 'trash', 'ha', 'widgets', 'design']
+const TAB_ORDER: AboutTab[] = ['overview', 'setup', 'docker', 'media', 'recyclarr', 'cfmanager', 'ha', 'widgets', 'design']
 
 const TAB_LABELS: Record<AboutTab, string> = {
   overview: 'Übersicht',
   setup: 'Installation & Setup',
   docker: 'Docker',
   media: 'Media & Seerr',
-  trash: 'TRaSH / Recyclarr',
+  recyclarr: 'Recyclarr',
+  cfmanager: 'CF-Manager',
   ha: 'Home Assistant',
   widgets: 'Widgets',
   design: 'Design & Einstellungen',
@@ -838,14 +966,15 @@ export function AboutPage() {
       </div>
 
       {/* Tab content */}
-      {activeTab === 'overview'  && <TabOverview version={version} />}
-      {activeTab === 'setup'     && <TabSetup />}
-      {activeTab === 'docker'    && <TabDocker />}
-      {activeTab === 'media'     && <TabMedia />}
-      {activeTab === 'trash'     && <TabTrash />}
-      {activeTab === 'ha'        && <TabHA />}
-      {activeTab === 'widgets'   && <TabWidgets />}
-      {activeTab === 'design'    && <TabDesign />}
+      {activeTab === 'overview'   && <TabOverview version={version} />}
+      {activeTab === 'setup'      && <TabSetup />}
+      {activeTab === 'docker'     && <TabDocker />}
+      {activeTab === 'media'      && <TabMedia />}
+      {activeTab === 'recyclarr'  && <TabTrash />}
+      {activeTab === 'cfmanager'  && <TabCFManager />}
+      {activeTab === 'ha'         && <TabHA />}
+      {activeTab === 'widgets'    && <TabWidgets />}
+      {activeTab === 'design'     && <TabDesign />}
     </div>
   )
 }
