@@ -1,4 +1,4 @@
-import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull, EnergyData, CalendarEntry } from './types'
+import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull, HaArea, EnergyData, CalendarEntry } from './types'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse, RadarrMovie, SonarrSeries, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile } from './types/arr'
 import type { TmdbPage, TmdbGenre, TmdbProvider, TmdbTvDetail, TmdbDiscoverFilters } from './types/tmdb'
 
@@ -267,6 +267,8 @@ export const api = {
       delete: (id: string) => req<void>(`/ha/instances/${id}`, { method: 'DELETE' }),
       test: (id: string) => req<{ ok: boolean; error?: string }>(`/ha/instances/${id}/test`, { method: 'POST', body: JSON.stringify({}) }),
       states: (id: string) => req<HaEntityFull[]>(`/ha/instances/${id}/states`),
+      areas: (id: string) => req<HaArea[]>(`/ha/instances/${id}/areas`),
+      entityArea: (id: string, entityId: string) => req<{ area_id: string | null }>(`/ha/instances/${id}/entity-area?entity_id=${encodeURIComponent(entityId)}`),
       call: (id: string, domain: string, service: string, entity_id: string, service_data?: Record<string, unknown>) =>
         req<{ ok: boolean }>(`/ha/instances/${id}/call`, { method: 'POST', body: JSON.stringify({ domain, service, entity_id, service_data }) }),
     },
@@ -276,7 +278,7 @@ export const api = {
       list: () => req<HaPanel[]>('/ha/panels'),
       add: (data: { instance_id: string; entity_id: string; label?: string; panel_type?: string }) =>
         req<HaPanel>('/ha/panels', { method: 'POST', body: JSON.stringify(data) }),
-      update: (id: string, data: { label?: string; panel_type?: string }) =>
+      update: (id: string, data: { label?: string; panel_type?: string; area_id?: string | null }) =>
         req<HaPanel>(`/ha/panels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
       delete: (id: string) => req<void>(`/ha/panels/${id}`, { method: 'DELETE' }),
       reorder: (ids: string[]) => req<{ ok: boolean }>('/ha/panels/reorder', { method: 'PATCH', body: JSON.stringify({ ids }) }),

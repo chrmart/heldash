@@ -279,7 +279,14 @@ export interface HaPanel {
   panel_type: string
   position: number
   owner_id: string
+  area_id: string | null
   created_at: string
+}
+
+export interface HaArea {
+  area_id: string
+  name: string
+  icon: string | null
 }
 
 export interface HaEntityFull {

@@ -26,6 +26,7 @@ interface HaPanelRow {
   panel_type: string
   position: number
   owner_id: string
+  area_id: string | null
   created_at: string
 }
 
@@ -50,11 +51,13 @@ interface AddPanelBody {
   entity_id: string
   label?: string
   panel_type?: string
+  area_id?: string
 }
 
 interface PatchPanelBody {
   label?: string
   panel_type?: string
+  area_id?: string | null
 }
 
 interface ReorderBody {
@@ -277,7 +280,7 @@ export async function haRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
   }, async (req, reply) => {
     const ownerId = callerOwnerId(req)
-    const { instance_id, entity_id, label, panel_type = 'auto' } = req.body
+    const { instance_id, entity_id, label, panel_type = 'auto', area_id } = req.body
     if (!instance_id?.trim()) return reply.status(400).send({ error: 'instance_id is required' })
     if (!entity_id?.trim()) return reply.status(400).send({ error: 'entity_id is required' })
     const inst = db.prepare('SELECT id FROM ha_instances WHERE id = ?').get(instance_id)
@@ -290,9 +293,9 @@ export async function haRoutes(app: FastifyInstance) {
     const maxRow = db.prepare('SELECT MAX(position) as m FROM ha_panels WHERE owner_id = ?').get(ownerId) as { m: number | null }
     const position = (maxRow.m ?? -1) + 1
     db.prepare(`
-      INSERT INTO ha_panels (id, instance_id, entity_id, label, panel_type, position, owner_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, instance_id, entity_id.trim(), label?.trim() ?? null, panel_type, position, ownerId)
+      INSERT INTO ha_panels (id, instance_id, entity_id, label, panel_type, position, owner_id, area_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, instance_id, entity_id.trim(), label?.trim() ?? null, panel_type, position, ownerId, area_id ?? null)
     return reply.status(201).send(db.prepare('SELECT * FROM ha_panels WHERE id = ?').get(id) as HaPanelRow)
   })
 
@@ -321,7 +324,8 @@ export async function haRoutes(app: FastifyInstance) {
     if (!row) return reply.status(404).send({ error: 'Not found' })
     const label = req.body.label !== undefined ? (req.body.label.trim() || null) : row.label
     const panel_type = req.body.panel_type ?? row.panel_type
-    db.prepare('UPDATE ha_panels SET label=?, panel_type=? WHERE id=?').run(label, panel_type, row.id)
+    const area_id = 'area_id' in req.body ? (req.body.area_id ?? null) : row.area_id
+    db.prepare('UPDATE ha_panels SET label=?, panel_type=?, area_id=? WHERE id=?').run(label, panel_type, area_id, row.id)
     return db.prepare('SELECT * FROM ha_panels WHERE id = ?').get(row.id) as HaPanelRow
   })
 
@@ -334,6 +338,36 @@ export async function haRoutes(app: FastifyInstance) {
     if (!row) return reply.status(404).send({ error: 'Not found' })
     db.prepare('DELETE FROM ha_panels WHERE id = ?').run(req.params.id)
     return reply.status(204).send()
+  })
+
+  // GET /api/ha/instances/:id/areas — list all HA areas (rooms) via WS
+  app.get<{ Params: { id: string } }>('/api/ha/instances/:id/areas', {
+    preHandler: [app.authenticate],
+  }, async (req, reply) => {
+    const row = db.prepare('SELECT * FROM ha_instances WHERE id = ?').get(req.params.id) as HaInstanceRow | undefined
+    if (!row) return reply.status(404).send({ error: 'Not found' })
+    try {
+      const client = getHaWsClient(row.id, row.url, row.token)
+      const areas = await client.sendCommand('config/area_registry/list') as { area_id: string; name: string; icon: string | null }[]
+      return Array.isArray(areas) ? areas : []
+    } catch {
+      return []
+    }
+  })
+
+  // GET /api/ha/instances/:id/entity-area — get area_id for a single entity
+  app.get<{ Params: { id: string }; Querystring: { entity_id?: string } }>('/api/ha/instances/:id/entity-area', {
+    preHandler: [app.authenticate],
+  }, async (req) => {
+    const row = db.prepare('SELECT * FROM ha_instances WHERE id = ?').get(req.params.id) as HaInstanceRow | undefined
+    if (!row || !req.query.entity_id) return { area_id: null }
+    try {
+      const client = getHaWsClient(row.id, row.url, row.token)
+      const result = await client.sendCommand('config/entity_registry/get', { entity_id: req.query.entity_id }) as { area_id?: string | null }
+      return { area_id: result?.area_id ?? null }
+    } catch {
+      return { area_id: null }
+    }
   })
 
   // GET /api/ha/instances/:id/energy — energy dashboard data via HA WebSocket

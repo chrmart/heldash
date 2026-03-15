@@ -66,6 +66,8 @@ function runMigrations(db: Database.Database): number {
     'ALTER TABLE recyclarr_config ADD COLUMN last_sync_success INTEGER',
     'ALTER TABLE recyclarr_config ADD COLUMN delete_old_cfs INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE recyclarr_config ADD COLUMN is_syncing INTEGER NOT NULL DEFAULT 0',
+    // HA panel area assignment for grouped view
+    'ALTER TABLE ha_panels ADD COLUMN area_id TEXT',
   ]
   for (const sql of migrations) {
     try {

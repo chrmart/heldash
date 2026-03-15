@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { api } from '../api'
-import type { HaInstance, HaPanel, HaEntityFull, EnergyData } from '../types'
+import type { HaInstance, HaPanel, HaEntityFull, HaArea, EnergyData } from '../types'
 
 interface HaStore {
   instances: HaInstance[]
@@ -9,16 +9,20 @@ interface HaStore {
   stateMap: Record<string, Record<string, HaEntityFull>>
   // energyData: 'instanceId:period' → EnergyData
   energyData: Record<string, EnergyData>
+  // areas: instanceId → HaArea[]
+  areas: Record<string, HaArea[]>
   loadInstances: () => Promise<void>
   loadPanels: () => Promise<void>
   loadStates: (instanceId: string) => Promise<void>
   loadEnergy: (instanceId: string, period: string) => Promise<void>
+  loadAreas: (instanceId: string) => Promise<void>
   updateEntityState: (instanceId: string, entityId: string, newState: HaEntityFull) => void
   callService: (instanceId: string, domain: string, service: string, entityId: string, serviceData?: Record<string, unknown>) => Promise<void>
-  addPanel: (instanceId: string, entityId: string, label?: string, panelType?: string) => Promise<void>
-  updatePanel: (panelId: string, data: { label?: string; panel_type?: string }) => Promise<void>
+  addPanel: (instanceId: string, entityId: string, label?: string, panelType?: string) => Promise<HaPanel>
+  updatePanel: (panelId: string, data: { label?: string; panel_type?: string; area_id?: string | null }) => Promise<void>
   removePanel: (panelId: string) => Promise<void>
   reorderPanels: (ids: string[]) => Promise<void>
+  reorderRoomPanels: (ids: string[]) => Promise<void>
   createInstance: (data: { name: string; url: string; token: string; enabled?: boolean }) => Promise<void>
   updateInstance: (id: string, data: { name?: string; url?: string; token?: string; enabled?: boolean }) => Promise<void>
   deleteInstance: (id: string) => Promise<void>
@@ -29,6 +33,7 @@ export const useHaStore = create<HaStore>((set, get) => ({
   panels: [],
   stateMap: {},
   energyData: {},
+  areas: {},
 
   loadInstances: async () => {
     const instances = await api.ha.instances.list()
@@ -52,6 +57,11 @@ export const useHaStore = create<HaStore>((set, get) => ({
     set(prev => ({ energyData: { ...prev.energyData, [`${instanceId}:${period}`]: data } }))
   },
 
+  loadAreas: async (instanceId: string) => {
+    const data = await api.ha.instances.areas(instanceId)
+    set(prev => ({ areas: { ...prev.areas, [instanceId]: data } }))
+  },
+
   updateEntityState: (instanceId: string, entityId: string, newState: HaEntityFull) => {
     set(prev => ({
       stateMap: {
@@ -73,6 +83,7 @@ export const useHaStore = create<HaStore>((set, get) => ({
   addPanel: async (instanceId, entityId, label, panelType) => {
     const panel = await api.ha.panels.add({ instance_id: instanceId, entity_id: entityId, label, panel_type: panelType })
     set(prev => ({ panels: [...prev.panels, panel] }))
+    return panel
   },
 
   updatePanel: async (panelId, data) => {
@@ -92,6 +103,16 @@ export const useHaStore = create<HaStore>((set, get) => ({
       return { ...p, position: idx }
     })
     set({ panels: ordered })
+    await api.ha.panels.reorder(ids)
+  },
+
+  // Reorder panels within a single room — only updates positions of given ids,
+  // all other panels keep their current positions (no cross-room interference).
+  reorderRoomPanels: async (ids: string[]) => {
+    const { panels } = get()
+    const posMap = new Map(ids.map((id, idx) => [id, idx]))
+    const updated = panels.map(p => posMap.has(p.id) ? { ...p, position: posMap.get(p.id)! } : p)
+    set({ panels: updated })
     await api.ha.panels.reorder(ids)
   },
 

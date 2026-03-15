@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+  DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core'
 import {
@@ -14,8 +14,9 @@ import {
 import { useHaStore } from '../store/useHaStore'
 import { useStore } from '../store/useStore'
 import { api } from '../api'
-import type { HaEntityFull, HaPanel, HaInstance } from '../types'
+import type { HaEntityFull, HaPanel, HaInstance, HaArea } from '../types'
 import { HaPanelCard } from './HaPanelCard'
+import { LS_HA_VIEW_MODE } from '../constants'
 
 // ── Domain helpers ────────────────────────────────────────────────────────────
 
@@ -281,17 +282,25 @@ function ManageInstancesModal({ instances, onClose, onAdd, onEdit, onDelete }: M
   )
 }
 
-// ── Edit Panel Label Modal ────────────────────────────────────────────────────
+// ── Edit Panel Modal ──────────────────────────────────────────────────────────
 
 function EditPanelModal({ panel, onClose }: { panel: HaPanel; onClose: () => void }) {
   const { updatePanel } = useHaStore()
   const [label, setLabel] = useState(panel.label ?? '')
+  const [areaId, setAreaId] = useState<string | null>(panel.area_id ?? null)
+  const [areas, setAreas] = useState<HaArea[]>([])
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api.ha.instances.areas(panel.instance_id)
+      .then(data => setAreas(data))
+      .catch(() => {})
+  }, [])
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      await updatePanel(panel.id, { label: label.trim() || undefined })
+      await updatePanel(panel.id, { label: label.trim() || undefined, area_id: areaId })
       onClose()
     } finally {
       setSaving(false)
@@ -316,7 +325,7 @@ function EditPanelModal({ panel, onClose }: { panel: HaPanel; onClose: () => voi
         </button>
 
         <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 6, color: 'var(--text-primary)' }}>
-          Edit Panel Label
+          Edit Panel
         </h2>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 28, fontFamily: 'var(--font-mono)' }}>
           {panel.entity_id}
@@ -334,6 +343,23 @@ function EditPanelModal({ panel, onClose }: { panel: HaPanel; onClose: () => voi
               style={{ fontSize: 14, padding: '10px 12px' }}
             />
           </div>
+
+          {areas.length > 0 && (
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Raum</label>
+              <select
+                className="form-input"
+                value={areaId ?? ''}
+                onChange={e => setAreaId(e.target.value || null)}
+                style={{ fontSize: 14, padding: '10px 12px' }}
+              >
+                <option value="">Kein Raum</option>
+                {areas.map(a => (
+                  <option key={a.area_id} value={a.area_id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', padding: '11px 20px', fontSize: 14 }}>
@@ -875,13 +901,114 @@ function AddEnergyPanelModal({ instances, panels, onClose, onAdd }: {
   )
 }
 
+// ── Room Section (grouped view) ───────────────────────────────────────────────
+
+interface RoomSectionProps {
+  areaId: string | null
+  areaName: string
+  panels: HaPanel[]
+  stateMap: Record<string, Record<string, HaEntityFull>>
+  onRemove: (id: string) => void
+  onEdit: (panel: HaPanel) => void
+  onReorder: (ids: string[]) => void
+}
+
+function RoomSection({ areaId, areaName, panels, stateMap, onRemove, onEdit, onReorder }: RoomSectionProps) {
+  const storageKey = `ha_room_${areaId ?? 'unassigned'}`
+
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) return false
+    const saved = sessionStorage.getItem(storageKey)
+    if (saved !== null) return saved === 'true'
+    return panels.length > 6
+  })
+
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024)
+
+  useEffect(() => {
+    const handler = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+
+  const isMobile = windowWidth < 768
+  const isCollapsed = isMobile && collapsed
+
+  const toggle = () => {
+    if (!isMobile) return
+    const next = !collapsed
+    setCollapsed(next)
+    sessionStorage.setItem(storageKey, String(next))
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIdx = panels.findIndex(p => p.id === active.id)
+    const newIdx = panels.findIndex(p => p.id === over.id)
+    if (oldIdx === -1 || newIdx === -1) return
+    const reordered = [...panels]
+    const [moved] = reordered.splice(oldIdx, 1)
+    reordered.splice(newIdx, 0, moved)
+    onReorder(reordered.map(p => p.id))
+  }
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div
+        className="section-header"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          cursor: isMobile ? 'pointer' : 'default',
+          userSelect: 'none',
+          marginBottom: 12,
+        }}
+        onClick={toggle}
+      >
+        {isMobile && (isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />)}
+        <Home size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+          {areaName}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>({panels.length})</span>
+      </div>
+      {!isCollapsed && (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={panels.map(p => p.id)} strategy={rectSortingStrategy}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
+              {panels.map(panel => {
+                const entity = stateMap[panel.instance_id]?.[panel.entity_id]
+                return (
+                  <HaPanelCard
+                    key={panel.id}
+                    panel={panel}
+                    entity={entity}
+                    instanceId={panel.instance_id}
+                    onRemove={() => onRemove(panel.id)}
+                    onEdit={() => onEdit(panel)}
+                  />
+                )
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function HaPage() {
   const {
-    instances, panels, stateMap,
-    loadInstances, loadPanels, loadStates, updateEntityState,
-    addPanel, removePanel, reorderPanels,
+    instances, panels, stateMap, areas,
+    loadInstances, loadPanels, loadStates, updateEntityState, loadAreas,
+    addPanel, updatePanel, removePanel, reorderPanels, reorderRoomPanels,
     deleteInstance,
   } = useHaStore()
   const { isAdmin } = useStore()
@@ -893,6 +1020,9 @@ export function HaPage() {
   const [editPanel, setEditPanel] = useState<HaPanel | null>(null)
   const [showManageModal, setShowManageModal] = useState(false)
   const [activeInstanceId, setActiveInstanceId] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'flat' | 'grouped'>(() =>
+    (localStorage.getItem(LS_HA_VIEW_MODE) as 'flat' | 'grouped' | null) ?? 'flat'
+  )
 
   // Load initial data
   useEffect(() => {
@@ -905,6 +1035,23 @@ export function HaPage() {
     const first = instances.find(i => i.enabled)
     if (activeInstanceId === null && first) setActiveInstanceId(first.id)
   }, [instances.length])
+
+  // Load areas when grouped view is active (or becomes active) for the current instance
+  useEffect(() => {
+    if (viewMode === 'grouped' && activeInstanceId) {
+      loadAreas(activeInstanceId).catch(() => {})
+    }
+  }, [viewMode, activeInstanceId])
+
+  // If areas loaded and empty → force flat view and persist
+  const activeAreas = activeInstanceId ? (areas[activeInstanceId] ?? []) : []
+  const areasLoaded = activeInstanceId != null && activeInstanceId in areas
+  useEffect(() => {
+    if (viewMode === 'grouped' && areasLoaded && activeAreas.length === 0) {
+      setViewMode('flat')
+      localStorage.setItem(LS_HA_VIEW_MODE, 'flat')
+    }
+  }, [areasLoaded, activeAreas.length])
 
   // Subscribe to real-time state updates for all instances referenced in panels.
   // On mount: fetch initial bulk state snapshot, then open SSE stream from the
@@ -958,7 +1105,15 @@ export function HaPage() {
   }
 
   const handleAddPanel = async (instanceId: string, entityId: string) => {
-    await addPanel(instanceId, entityId)
+    const panel = await addPanel(instanceId, entityId)
+    // Background: auto-detect entity area and patch if found
+    api.ha.instances.entityArea(instanceId, entityId)
+      .then(({ area_id }) => {
+        if (area_id) {
+          updatePanel(panel.id, { area_id }).catch(() => {})
+        }
+      })
+      .catch(() => {})
   }
 
   const handleAddEnergyPanel = async (instanceId: string) => {
@@ -1010,6 +1165,37 @@ export function HaPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* View mode toggle — only shown when areas are available */}
+          {enabledInstances.length > 0 && activeAreas.length > 0 && (
+            <div style={{ display: 'flex', borderRadius: 'var(--radius-sm)', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
+              {(['flat', 'grouped'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => {
+                    setViewMode(mode)
+                    localStorage.setItem(LS_HA_VIEW_MODE, mode)
+                    if (mode === 'grouped' && activeInstanceId && !(activeInstanceId in areas)) {
+                      loadAreas(activeInstanceId).catch(() => {})
+                    }
+                  }}
+                  style={{
+                    fontSize: 12, padding: '4px 12px', border: 'none', cursor: 'pointer',
+                    background: viewMode === mode ? 'var(--accent-subtle)' : 'transparent',
+                    color: viewMode === mode ? 'var(--accent)' : 'var(--text-secondary)',
+                    fontWeight: viewMode === mode ? 600 : 400,
+                    transition: 'all var(--transition-fast)',
+                  }}
+                >
+                  {mode === 'flat' ? 'Flach' : 'Nach Raum'}
+                </button>
+              ))}
+            </div>
+          )}
+          {enabledInstances.length > 0 && viewMode === 'grouped' && areasLoaded && activeAreas.length === 0 && (
+            <span className="badge badge-neutral" style={{ fontSize: 11 }}>
+              Räume in Home Assistant nicht konfiguriert
+            </span>
+          )}
           {enabledInstances.length > 0 && (
             <>
               <button className="btn btn-ghost" onClick={() => setShowEnergyPicker(true)} style={{ gap: 6 }}>
@@ -1080,8 +1266,8 @@ export function HaPage() {
         </div>
       )}
 
-      {/* DnD Panel Grid */}
-      {regularPanels.length > 0 && (
+      {/* Flat DnD Panel Grid */}
+      {regularPanels.length > 0 && viewMode === 'flat' && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={regularPanels.map(p => p.id)} strategy={rectSortingStrategy}>
             <div style={{
@@ -1106,6 +1292,50 @@ export function HaPage() {
           </SortableContext>
         </DndContext>
       )}
+
+      {/* Grouped by Room view */}
+      {regularPanels.length > 0 && viewMode === 'grouped' && activeAreas.length > 0 && (() => {
+        const areaSet = new Set(activeAreas.map(a => a.area_id))
+        const knownRooms = activeAreas
+          .slice()
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(area => ({
+            ...area,
+            panels: regularPanels.filter(p => p.area_id === area.area_id).sort((a, b) => a.position - b.position),
+          }))
+          .filter(r => r.panels.length > 0)
+        const noRoomPanels = regularPanels
+          .filter(p => !p.area_id || !areaSet.has(p.area_id))
+          .sort((a, b) => a.position - b.position)
+        return (
+          <div>
+            {knownRooms.map(room => (
+              <RoomSection
+                key={room.area_id}
+                areaId={room.area_id}
+                areaName={room.name}
+                panels={room.panels}
+                stateMap={stateMap}
+                onRemove={id => removePanel(id)}
+                onEdit={panel => setEditPanel(panel)}
+                onReorder={ids => reorderRoomPanels(ids).catch(() => {})}
+              />
+            ))}
+            {noRoomPanels.length > 0 && (
+              <RoomSection
+                key="unassigned"
+                areaId={null}
+                areaName="Ohne Raum"
+                panels={noRoomPanels}
+                stateMap={stateMap}
+                onRemove={id => removePanel(id)}
+                onEdit={panel => setEditPanel(panel)}
+                onReorder={ids => reorderRoomPanels(ids).catch(() => {})}
+              />
+            )}
+          </div>
+        )
+      })()}
 
       {/* Modals */}
       {showInstanceForm && (
