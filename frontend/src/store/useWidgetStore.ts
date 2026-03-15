@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import type { Widget, WidgetStats } from '../types'
+import { useDockerStore } from './useDockerStore'
 
 // ── Centralized polling state (module scope, non-reactive) ────────────────────
 const intervalMap = new Map<string, ReturnType<typeof setInterval>>()
@@ -112,7 +113,15 @@ export const useWidgetStore = create<WidgetState>((set, get) => ({
     refCountMap.set(widgetId, count)
     if (count === 1) {
       const ms = POLL_INTERVALS[widgetType] ?? 30000
-      const id = setInterval(() => { get().loadStats(widgetId).catch(() => {}) }, ms)
+      let id: ReturnType<typeof setInterval>
+      if (widgetType === 'docker_overview') {
+        id = setInterval(() => { useDockerStore.getState().loadContainers().catch(() => {}) }, ms)
+      } else {
+        if (!(widgetType in POLL_INTERVALS)) {
+          console.warn(`[useWidgetStore] Unknown widget type "${widgetType}" — using default 30s interval`)
+        }
+        id = setInterval(() => { useWidgetStore.getState().loadStats(widgetId).catch(() => {}) }, ms)
+      }
       intervalMap.set(widgetId, id)
     }
   },

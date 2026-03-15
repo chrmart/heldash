@@ -1134,6 +1134,7 @@ export function WidgetsPage({ showAddForm, onFormClose }: Props) {
   const { isAdmin } = useStore()
   const { widgets, loadWidgets, loadStats, createWidget, updateWidget, deleteWidget, uploadWidgetIcon, startPollingAll, stopPollingAll } = useWidgetStore()
   const { isOnDashboard, addWidget, removeByRef } = useDashboardStore()
+  const { loadContainers: loadDockerContainers } = useDockerStore()
   const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -1143,10 +1144,13 @@ export function WidgetsPage({ showAddForm, onFormClose }: Props) {
   const widgetIds = widgets.map(w => w.id).join(',')
 
   useEffect(() => {
-    const pollable = widgets.filter(w => w.type !== 'docker_overview' && w.type !== 'custom_button')
-    if (pollable.length === 0) return
-    Promise.all(pollable.map(w => loadStats(w.id))).catch(() => {})
-    startPollingAll(pollable.map(w => ({ id: w.id, type: w.type })))
+    const statsPollable = widgets.filter(w => w.type !== 'docker_overview' && w.type !== 'custom_button')
+    const dockerPollable = widgets.filter(w => w.type === 'docker_overview')
+    if (statsPollable.length === 0 && dockerPollable.length === 0) return
+    Promise.all(statsPollable.map(w => loadStats(w.id))).catch(() => {})
+    if (dockerPollable.length > 0) loadDockerContainers().catch(() => {})
+    const allPollable = [...statsPollable, ...dockerPollable]
+    startPollingAll(allPollable.map(w => ({ id: w.id, type: w.type })))
     return () => stopPollingAll()
   }, [widgetIds])
 

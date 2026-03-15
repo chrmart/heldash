@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { useWidgetStore } from '../store/useWidgetStore'
+import { useDockerStore } from '../store/useDockerStore'
 import { ServiceCard } from '../components/ServiceCard'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
 import { AdGuardStatsView, DockerOverviewContent, HaStatsView, CustomButtonsView, StatBar, NginxPMStatsView, HaEnergyWidgetView } from './WidgetsPage'
@@ -660,6 +661,7 @@ export function Dashboard({ onEdit }: Props) {
   const { instances, loadInstances, loadAllStats } = useArrStore()
   const { items, groups, editMode, guestMode, loading, reorder, reorderGroups, createGroup } = useDashboardStore()
   const { loadStats, startPollingAll, stopPollingAll } = useWidgetStore()
+  const { loadContainers } = useDockerStore()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -688,10 +690,13 @@ export function Dashboard({ onEdit }: Props) {
   useEffect(() => {
     const widgetItems = [...items, ...groups.flatMap(g => g.items)]
       .filter(i => i.type === 'widget') as DashboardWidgetItem[]
-    const pollable = widgetItems.filter(i => i.widget.type !== 'docker_overview' && i.widget.type !== 'custom_button')
-    if (pollable.length === 0) return
-    Promise.all(pollable.map(i => loadStats(i.widget.id))).catch(() => {})
-    startPollingAll(pollable.map(i => ({ id: i.widget.id, type: i.widget.type })))
+    const statsPollable = widgetItems.filter(i => i.widget.type !== 'docker_overview' && i.widget.type !== 'custom_button')
+    const dockerPollable = widgetItems.filter(i => i.widget.type === 'docker_overview')
+    if (statsPollable.length === 0 && dockerPollable.length === 0) return
+    Promise.all(statsPollable.map(i => loadStats(i.widget.id))).catch(() => {})
+    if (dockerPollable.length > 0) loadContainers().catch(() => {})
+    const allPollable = [...statsPollable, ...dockerPollable]
+    startPollingAll(allPollable.map(i => ({ id: i.widget.id, type: i.widget.type })))
     return () => stopPollingAll()
   }, [widgetItemIds])
 
