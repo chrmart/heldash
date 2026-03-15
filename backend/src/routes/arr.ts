@@ -132,14 +132,13 @@ interface VisibilityBody {
 interface CreateCfBody {
   name: string
   includeCustomFormatWhenRenaming?: boolean
-  specifications: unknown[]
+  specifications: object[]
 }
 
 interface PutCfBody {
-  id?: number
   name: string
   includeCustomFormatWhenRenaming?: boolean
-  specifications: unknown[]
+  specifications: object[]
 }
 
 interface UpdateProfileScoresBody {
@@ -602,7 +601,7 @@ export async function arrRoutes(app: FastifyInstance) {
       const cfId = parseInt(req.params.cfId, 10)
       if (isNaN(cfId)) return reply.status(400).send({ error: 'Invalid cfId' })
       try {
-        return await makeClient(row).updateCustomFormat(cfId, { ...req.body, id: cfId })
+        return await makeClient(row).updateCustomFormat(cfId, req.body)
       } catch (e: unknown) {
         return reply.status(502).send({ error: 'Upstream error', detail: (e as Error).message })
       }
@@ -675,6 +674,8 @@ export async function arrRoutes(app: FastifyInstance) {
       try {
         const client = makeClient(row)
         const profile = await client.getQualityProfile(profileId) as {
+          id: number
+          name: string
           formatItems: { format: number; score: number; name: string }[]
           [k: string]: unknown
         }
