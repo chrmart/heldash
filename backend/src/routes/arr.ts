@@ -942,6 +942,23 @@ export async function arrRoutes(app: FastifyInstance) {
     }
   )
 
+  // GET /api/arr/:id/movie/:tmdbId — movie detail with mediaInfo (status + request tracking)
+  app.get<{ Params: { id: string; tmdbId: string } }>(
+    '/api/arr/:id/movie/:tmdbId',
+    async (req, reply) => {
+      const row = await resolveInstance(req, reply, req.params.id)
+      if (!row) return
+      if (row.type !== 'seerr') return reply.status(400).send({ error: 'Only available for Seerr' })
+      const tmdbId = parseInt(req.params.tmdbId, 10)
+      if (isNaN(tmdbId)) return reply.status(400).send({ error: 'Invalid tmdbId' })
+      try {
+        return await new SeerrClient(row.url, row.api_key).getMovieDetailFull(tmdbId)
+      } catch (e: unknown) {
+        return reply.status(502).send({ error: 'Upstream error', detail: (e as Error).message })
+      }
+    }
+  )
+
   // GET /api/arr/:id/tv/:tmdbId — full TV detail with seasons and per-season availability
   app.get<{ Params: { id: string; tmdbId: string } }>(
     '/api/arr/:id/tv/:tmdbId',

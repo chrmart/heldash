@@ -86,6 +86,17 @@ export interface SeerrMediaSeasonStatus {
   status: number
 }
 
+export interface SeerrMovieDetailRaw {
+  id: number
+  title: string
+  releaseDate?: string
+  mediaInfo?: {
+    id: number
+    status: number
+    requests?: { id: number; status: number }[]
+  }
+}
+
 export interface SeerrTvDetailRaw {
   id: number
   name: string
@@ -157,6 +168,11 @@ export class SeerrClient extends ArrBaseClient {
 
   getMovieDetails(tmdbId: number): Promise<{ title: string }> {
     return this.get<{ title: string }>(`movie/${tmdbId}`)
+  }
+
+  // Full movie detail with mediaInfo (status + request tracking)
+  getMovieDetailFull(tmdbId: number): Promise<SeerrMovieDetailRaw> {
+    return this.get<SeerrMovieDetailRaw>(`movie/${tmdbId}`)
   }
 
   // Kept for backward compatibility with request enrichment

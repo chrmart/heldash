@@ -1,7 +1,7 @@
 import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull, HaArea, EnergyData, CalendarEntry } from './types'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse, RadarrMovie, SonarrSeries, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile } from './types/arr'
 import type { TmdbPage, TmdbGenre, TmdbProvider, TmdbTvDetail, TmdbDiscoverFilters } from './types/tmdb'
-import type { SeerrTvDetail } from './types/seerr'
+import type { SeerrTvDetail, SeerrMovieDetail } from './types/seerr'
 
 const BASE = '/api'
 
@@ -131,6 +131,7 @@ export const api = {
     movies: (id: string) => req<RadarrMovie[]>(`/arr/${id}/movies`),
     series: (id: string) => req<SonarrSeries[]>(`/arr/${id}/series`),
     seerrTvDetail: (id: string, tmdbId: number) => req<SeerrTvDetail>(`/arr/${id}/tv/${tmdbId}`),
+    seerrMovieDetail: (id: string, tmdbId: number) => req<SeerrMovieDetail>(`/arr/${id}/movie/${tmdbId}`),
     discoverRequest: (id: string, mediaType: 'movie' | 'tv', mediaId: number, seasons?: number[]) =>
       req<unknown>(`/arr/${id}/discover/request`, { method: 'POST', body: JSON.stringify({ mediaType, mediaId, seasons }) }),
     customFormats: {

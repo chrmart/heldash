@@ -1138,7 +1138,7 @@ const DEFAULT_FILTERS: TmdbFilters = {
 }
 
 function DiscoverTab({ hasTmdbKey, onNavigate }: { hasTmdbKey: boolean; onNavigate: (page: string) => void }) {
-  const { instances, seerrRequests, seerrTvStatus, discoverRequest, loadSeerrRequests, loadSeerrTvStatus } = useArrStore()
+  const { instances, seerrRequests, seerrTvStatus, seerrMovieStatus, discoverRequest, loadSeerrRequests, loadSeerrTvStatus, loadSeerrMovieStatus } = useArrStore()
   const {
     trending, discoverMovies, discoverTv, searchResults, genres, watchProviders, tvDetail,
     loadTrending, loadDiscoverMovies, loadDiscoverTv, search: searchTmdb,
@@ -1252,20 +1252,25 @@ function DiscoverTab({ hasTmdbKey, onNavigate }: { hasTmdbKey: boolean; onNaviga
     return () => clearTimeout(timer)
   }, [notification])
 
-  // Background-load Seerr TV status for all visible TV items (enables accurate card indicators)
+  // Background-load Seerr status for all visible items (enables accurate card indicators)
   useEffect(() => {
     if (!seerrInstance) return
-    const tvItems = [
-      ...(discoverTv?.results ?? []),
-      ...(trending?.results ?? []).filter(r => r.media_type === 'tv'),
-      ...(searchResults?.results ?? []).filter(r => r.media_type === 'tv'),
-    ]
-    tvItems.forEach(item => {
-      if (seerrTvStatus[item.id] === undefined) {
+    // discoverMovies/discoverTv have no media_type on items — handle by source
+    ;(discoverMovies?.results ?? []).forEach(item => {
+      if (seerrMovieStatus[item.id] === undefined) loadSeerrMovieStatus(seerrInstance.id, item.id)
+    });
+    (discoverTv?.results ?? []).forEach(item => {
+      if (seerrTvStatus[item.id] === undefined) loadSeerrTvStatus(seerrInstance.id, item.id)
+    });
+    // trending and search include media_type
+    [...(trending?.results ?? []), ...(searchResults?.results ?? [])].forEach(item => {
+      if (item.media_type === 'movie' && seerrMovieStatus[item.id] === undefined) {
+        loadSeerrMovieStatus(seerrInstance.id, item.id)
+      } else if (item.media_type === 'tv' && seerrTvStatus[item.id] === undefined) {
         loadSeerrTvStatus(seerrInstance.id, item.id)
       }
     })
-  }, [discoverTv, trending, searchResults, seerrInstance?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [discoverMovies, discoverTv, trending, searchResults, seerrInstance?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-select seasons when TV detail loads
   useEffect(() => {
@@ -1273,17 +1278,17 @@ function DiscoverTab({ hasTmdbKey, onNavigate }: { hasTmdbKey: boolean; onNaviga
     const detail = tvDetail[confirmRequest.mediaId]
     if (!detail) return
     const realSeasons = detail.seasons.filter(s => s.season_number > 0)
-    // Seasons already available in Sonarr (from Seerr TV status — most accurate)
-    const availableNums = seerrTvStatus[confirmRequest.mediaId]?.seasons
-      ?.filter(s => s.status === 5)
-      .map(s => s.seasonNumber) ?? []
-    // Seasons pending request (from seerrRequests, as fallback)
-    const pendingNums = seerrInstance
+    // Seasons already in Sonarr (available) or pending/processing via Seerr TV status
+    const seerrSeasons = seerrTvStatus[confirmRequest.mediaId]?.seasons ?? []
+    const availableNums = seerrSeasons.filter(s => s.status === 5).map(s => s.seasonNumber)
+    const pendingFromSeerr = seerrSeasons.filter(s => s.status === 2 || s.status === 3).map(s => s.seasonNumber)
+    // Fallback: seasons from explicit Seerr requests (for pending seasons not yet reflected in seerrTvStatus)
+    const pendingFromRequests = seerrInstance
       ? (seerrRequests[seerrInstance.id]?.results ?? [])
           .filter(r => r.media.mediaType === 'tv' && r.media.tmdbId === confirmRequest.mediaId)
           .flatMap(r => r.seasons?.map(s => s.seasonNumber) ?? [])
       : []
-    const excludeNums = [...new Set([...availableNums, ...pendingNums])]
+    const excludeNums = [...new Set([...availableNums, ...pendingFromSeerr, ...pendingFromRequests])]
     setSelectedSeasons(realSeasons.filter(s => !excludeNums.includes(s.season_number)).map(s => s.season_number))
   }, [confirmRequest?.mediaId, tvDetail, seerrTvStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1346,22 +1351,29 @@ function DiscoverTab({ hasTmdbKey, onNavigate }: { hasTmdbKey: boolean; onNaviga
     const mt = getEffectiveMediaType(item)
     if (!mt) return null
 
-    // For TV: use Seerr TV status when available (accurate — includes shows added directly to Sonarr)
+    // Use Seerr media status when loaded — accurate for both direct-library and requested items
+    if (mt === 'movie' && seerrMovieStatus[item.id] !== undefined) {
+      const s = seerrMovieStatus[item.id].status
+      if (s === 5) return 'available'
+      if (s === 2 || s === 3) return 'pending'
+      return null  // status 1 = not in Radarr
+    }
     if (mt === 'tv' && seerrTvStatus[item.id] !== undefined) {
       const s = seerrTvStatus[item.id].status
       if (s === 5) return 'available'
       if (s === 4) return 'missing_seasons'
       if (s === 2 || s === 3) return 'pending'
-      return null  // status 1 = unknown / not in Sonarr
+      return null  // status 1 = not in Sonarr
     }
 
-    // Fallback: check seerrRequests (covers movies and explicitly requested TV shows)
+    // Fallback while Seerr status not yet loaded: check seerrRequests
     const requests = seerrRequests[seerrInstance.id]?.results ?? []
     const req = requests.find(r => r.media.mediaType === mt && r.media.tmdbId === item.id)
     if (!req) return null
     if (req.media.status === 5) return 'available'
     if (req.media.status === 4) return 'missing_seasons'
-    return 'pending'
+    if (req.media.status === 2 || req.media.status === 3) return 'pending'
+    return null
   }
 
   // Genre/provider lists depend on current tab
@@ -1872,16 +1884,17 @@ function DiscoverTab({ hasTmdbKey, onNavigate }: { hasTmdbKey: boolean; onNaviga
                 )
               }
               const realSeasons = detail.seasons.filter(s => s.season_number > 0)
-              // Seasons available in Sonarr (from Seerr TV status)
-              const availableSeasonNums = seerrTvStatus[confirmRequest.mediaId]?.seasons
-                ?.filter(s => s.status === 5).map(s => s.seasonNumber) ?? []
-              // Seasons pending via Seerr request
+              // Seasons available in Sonarr or pending/processing (from Seerr TV status)
+              const seerrSeasonData = seerrTvStatus[confirmRequest.mediaId]?.seasons ?? []
+              const availableSeasonNums = seerrSeasonData.filter(s => s.status === 5).map(s => s.seasonNumber)
+              const pendingSeasonNums = seerrSeasonData.filter(s => s.status === 2 || s.status === 3).map(s => s.seasonNumber)
+              // Fallback: seasons from explicit Seerr requests
               const requestedSeasonNums = seerrInstance
                 ? (seerrRequests[seerrInstance.id]?.results ?? [])
                     .filter(r => r.media.mediaType === 'tv' && r.media.tmdbId === confirmRequest.mediaId)
                     .flatMap(r => r.seasons?.map(s => s.seasonNumber) ?? [])
                 : []
-              const unavailableNums = [...new Set([...availableSeasonNums, ...requestedSeasonNums])]
+              const unavailableNums = [...new Set([...availableSeasonNums, ...pendingSeasonNums, ...requestedSeasonNums])]
               const missingSeasons = realSeasons.filter(s => !unavailableNums.includes(s.season_number))
               return (
                 <div style={{ marginBottom: 16 }}>
@@ -1900,7 +1913,7 @@ function DiscoverTab({ hasTmdbKey, onNavigate }: { hasTmdbKey: boolean; onNaviga
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {realSeasons.map(s => {
                       const isAvailable = availableSeasonNums.includes(s.season_number)
-                      const isPending = !isAvailable && requestedSeasonNums.includes(s.season_number)
+                      const isPending = !isAvailable && (pendingSeasonNums.includes(s.season_number) || requestedSeasonNums.includes(s.season_number))
                       const isUnavailable = isAvailable || isPending
                       const isSelected = selectedSeasons.includes(s.season_number)
 

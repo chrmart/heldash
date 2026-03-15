@@ -22,6 +22,17 @@ export interface SeerrMediaSeasonStatus {
   status: number  // 1=unknown, 2=pending, 3=processing, 4=partial, 5=available
 }
 
+export interface SeerrMovieDetail {
+  id: number
+  title: string
+  releaseDate?: string
+  mediaInfo?: {
+    id: number
+    status: number  // 1=UNKNOWN, 2=PENDING, 3=PROCESSING, 4=PARTIALLY_AVAILABLE, 5=AVAILABLE
+    requests?: { id: number; status: number }[]
+  }
+}
+
 export interface SeerrTvDetail {
   id: number
   name: string
