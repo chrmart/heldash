@@ -346,11 +346,26 @@ export async function haRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const row = db.prepare('SELECT * FROM ha_instances WHERE id = ?').get(req.params.id) as HaInstanceRow | undefined
     if (!row) return reply.status(404).send({ error: 'Not found' })
+    app.log.info({ instanceId: req.params.id }, 'Fetching HA areas')
     try {
       const client = getHaWsClient(row.id, row.url, row.token)
-      const areas = await client.sendCommand('config/area_registry/list') as { area_id: string; name: string; icon: string | null }[]
+      let areas: unknown = null
+      try {
+        areas = await client.sendCommand('config/area_registry/list')
+        app.log.info({ instanceId: req.params.id, count: Array.isArray(areas) ? areas.length : -1 }, 'HA areas fetched via config/area_registry/list')
+      } catch (e1) {
+        app.log.warn({ instanceId: req.params.id, err: String(e1) }, 'config/area_registry/list failed, trying area_registry/list')
+        try {
+          areas = await client.sendCommand('area_registry/list')
+          app.log.info({ instanceId: req.params.id, count: Array.isArray(areas) ? areas.length : -1 }, 'HA areas fetched via area_registry/list')
+        } catch (e2) {
+          app.log.error({ instanceId: req.params.id, err: String(e2) }, 'Both area_registry commands failed')
+          return []
+        }
+      }
       return Array.isArray(areas) ? areas : []
-    } catch {
+    } catch (err) {
+      app.log.error({ instanceId: req.params.id, err: String(err) }, 'HA areas fetch failed')
       return []
     }
   })

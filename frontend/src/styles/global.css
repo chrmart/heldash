@@ -155,6 +155,10 @@ body {
   transition: background-color var(--transition-slow), color var(--transition-slow);
 }
 
+select, input, textarea, button {
+  font-family: var(--font-sans);
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
   font-weight: 700;
@@ -879,6 +883,16 @@ h4 { font-size: 15px; line-height: 1.5; }
     white-space: nowrap;
     flex-shrink: 0;
   }
+}
+
+/* ─── About page tab overrides ────────────────────────────────────────────── */
+.about-tabs {
+  overflow-x: auto;
+}
+.about-tabs .tab {
+  min-width: unset;
+  padding: var(--spacing-sm) var(--spacing-md);
+  white-space: nowrap;
 }
 
 /* ─── Badges ──────────────────────────────────────────────────────────────── */

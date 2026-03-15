@@ -920,14 +920,14 @@ const TAB_ORDER: AboutTab[] = ['overview', 'setup', 'docker', 'media', 'recyclar
 
 const TAB_LABELS: Record<AboutTab, string> = {
   overview: 'Übersicht',
-  setup: 'Installation & Setup',
+  setup: 'Installation',
   docker: 'Docker',
   media: 'Media & Seerr',
   recyclarr: 'Recyclarr',
   cfmanager: 'CF-Manager',
   ha: 'Home Assistant',
   widgets: 'Widgets',
-  design: 'Design & Einstellungen',
+  design: 'Design',
 }
 
 export function AboutPage() {
@@ -951,7 +951,7 @@ export function AboutPage() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       {/* Tab bar */}
-      <div style={{ marginBottom: 'var(--spacing-2xl)', overflowX: 'auto' }}>
+      <div className="about-tabs" style={{ marginBottom: 'var(--spacing-2xl)' }}>
         <div className="tabs" style={{ display: 'inline-flex', minWidth: 'max-content' }}>
           {TAB_ORDER.map(tab => (
             <button

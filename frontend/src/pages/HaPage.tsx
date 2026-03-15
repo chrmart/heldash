@@ -467,7 +467,7 @@ function EntityBrowserModal({ instances, panels, onClose, onAdd }: EntityBrowser
         className="glass"
         onClick={e => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 560, maxHeight: '82vh',
+          width: '100%', maxWidth: 640, minWidth: Math.min(640, (typeof window !== 'undefined' ? window.innerWidth : 640) - 32), maxHeight: '82vh',
           borderRadius: 'var(--radius-xl)',
           padding: '32px',
           animation: 'slide-up var(--transition-base)',
@@ -512,7 +512,7 @@ function EntityBrowserModal({ instances, panels, onClose, onAdd }: EntityBrowser
         </div>
 
         {/* Domain filter tabs */}
-        <div className="tabs" style={{ overflowX: 'auto', flexShrink: 0 }}>
+        <div className="tabs" style={{ overflowX: 'auto', flexShrink: 0, flexWrap: 'wrap' }}>
           {BROWSER_TABS.filter(tab => tab === 'All' || tabCounts[tab] > 0).map(tab => (
             <button
               key={tab}
@@ -1036,9 +1036,16 @@ export function HaPage() {
     if (activeInstanceId === null && first) setActiveInstanceId(first.id)
   }, [instances.length])
 
-  // Load areas when grouped view is active (or becomes active) for the current instance
+  // Load areas when active instance changes (always, so the toggle can appear)
   useEffect(() => {
-    if (viewMode === 'grouped' && activeInstanceId) {
+    if (activeInstanceId) {
+      loadAreas(activeInstanceId).catch(() => {})
+    }
+  }, [activeInstanceId])
+
+  // Also reload areas when switching to grouped view if not yet loaded
+  useEffect(() => {
+    if (viewMode === 'grouped' && activeInstanceId && !(activeInstanceId in areas)) {
       loadAreas(activeInstanceId).catch(() => {})
     }
   }, [viewMode, activeInstanceId])
