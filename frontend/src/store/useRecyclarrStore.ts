@@ -44,7 +44,7 @@ interface RecyclarrState {
     syncSchedule: string
     deleteOldCfs: boolean
   }) => Promise<void>
-  loadCfList: (instanceId: string) => Promise<void>
+  loadCfList: (instanceId: string, profileSlugs?: string[]) => Promise<void>
   sync: (instanceId?: string) => void
   refreshTemplates: () => Promise<void>
   refreshCache: () => Promise<void>
@@ -87,8 +87,8 @@ export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
     await get().loadConfigs()
   },
 
-  loadCfList: async (instanceId) => {
-    const data = await api.recyclarr.cfList(instanceId)
+  loadCfList: async (instanceId, profileSlugs?) => {
+    const data = await api.recyclarr.cfList(instanceId, profileSlugs)
     set(s => ({ cfLists: { ...s.cfLists, [instanceId]: data } }))
   },
 

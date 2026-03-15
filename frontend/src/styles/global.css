@@ -756,6 +756,19 @@ h4 { font-size: 15px; line-height: 1.5; }
   }
 }
 
+/* ─── CF Manager grid ─────────────────────────────────────────────────────── */
+.cf-manager-grid {
+  display: grid;
+  grid-template-columns: 35% 65%;
+  gap: var(--spacing-xl);
+  align-items: flex-start;
+}
+@media (max-width: 768px) {
+  .cf-manager-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ─── Table Responsive ────────────────────────────────────────────────────── */
 .table-responsive {
   overflow-x: auto;

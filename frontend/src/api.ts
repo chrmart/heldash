@@ -298,7 +298,7 @@ export const api = {
       syncSchedule: string
       deleteOldCfs: boolean
     }) => req<{ ok: boolean }>(`/recyclarr/config/${instanceId}`, { method: 'PUT', body: JSON.stringify(data) }),
-    cfList: (instanceId: string) => req<import('./types/recyclarr').RecyclarrCfEntry[]>(`/recyclarr/formats/${instanceId}`),
+    cfList: (instanceId: string, profileSlugs?: string[]) => req<import('./types/recyclarr').RecyclarrCfEntry[]>(`/recyclarr/formats/${instanceId}${profileSlugs?.length ? `?profileSlugs=${profileSlugs.join(',')}` : ''}`),
     refreshTemplates: () => req<{ updated: boolean; count: number; fetched_at: string; warning?: string }>('/recyclarr/refresh-templates', { method: 'POST', body: JSON.stringify({}) }),
     refreshCache: () => req<{ ok: boolean }>('/recyclarr/refresh-cache', { method: 'POST', body: JSON.stringify({}) }),
   },

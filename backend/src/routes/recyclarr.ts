@@ -1014,18 +1014,25 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
   )
 
   // GET /api/recyclarr/formats/:instanceId — authenticate
-  app.get<{ Params: { instanceId: string } }>(
+  app.get<{ Params: { instanceId: string }; Querystring: { profileSlugs?: string } }>(
     '/api/recyclarr/formats/:instanceId',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const db = getDb()
       const { instanceId } = req.params
 
-      const configRow = db.prepare('SELECT templates FROM recyclarr_config WHERE instance_id = ?').get(instanceId) as { templates: string } | undefined
-      if (!configRow) return reply.send([])
+      let profileSlugs: string[]
 
-      const templates = JSON.parse(configRow.templates) as string[]
-      const profileSlugs = templates.filter(t => t.includes('quality-profile'))
+      if (req.query.profileSlugs) {
+        // Wizard mode: use slugs from query param (unsaved state)
+        profileSlugs = req.query.profileSlugs.split(',').map(s => s.trim()).filter(Boolean)
+      } else {
+        const configRow = db.prepare('SELECT templates FROM recyclarr_config WHERE instance_id = ?').get(instanceId) as { templates: string } | undefined
+        if (!configRow) return reply.send([])
+
+        const templates = JSON.parse(configRow.templates) as string[]
+        profileSlugs = templates.filter(t => t.includes('quality-profile'))
+      }
 
       if (profileSlugs.length === 0) {
         return reply.status(400).send({ error: 'Keine Profile konfiguriert — bitte zuerst Profile in Schritt 2 auswählen' })

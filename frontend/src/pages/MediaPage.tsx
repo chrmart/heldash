@@ -1960,7 +1960,8 @@ function RecyclarrWizard({
   onClose: () => void
   instances: import('../types/arr').ArrInstance[]
 }) {
-  const { templates, loadTemplates, loadCfList, cfLists, saveConfig } = useRecyclarrStore()
+  const { templates, loadTemplates, loadCfList, cfLists, saveConfig, refreshCache } = useRecyclarrStore()
+  const { loadCustomFormats, customFormats: arrCustomFormats } = useArrStore()
 
   const [step, setStep] = useState(1)
   const TOTAL_STEPS = 7
@@ -1988,12 +1989,33 @@ function RecyclarrWizard({
   const [scoreOverrides, setScoreOverrides] = useState<import('../types/recyclarr').RecyclarrScoreOverride[]>([])
   const [showOnlyChanged, setShowOnlyChanged] = useState(false)
 
-  // Step 5
+  // Step 5 — existing (manual) user CFs
   const [userCfs, setUserCfs] = useState<import('../types/recyclarr').RecyclarrUserCf[]>([])
   const [newUserCfName, setNewUserCfName] = useState('')
   const [newUserCfScore, setNewUserCfScore] = useState('0')
   const [newUserCfProfile, setNewUserCfProfile] = useState('')
   const [userCfProtect, setUserCfProtect] = useState<Record<string, boolean>>({})
+
+  // Step 5 — arr instance CFs (loaded into arr store, read from arrCustomFormats[instanceId])
+  const [arrCfLoading, setArrCfLoading] = useState(false)
+  const [arrCfError, setArrCfError] = useState<string | null>(null)
+  const [arrCfLoaded, setArrCfLoaded] = useState(false)
+  // checked arr CFs: name → { scores: Record<profileSlug, string>, protect: boolean }
+  const [arrCfSelections, setArrCfSelections] = useState<Record<string, { scores: Record<string, string>; protect: boolean }>>({})
+
+  const loadArrCfs = async () => {
+    if (!selectedInstanceId) return
+    setArrCfLoading(true)
+    setArrCfError(null)
+    try {
+      await loadCustomFormats(selectedInstanceId)
+      setArrCfLoaded(true)
+    } catch (e: unknown) {
+      setArrCfError(e instanceof Error ? e.message : 'Fehler beim Laden der Custom Formats')
+    } finally {
+      setArrCfLoading(false)
+    }
+  }
 
   // Step 6
   const [scheduleType, setScheduleType] = useState<'manual' | 'daily' | 'weekly' | 'cron'>('manual')
@@ -2009,6 +2031,18 @@ function RecyclarrWizard({
     if (templates.length === 0) loadTemplates().catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Auto-load CFs when entering Step 4
+  useEffect(() => {
+    if (step === 4 && !wizCfLoaded && !wizCfLoading && selectedInstanceId && selectedProfiles.length > 0) {
+      handleLoadWizCfs()
+    }
+    // Auto-load arr CFs when entering Step 5
+    if (step === 5 && !arrCfLoaded && !arrCfLoading && selectedInstanceId) {
+      loadArrCfs()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
 
   const selectedInstance = instances.find(i => i.id === selectedInstanceId)
   const instType = selectedInstance?.type as 'radarr' | 'sonarr' | undefined
@@ -2031,7 +2065,7 @@ function RecyclarrWizard({
     setWizCfLoading(true)
     setWizCfError(null)
     try {
-      await loadCfList(selectedInstanceId)
+      await loadCfList(selectedInstanceId, selectedProfiles)
       setWizCfLoaded(true)
     } catch (e: unknown) {
       setWizCfError(e instanceof Error ? e.message : 'Fehler beim Laden')
@@ -2067,12 +2101,23 @@ function RecyclarrWizard({
         ...userCfs.filter(u => userCfProtect[u.name]).map(u => u.name),
       ],
     }))
+    // Build arr CF selections into userCfNames entries
+    const arrCfUserEntries: import('../types/recyclarr').RecyclarrUserCf[] = []
+    for (const [cfName, sel] of Object.entries(arrCfSelections)) {
+      for (const [slug, scoreStr] of Object.entries(sel.scores)) {
+        const score = parseInt(scoreStr, 10)
+        if (!isNaN(score)) {
+          const tpl = profileTemplates.find(t => t.slug === slug)
+          arrCfUserEntries.push({ name: cfName, score, profileName: tpl?.name ?? slug })
+        }
+      }
+    }
     try {
       await saveConfig(selectedInstanceId, {
         enabled: true,
         templates: allTemplates,
         scoreOverrides,
-        userCfNames: userCfs,
+        userCfNames: [...userCfs, ...arrCfUserEntries],
         preferredRatio,
         profilesConfig,
         syncSchedule: buildScheduleStr(),
@@ -2292,8 +2337,17 @@ function RecyclarrWizard({
             </div>
           )}
           {wizCfLoaded && currentCfs.length === 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span className="badge-neutral" style={{ fontSize: 11 }}>Keine TRaSH Formate für diese Profile gefunden — TRaSH Cache neu laden?</span>
+              <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, gap: 4 }} onClick={async () => {
+                try {
+                  await refreshCache()
+                  setWizCfLoaded(false)
+                  handleLoadWizCfs()
+                } catch { /* ignore */ }
+              }}>
+                <RefreshCw size={11} /> Cache neu laden
+              </button>
             </div>
           )}
           {wizCfLoaded && currentCfs.length > 0 && (
@@ -2342,50 +2396,164 @@ function RecyclarrWizard({
         </div>
       )
 
-      case 5: return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
-            Optional: Füge eigene Custom Formats aus deiner Arr-Instanz hinzu und weise ihnen Scores zu.
-          </p>
-          {userCfs.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {userCfs.map((ucf, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '8px 10px', background: 'rgba(var(--text-rgb), 0.04)', borderRadius: 'var(--radius-sm)' }}>
-                  <span style={{ flex: 1 }}>{ucf.name}</span>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{ucf.profileName || '—'}</span>
-                  <span style={{ color: 'var(--accent)', fontSize: 12, minWidth: 40, textAlign: 'right' }}>{ucf.score}</span>
-                  <button
-                    className={`btn btn-sm btn-icon ${userCfProtect[ucf.name] ? 'btn-primary' : 'btn-ghost'}`}
-                    onClick={() => setUserCfProtect(prev => ({ ...prev, [ucf.name]: !prev[ucf.name] }))}
-                    title="Vor Recyclarr-Überschreibung schützen"
-                    style={{ padding: 4 }}
-                  >
-                    <Shield size={11} />
+      case 5: {
+        const instanceArrCfs = arrCustomFormats[selectedInstanceId] ?? []
+        const profileDisplayNames = selectedProfiles.map(slug => {
+          const tpl = profileTemplates.find(t => t.slug === slug)
+          return { slug, name: tpl?.name ?? slug }
+        })
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+              Optional: Wähle vorhandene Custom Formats aus deiner Arr-Instanz oder erstelle neue.
+            </p>
+
+            {/* Section: Existing CFs from Arr */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Vorhandene Custom Formats in {selectedInstance?.name ?? 'Instanz'}</span>
+                {arrCfLoading && <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />}
+                {arrCfLoaded && !arrCfLoading && (
+                  <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={loadArrCfs}>
+                    <RefreshCw size={10} />
                   </button>
-                  <button className="btn btn-danger btn-icon btn-sm" onClick={() => setUserCfs(prev => prev.filter((_, i) => i !== idx))} style={{ width: 22, height: 22, padding: 3 }}>
-                    <X size={10} />
-                  </button>
+                )}
+              </div>
+
+              {arrCfError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-md)' }}>
+                  <AlertTriangle size={13} style={{ color: 'var(--status-offline)' }} />
+                  <span style={{ fontSize: 12, color: 'var(--status-offline)' }}>{arrCfError}</span>
+                  <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto', fontSize: 11 }} onClick={loadArrCfs}>Wiederholen</button>
                 </div>
-              ))}
+              )}
+
+              {arrCfLoaded && instanceArrCfs.length === 0 && (
+                <span className="badge-neutral" style={{ fontSize: 11, alignSelf: 'flex-start' }}>Keine Custom Formats in dieser Instanz vorhanden</span>
+              )}
+
+              {arrCfLoaded && instanceArrCfs.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
+                  {instanceArrCfs.map(cf => {
+                    const sel = arrCfSelections[cf.name]
+                    const checked = !!sel
+                    return (
+                      <div key={cf.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', background: checked ? 'rgba(var(--accent-rgb), 0.06)' : 'rgba(var(--text-rgb), 0.04)', borderRadius: 'var(--radius-sm)', border: checked ? '1px solid rgba(var(--accent-rgb), 0.2)' : '1px solid transparent' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={checked} onChange={e => {
+                            if (e.target.checked) {
+                              setArrCfSelections(prev => ({ ...prev, [cf.name]: { scores: {}, protect: true } }))
+                              // Add to except list for all profiles (protect ON by default)
+                              setExceptLists(prev => {
+                                const next = { ...prev }
+                                for (const { slug } of profileDisplayNames) {
+                                  const cur = next[slug] ?? []
+                                  if (!cur.includes(cf.name)) next[slug] = [...cur, cf.name]
+                                }
+                                return next
+                              })
+                            } else {
+                              setArrCfSelections(prev => { const n = { ...prev }; delete n[cf.name]; return n })
+                              // Remove from except list
+                              setExceptLists(prev => {
+                                const next = { ...prev }
+                                for (const { slug } of profileDisplayNames) {
+                                  next[slug] = (next[slug] ?? []).filter(n => n !== cf.name)
+                                }
+                                return next
+                              })
+                            }
+                          }} />
+                          <span style={{ fontSize: 13, flex: 1 }}>{cf.name}</span>
+                          <span className="badge-neutral" style={{ fontSize: 10 }}>{cf.specifications.length} Bedingung{cf.specifications.length !== 1 ? 'en' : ''}</span>
+                        </label>
+
+                        {checked && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginLeft: 20 }}>
+                            {/* Score per profile */}
+                            {profileDisplayNames.map(({ slug, name: profName }) => (
+                              <div key={slug} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 120 }}>{profName}</span>
+                                <input type="number" placeholder="Score" value={sel.scores[slug] ?? ''}
+                                  onChange={e => setArrCfSelections(prev => ({ ...prev, [cf.name]: { ...prev[cf.name], scores: { ...prev[cf.name].scores, [slug]: e.target.value } } }))}
+                                  style={{ width: 70, background: 'rgba(var(--text-rgb), 0.06)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '3px 6px', fontSize: 12, color: 'var(--text-primary)' }} />
+                              </div>
+                            ))}
+                            {/* Protect toggle */}
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 }}>
+                              <input type="checkbox" checked={sel.protect} onChange={e => {
+                                const protect = e.target.checked
+                                setArrCfSelections(prev => ({ ...prev, [cf.name]: { ...prev[cf.name], protect } }))
+                                setExceptLists(prev => {
+                                  const next = { ...prev }
+                                  for (const { slug } of profileDisplayNames) {
+                                    if (protect) {
+                                      const cur = next[slug] ?? []
+                                      if (!cur.includes(cf.name)) next[slug] = [...cur, cf.name]
+                                    } else {
+                                      next[slug] = (next[slug] ?? []).filter(n => n !== cf.name)
+                                    }
+                                  }
+                                  return next
+                                })
+                              }} />
+                              Von Recyclarr-Überschreibung schützen
+                              {sel.protect && <span className="badge-accent" style={{ fontSize: 10 }}>Wird zu Ausnahmen-Liste hinzugefügt</span>}
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          )}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input className="form-input" placeholder="CF-Name" value={newUserCfName} onChange={e => setNewUserCfName(e.target.value)} style={{ flex: 2, minWidth: 120, fontSize: 12 }} />
-            <input className="form-input" placeholder="Profilname" value={newUserCfProfile} onChange={e => setNewUserCfProfile(e.target.value)} style={{ flex: 2, minWidth: 120, fontSize: 12 }} />
-            <input className="form-input" type="number" placeholder="Score" value={newUserCfScore} onChange={e => setNewUserCfScore(e.target.value)} style={{ flex: 1, minWidth: 70, fontSize: 12 }} />
-            <button className="btn btn-ghost btn-sm" onClick={() => {
-              if (!newUserCfName.trim()) return
-              setUserCfs(prev => [...prev, { name: newUserCfName.trim(), score: parseInt(newUserCfScore, 10) || 0, profileName: newUserCfProfile }])
-              setNewUserCfName(''); setNewUserCfScore('0'); setNewUserCfProfile('')
-            }} style={{ fontSize: 12, gap: 4 }}>
-              <Plus size={12} /> Hinzufügen
+
+            {/* Section: Create new CFs */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Neue Custom Formats erstellen</span>
+              {userCfs.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {userCfs.map((ucf, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '8px 10px', background: 'rgba(var(--text-rgb), 0.04)', borderRadius: 'var(--radius-sm)' }}>
+                      <span style={{ flex: 1 }}>{ucf.name}</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{ucf.profileName || '—'}</span>
+                      <span style={{ color: 'var(--accent)', fontSize: 12, minWidth: 40, textAlign: 'right' }}>{ucf.score}</span>
+                      <button
+                        className={`btn btn-sm btn-icon ${userCfProtect[ucf.name] ? 'btn-primary' : 'btn-ghost'}`}
+                        onClick={() => setUserCfProtect(prev => ({ ...prev, [ucf.name]: !prev[ucf.name] }))}
+                        title="Vor Recyclarr-Überschreibung schützen"
+                        style={{ padding: 4 }}
+                      >
+                        <Shield size={11} />
+                      </button>
+                      <button className="btn btn-danger btn-icon btn-sm" onClick={() => setUserCfs(prev => prev.filter((_, i) => i !== idx))} style={{ width: 22, height: 22, padding: 3 }}>
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input className="form-input" placeholder="CF-Name" value={newUserCfName} onChange={e => setNewUserCfName(e.target.value)} style={{ flex: 2, minWidth: 120, fontSize: 12 }} />
+                <input className="form-input" placeholder="Profilname" value={newUserCfProfile} onChange={e => setNewUserCfProfile(e.target.value)} style={{ flex: 2, minWidth: 120, fontSize: 12 }} />
+                <input className="form-input" type="number" placeholder="Score" value={newUserCfScore} onChange={e => setNewUserCfScore(e.target.value)} style={{ flex: 1, minWidth: 70, fontSize: 12 }} />
+                <button className="btn btn-ghost btn-sm" onClick={() => {
+                  if (!newUserCfName.trim()) return
+                  setUserCfs(prev => [...prev, { name: newUserCfName.trim(), score: parseInt(newUserCfScore, 10) || 0, profileName: newUserCfProfile }])
+                  setNewUserCfName(''); setNewUserCfScore('0'); setNewUserCfProfile('')
+                }} style={{ fontSize: 12, gap: 4 }}>
+                  <Plus size={12} /> Hinzufügen
+                </button>
+              </div>
+            </div>
+
+            <button className="btn btn-ghost btn-sm" onClick={() => setStep(s => s + 1)} style={{ alignSelf: 'flex-start', fontSize: 12, color: 'var(--text-muted)' }}>
+              Überspringen →
             </button>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => setStep(s => s + 1)} style={{ alignSelf: 'flex-start', fontSize: 12, color: 'var(--text-muted)' }}>
-            Überspringen →
-          </button>
-        </div>
-      )
+        )
+      }
 
       case 6: return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -2457,8 +2625,29 @@ function RecyclarrWizard({
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 130 }}>User CFs</span>
-                <span style={{ fontSize: 12 }}>{userCfs.length}</span>
+                <span style={{ fontSize: 12 }}>{userCfs.length + Object.keys(arrCfSelections).length}</span>
               </div>
+              {Object.keys(arrCfSelections).length > 0 && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 130 }}>Arr CFs</span>
+                  <span style={{ fontSize: 12 }}>{Object.keys(arrCfSelections).join(', ')}</span>
+                </div>
+              )}
+              {selectedProfiles.some(s => (exceptLists[s] ?? []).length > 0) && (
+                <div style={{ display: 'flex', gap: 8, flexDirection: 'column' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Ausnahmen</span>
+                  {selectedProfiles.map(slug => {
+                    const excepts = exceptLists[slug] ?? []
+                    if (!excepts.length) return null
+                    const tpl = profileTemplates.find(t => t.slug === slug)
+                    return (
+                      <div key={slug} style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 130 }}>
+                        {tpl?.name ?? slug}: {excepts.join(', ')}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8 }}>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 130 }}>Preferred Ratio</span>
                 <span style={{ fontSize: 12 }}>{preferredRatio.toFixed(1)}</span>
@@ -3960,9 +4149,9 @@ function CfManagerTab() {
       )}
 
       {/* Two-column layout */}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        {/* Left: CF list (60%) */}
-        <div style={{ flex: '0 0 calc(60% - 8px)', minWidth: 300 }}>
+      <div className="cf-manager-grid">
+        {/* Left: CF list (35%) */}
+        <div>
           <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 600, fontSize: 15 }}>Custom Formats</span>
@@ -4025,8 +4214,8 @@ function CfManagerTab() {
           </div>
         </div>
 
-        {/* Right: Quality profile score editor (40%) */}
-        <div style={{ flex: 1, minWidth: 280 }}>
+        {/* Right: Quality profile score editor (65%) */}
+        <div>
           <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 600, fontSize: 15 }}>Qualitätsprofile</span>
