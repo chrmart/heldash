@@ -136,7 +136,7 @@ export async function haRoutes(app: FastifyInstance) {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(id, name.trim(), url.replace(/\/$/, ''), token.trim(), enabled ? 1 : 0, position)
     const row = db.prepare('SELECT * FROM ha_instances WHERE id = ?').get(id) as HaInstanceRow
-    return sanitizeInstance(row)
+    return reply.status(201).send(sanitizeInstance(row))
   })
 
   // PATCH /api/ha/instances/:id
@@ -293,7 +293,7 @@ export async function haRoutes(app: FastifyInstance) {
       INSERT INTO ha_panels (id, instance_id, entity_id, label, panel_type, position, owner_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, instance_id, entity_id.trim(), label?.trim() ?? null, panel_type, position, ownerId)
-    return db.prepare('SELECT * FROM ha_panels WHERE id = ?').get(id) as HaPanelRow
+    return reply.status(201).send(db.prepare('SELECT * FROM ha_panels WHERE id = ?').get(id) as HaPanelRow)
   })
 
   // PATCH /api/ha/panels/reorder — must be registered BEFORE /:id

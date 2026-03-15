@@ -136,8 +136,8 @@ export function DockerOverviewContent({ isAdmin }: { isAdmin: boolean }) {
     try {
       await controlContainer(selectedId, action)
       await loadContainers()
-    } catch (e: any) {
-      setCtrlError(e.message)
+    } catch (e: unknown) {
+      setCtrlError((e as Error).message)
     } finally {
       setControlling(false)
     }
@@ -535,8 +535,8 @@ function WidgetForm({
     setSaving(true)
     try {
       await onSave({ name: name.trim(), type, config, display_location: displayLocation, iconData: pendingIcon ? { data: pendingIcon.data, contentType: pendingIcon.contentType } : null })
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError((e as Error).message)
     } finally {
       setSaving(false)
     }

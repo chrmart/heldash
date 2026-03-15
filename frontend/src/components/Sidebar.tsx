@@ -9,6 +9,7 @@ import { useWidgetStore } from '../store/useWidgetStore'
 import { useDockerStore } from '../store/useDockerStore'
 import type { Widget, ServerStats, AdGuardStats, HaEntityState, NpmStats } from '../types'
 import { containerCounts } from '../utils'
+import { LS_SIDEBAR_COLLAPSED } from '../constants'
 
 interface Props {
   page: string
@@ -38,7 +39,7 @@ export function Sidebar({ page, onNavigate }: Props) {
 
   // ── Collapse state ──────────────────────────────────────────────────────────
   const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem('sidebar_collapsed') === 'true' } catch { return false }
+    try { return localStorage.getItem(LS_SIDEBAR_COLLAPSED) === 'true' } catch { return false }
   })
 
   // Keep --sidebar-width CSS variable on :root in sync (useLayoutEffect avoids flash)
@@ -49,7 +50,7 @@ export function Sidebar({ page, onNavigate }: Props) {
   const toggleCollapse = () => {
     setCollapsed(prev => {
       const next = !prev
-      try { localStorage.setItem('sidebar_collapsed', String(next)) } catch {}
+      try { localStorage.setItem(LS_SIDEBAR_COLLAPSED, String(next)) } catch {}
       return next
     })
   }

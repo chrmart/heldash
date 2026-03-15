@@ -75,8 +75,8 @@ function UserEditRow({
         is_active: isActive,
         ...(password ? { password } : {}),
       })
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError((e as Error).message)
     } finally {
       setSaving(false)
     }
@@ -423,7 +423,7 @@ export function SettingsPage() {
     if (!newGroup.trim()) return
     setGroupError('')
     try { await createGroup({ name: newGroup.trim() }); setNewGroup('') }
-    catch (e: any) { setGroupError(e.message ?? 'Failed to create group') }
+    catch (e: unknown) { setGroupError((e as Error).message ?? 'Failed to create group') }
   }
 
   const handleAddUser = async () => {
@@ -443,8 +443,8 @@ export function SettingsPage() {
         user_group_id: newUser.user_group_id || undefined,
       })
       setNewUser({ username: '', first_name: '', last_name: '', email: '', password: '', user_group_id: 'grp_guest' })
-    } catch (e: any) {
-      setUserError(e.message)
+    } catch (e: unknown) {
+      setUserError((e as Error).message)
     } finally {
       setAddingUser(false)
     }
@@ -454,7 +454,7 @@ export function SettingsPage() {
     setUgError('')
     if (!newUG.name.trim()) return
     try { await createUserGroup({ name: newUG.name.trim(), description: newUG.description.trim() || undefined }); setNewUG({ name: '', description: '' }) }
-    catch (e: any) { setUgError(e.message ?? 'Failed to create group') }
+    catch (e: unknown) { setUgError((e as Error).message ?? 'Failed to create group') }
   }
 
   const handleSaveUser = async (userId: string, data: Parameters<typeof updateUser>[1]) => {
@@ -480,8 +480,8 @@ export function SettingsPage() {
       setBgName('')
       setBgFile(null)
       if (bgFileRef.current) bgFileRef.current.value = ''
-    } catch (e: any) {
-      setBgError(e.message ?? 'Upload failed')
+    } catch (e: unknown) {
+      setBgError((e as Error).message ?? 'Upload failed')
     } finally {
       setBgUploading(false)
     }

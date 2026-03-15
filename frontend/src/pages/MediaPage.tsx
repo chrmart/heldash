@@ -10,7 +10,7 @@ import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sort
 import { arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, Compass, Database, AlertTriangle, Sliders, Plus, ChevronDown, ChevronRight, Clock, Shield } from 'lucide-react'
-import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrStats, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile } from '../types/arr'
+import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrStats, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile, RadarrMovie, SonarrSeries } from '../types/arr'
 import type { TmdbResult, TmdbFilters, TmdbDiscoverFilters } from '../types/tmdb'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
 // ── Tab type ──────────────────────────────────────────────────────────────────
@@ -152,8 +152,8 @@ function InstanceForm({
     setSaving(true)
     try {
       await onSave({ type, name: name.trim(), url: url.trim(), api_key: apiKey.trim(), showOnDashboard })
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError((e as Error).message)
     } finally {
       setSaving(false)
     }
@@ -894,24 +894,24 @@ function LibraryTab() {
 
   const selected = selectedInstanceId ? radarrSonarrInstances.find(i => i.id === selectedInstanceId) : radarrSonarrInstances[0]
   const isRadarr = selected?.type === 'radarr'
-  const items: any[] = selected ? (isRadarr ? (movies[selected.id] ?? []) : (series[selected.id] ?? [])) : []
+  const items: (RadarrMovie | SonarrSeries)[] = selected ? (isRadarr ? (movies[selected.id] ?? []) : (series[selected.id] ?? [])) : []
 
-  const isMissing = (item: any): boolean => {
-    if (isRadarr) return item.monitored && !item.hasFile
-    return item.monitored && (item.statistics?.episodeFileCount ?? 0) < (item.statistics?.episodeCount ?? 0)
+  const isMissing = (item: RadarrMovie | SonarrSeries): boolean => {
+    if (isRadarr) return item.monitored && !(item as RadarrMovie).hasFile
+    return item.monitored && ((item as SonarrSeries).statistics?.episodeFileCount ?? 0) < ((item as SonarrSeries).statistics?.episodeCount ?? 0)
   }
 
   const filtered = items
-    .filter((item: any) => {
+    .filter((item: RadarrMovie | SonarrSeries) => {
       const title: string = item.title ?? ''
       if (!title.toLowerCase().includes(search.toLowerCase())) return false
       if (filter === 'missing') return isMissing(item)
       if (filter === 'unmonitored') return !item.monitored
       return true
     })
-    .sort((a: any, b: any) => {
+    .sort((a: RadarrMovie | SonarrSeries, b: RadarrMovie | SonarrSeries) => {
       if (sortKey === 'za') return (b.title ?? '').localeCompare(a.title ?? '')
-      if (sortKey === 'year') return (b.year ?? 0) - (a.year ?? 0)
+      if (sortKey === 'year') return ((b as RadarrMovie).year ?? 0) - ((a as RadarrMovie).year ?? 0)
       if (sortKey === 'missing') {
         const am = isMissing(a) ? 0 : 1
         const bm = isMissing(b) ? 0 : 1
@@ -1012,24 +1012,26 @@ function LibraryTab() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 }}>
-        {filtered.map((item: any) => {
-          const posterUrl = item.images?.find((i: any) => i.coverType === 'poster')?.remoteUrl
+        {filtered.map((item: RadarrMovie | SonarrSeries) => {
+          const posterUrl = item.images?.find((i: { coverType: string; remoteUrl: string }) => i.coverType === 'poster')?.remoteUrl
           const title: string = item.title ?? 'Unknown'
           const missing = isMissing(item)
 
           // Radarr: hasFile boolean. Sonarr: episodeFileCount / episodeCount (aired, no specials/unaired)
+          const radarrItem = item as RadarrMovie
+          const sonarrItem = item as SonarrSeries
           const fileLabel = isRadarr
-            ? (item.hasFile ? 'Downloaded' : 'Missing')
+            ? (radarrItem.hasFile ? 'Downloaded' : 'Missing')
             : (() => {
-                const got = item.statistics?.episodeFileCount ?? 0
-                const total = item.statistics?.episodeCount ?? 0
+                const got = sonarrItem.statistics?.episodeFileCount ?? 0
+                const total = sonarrItem.statistics?.episodeCount ?? 0
                 return total > 0 ? `${got} / ${total} ep` : '—'
               })()
           const fileColor = isRadarr
-            ? (item.hasFile ? '#22c55e' : (item.monitored ? '#ef4444' : 'var(--text-muted)'))
+            ? (radarrItem.hasFile ? '#22c55e' : (item.monitored ? '#ef4444' : 'var(--text-muted)'))
             : (() => {
-                const got = item.statistics?.episodeFileCount ?? 0
-                const total = item.statistics?.episodeCount ?? 0
+                const got = sonarrItem.statistics?.episodeFileCount ?? 0
+                const total = sonarrItem.statistics?.episodeCount ?? 0
                 if (total === 0) return 'var(--text-muted)'
                 return got >= total ? '#22c55e' : (item.monitored ? '#ef4444' : '#f59e0b')
               })()
@@ -1924,8 +1926,8 @@ function DiscoverTab({ hasTmdbKey, onNavigate }: { hasTmdbKey: boolean; onNaviga
                     )
                     setNotification({ type: 'success', message: `✓ ${confirmRequest.mediaType === 'movie' ? 'Movie' : 'Series'} requested!` })
                     setConfirmRequest(null)
-                  } catch (e: any) {
-                    setNotification({ type: 'error', message: `Error: ${e.message ?? 'Request failed'}` })
+                  } catch (e: unknown) {
+                    setNotification({ type: 'error', message: `Error: ${(e as Error).message ?? 'Request failed'}` })
                   } finally {
                     setRequesting(null)
                   }
@@ -2878,8 +2880,8 @@ function CfEditModal({
         includeCustomFormatWhenRenaming: includeWhenRenaming,
         specifications: specs.map(buildSpecPayload),
       })
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError((e as Error).message)
       setSaving(false)
     }
   }
@@ -3164,11 +3166,12 @@ function CfManagerTab() {
       await loadQualityProfiles(activeInstance)
       setScoreSaved(true)
       setTimeout(() => setScoreSaved(false), 3000)
-    } catch (e: any) {
-      if (e.message?.includes('Recyclarr Sync') || e.message?.includes('409')) {
+    } catch (e: unknown) {
+      const msg = (e as Error).message
+      if (msg?.includes('Recyclarr Sync') || msg?.includes('409')) {
         setScoreSaveError('sync')
       } else {
-        setScoreSaveError(e.message ?? 'Fehler beim Speichern')
+        setScoreSaveError(msg ?? 'Fehler beim Speichern')
       }
     } finally {
       setScoreSaving(false)

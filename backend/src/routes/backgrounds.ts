@@ -87,7 +87,7 @@ export async function backgroundsRoutes(app: FastifyInstance) {
     db.prepare('INSERT INTO backgrounds (id, name, file_path) VALUES (?, ?, ?)').run(id, name.trim(), filePath)
 
     app.log.info({ id, name: name.trim() }, 'Background image uploaded')
-    return { id, name: name.trim(), file_path: filePath }
+    return reply.status(201).send({ id, name: name.trim(), file_path: filePath })
   })
 
   // Delete a background image (admin only)

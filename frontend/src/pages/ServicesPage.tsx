@@ -353,13 +353,11 @@ export function ServicesPage({ onEdit }: Props) {
   const handleExport = async () => {
     setExporting(true)
     try {
-      const response = await fetch('/api/services/export')
-      if (!response.ok) throw new Error('Export failed')
-      const blob = await response.blob()
+      const blob = await api.services.export()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = response.headers.get('content-disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'heldash-services.json'
+      a.download = `heldash-services-${new Date().toISOString().split('T')[0]}.json`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

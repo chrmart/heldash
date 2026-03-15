@@ -304,8 +304,8 @@ function ContainerDetail({
       await loadContainers()
       setCurrentState(action === 'stop' ? 'exited' : 'running')
       setTimeout(() => startStream(), 1500)
-    } catch (e: any) {
-      setCtrlError(e.message)
+    } catch (e: unknown) {
+      setCtrlError((e as Error).message)
     } finally {
       setControlling(false)
     }

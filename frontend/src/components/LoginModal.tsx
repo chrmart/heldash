@@ -24,8 +24,8 @@ export function LoginModal({ onClose }: Props) {
       await login(username.trim(), password)
       await Promise.all([loadAll(), loadDashboard()])
       onClose()
-    } catch (err: any) {
-      setError(err.message ?? 'Login failed')
+    } catch (err: unknown) {
+      setError((err as Error).message ?? 'Login failed')
     } finally {
       setLoading(false)
     }

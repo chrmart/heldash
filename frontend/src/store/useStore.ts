@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Service, Group, Settings, ThemeMode, ThemeAccent, AuthUser, UserRecord, UserGroup, Background } from '../types'
 import { api } from '../api'
 import { calcAutoTheme } from '../utils'
+import { LS_GUEST_THEME_MODE, LS_GUEST_THEME_ACCENT } from '../constants'
 
 interface AppState {
   // App data
@@ -111,15 +112,15 @@ export const useStore = create<AppState>((set, get) => ({
       // Non-admins: apply locally stored theme preferences (no API write access)
       const settings = { ...rawSettings }
       if (!get().isAdmin) {
-        const m = localStorage.getItem('guest_theme_mode') as ThemeMode | null
-        const a = localStorage.getItem('guest_theme_accent') as ThemeAccent | null
+        const m = localStorage.getItem(LS_GUEST_THEME_MODE) as ThemeMode | null
+        const a = localStorage.getItem(LS_GUEST_THEME_ACCENT) as ThemeAccent | null
         if (m) settings.theme_mode = m
         if (a) settings.theme_accent = a
       }
       set({ services: parsedServices, groups, settings, loading: false })
       applyTheme(settings)
-    } catch (e: any) {
-      set({ error: e.message, loading: false })
+    } catch (e: unknown) {
+      set({ error: (e as Error).message, loading: false })
     }
   },
 
@@ -239,7 +240,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (get().isAdmin) {
       await get().updateSettings({ theme_mode: mode })
     } else {
-      localStorage.setItem('guest_theme_mode', mode)
+      localStorage.setItem(LS_GUEST_THEME_MODE, mode)
       const settings = get().settings
       if (settings) {
         const updated = { ...settings, theme_mode: mode }
@@ -253,7 +254,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (get().isAdmin) {
       await get().updateSettings({ theme_accent: accent })
     } else {
-      localStorage.setItem('guest_theme_accent', accent)
+      localStorage.setItem(LS_GUEST_THEME_ACCENT, accent)
       const settings = get().settings
       if (settings) {
         const updated = { ...settings, theme_accent: accent }

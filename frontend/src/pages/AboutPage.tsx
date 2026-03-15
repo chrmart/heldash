@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Copy, Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { LS_ABOUT_TAB } from '../constants'
+import { api } from '../api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type AboutTab = 'overview' | 'setup' | 'docker' | 'media' | 'trash' | 'ha' | 'widgets' | 'design'
@@ -802,21 +804,20 @@ const TAB_LABELS: Record<AboutTab, string> = {
 
 export function AboutPage() {
   const [activeTab, setActiveTab] = useState<AboutTab>(() => {
-    const saved = localStorage.getItem('about_tab')
+    const saved = localStorage.getItem(LS_ABOUT_TAB)
     return (saved && TAB_ORDER.includes(saved as AboutTab) ? saved : 'overview') as AboutTab
   })
   const [version, setVersion] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/health')
-      .then(r => r.json())
-      .then((data: { version?: string }) => setVersion(data.version ?? '–'))
+    api.health()
+      .then(data => setVersion(data.version ?? '–'))
       .catch(() => setVersion('–'))
   }, [])
 
   const handleTabChange = (tab: AboutTab) => {
     setActiveTab(tab)
-    localStorage.setItem('about_tab', tab)
+    localStorage.setItem(LS_ABOUT_TAB, tab)
   }
 
   return (

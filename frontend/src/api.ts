@@ -30,7 +30,7 @@ export const api = {
     uploadIcon: (id: string, data: string, contentType: string) =>
       req<{ icon_url: string }>(`/services/${id}/icon`, { method: 'POST', body: JSON.stringify({ data, content_type: contentType }) }),
     export: () => fetch('/api/services/export', { credentials: 'include' }).then(r => r.blob()),
-    import: (services: any[]) => req<{ imported: number; skipped: number; total: number; errors?: string[] }>('/services/import', { method: 'POST', body: JSON.stringify({ services }) }),
+    import: (services: Record<string, unknown>[]) => req<{ imported: number; skipped: number; total: number; errors?: string[] }>('/services/import', { method: 'POST', body: JSON.stringify({ services }) }),
   },
 
   groups: {

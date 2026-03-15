@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify'
 import { nanoid } from 'nanoid'
 import { getDb, safeJson } from '../db/database'
+import type Database from 'better-sqlite3'
 
 // ── DB row types ──────────────────────────────────────────────────────────────
 interface DashboardItemRow {
@@ -124,8 +125,8 @@ async function callerInfo(req: FastifyRequest): Promise<CallerInfo> {
 function buildItem(
   item: DashboardItemRow,
   filterGroupId: string | null,
-  db: any
-): any | null {
+  db: Database.Database
+): Record<string, unknown> | null {
   if (item.type === 'placeholder' || item.type === 'placeholder_app' || item.type === 'placeholder_widget' || item.type === 'placeholder_row') {
     return { id: item.id, type: item.type, position: item.position, group_id: item.group_id }
   }
@@ -253,7 +254,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       id, name, ownerId, position, 6
     )
 
-    return { id, name, position, col_span: 6 }
+    return reply.status(201).send({ id, name, position, col_span: 6 })
   })
 
   // PATCH /api/dashboard/groups/reorder — reorder groups (REGISTER BEFORE :id)
@@ -377,7 +378,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       id, type, ref_id ?? null, position, ownerId
     )
 
-    return { id, type, ref_id: ref_id ?? null, position }
+    return reply.status(201).send({ id, type, ref_id: ref_id ?? null, position })
   })
 
   // DELETE /api/dashboard/items/by-ref — remove by ref_id + type

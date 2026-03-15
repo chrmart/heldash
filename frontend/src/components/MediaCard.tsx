@@ -3,6 +3,7 @@ import { useArrStore } from '../store/useArrStore'
 import { useStore } from '../store/useStore'
 import type { ArrStatus, ArrStats, ArrQueueItem, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SabnzbdWarningItem, SeerrRequest, ArrHealthIssue } from '../types/arr'
 import { ChevronDown, ChevronUp, Check, X, Trash2, AlertTriangle } from 'lucide-react'
+import { normalizeUrl } from '../utils'
 
 // Minimal instance shape — works for both ArrInstance and dashboard partial
 export interface ArrInstanceBase {
@@ -222,8 +223,6 @@ function InstanceIcon({ iconUrl, iconEmoji }: { iconUrl?: string | null; iconEmo
 }
 
 // ── Arr card content (radarr / sonarr / prowlarr) ─────────────────────────────
-
-const normalizeUrl = (u: string) => u.replace(/\/$/, '').toLowerCase()
 
 function HealthIssueList({ issues }: { issues: ArrHealthIssue[] }) {
   if (issues.length === 0) return <p style={{ fontSize: 12, color: 'var(--status-online)', padding: '8px 0' }}>No health issues.</p>

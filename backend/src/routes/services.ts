@@ -78,6 +78,22 @@ interface UploadIconBody {
   content_type: string
 }
 
+interface ImportServiceItem {
+  name: string
+  url: string
+  icon?: string | null
+  description?: string | null
+  tags?: string[]
+  group_id?: string | null
+  check_enabled?: boolean
+  check_url?: string | null
+  check_interval?: number
+}
+
+interface ImportServicesBody {
+  services: ImportServiceItem[]
+}
+
 export async function servicesRoutes(app: FastifyInstance) {
   const db = getDb()
 
@@ -336,11 +352,11 @@ export async function servicesRoutes(app: FastifyInstance) {
   )
 
   // POST /api/services/import — admin only, import services from JSON
-  app.post<{ Body: any }>(
+  app.post<{ Body: ImportServicesBody }>(
     '/api/services/import',
     { onRequest: app.requireAdmin },
     async (req, reply) => {
-      const { services: importedServices } = req.body as { services: any[] }
+      const { services: importedServices } = req.body
 
       if (!Array.isArray(importedServices)) {
         return reply.status(400).send({ error: 'Invalid format: expected { services: [...] }' })
@@ -356,7 +372,7 @@ export async function servicesRoutes(app: FastifyInstance) {
       `)
 
       const importTxn = db.transaction(() => {
-        importedServices.forEach((svc: any, idx: number) => {
+        importedServices.forEach((svc: ImportServiceItem, idx: number) => {
           try {
             // Validate required fields
             if (!svc.name || typeof svc.name !== 'string') throw new Error('name required (string)')

@@ -57,7 +57,7 @@ export function ServiceModal({ service, onClose }: Props) {
     setClearIconUrl(false)
   }, [service])
 
-  const set = (key: string, value: any) => setForm(f => ({ ...f, [key]: value }))
+  const set = (key: string, value: unknown) => setForm(f => ({ ...f, [key]: value }))
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -90,7 +90,7 @@ export function ServiceModal({ service, onClose }: Props) {
     setSaving(true)
     setError('')
     try {
-      const data: any = {
+      const data: typeof defaultForm & { icon_url?: string | null } = {
         ...form,
         icon: form.icon || null,
         description: form.description || null,
@@ -125,8 +125,8 @@ export function ServiceModal({ service, onClose }: Props) {
       }
 
       onClose()
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError((e as Error).message)
     } finally {
       setSaving(false)
     }

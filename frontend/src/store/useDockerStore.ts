@@ -25,8 +25,8 @@ export const useDockerStore = create<DockerState>((set) => ({
     try {
       const containers = await api.docker.containers()
       set({ containers, loading: false })
-    } catch (e: any) {
-      set({ error: e.message, loading: false })
+    } catch (e: unknown) {
+      set({ error: (e as Error).message, loading: false })
     }
   },
 

@@ -36,8 +36,8 @@ export function SetupPage() {
         email: form.email.trim() || undefined,
         password: form.password,
       })
-    } catch (err: any) {
-      setError(err.message ?? 'Setup failed')
+    } catch (err: unknown) {
+      setError((err as Error).message ?? 'Setup failed')
     } finally {
       setLoading(false)
     }
