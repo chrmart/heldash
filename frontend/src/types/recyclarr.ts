@@ -1,33 +1,39 @@
-export interface RecyclarrTemplate {
-  slug: string
+export interface RecyclarrProfile {
+  trash_id: string
   name: string
-  type: 'profile' | 'custom_formats' | 'quality_definition'
   mediaType: 'radarr' | 'sonarr'
-  pairedWith?: string
   group: string
+  source: 'container' | 'cache'
 }
 
-export interface RecyclarrTemplatesResponse {
-  templates: RecyclarrTemplate[]
-  lastFetchedAt: string | null
-  warning: boolean
+export interface RecyclarrCf {
+  trash_id: string
+  name: string
+  mediaType: 'radarr' | 'sonarr'
+}
+
+export interface RecyclarrSettings {
+  containerName: string
+  configPath: string
 }
 
 export interface RecyclarrScoreOverride {
   trash_id: string
   name: string
   score: number
-  profileName: string
+  profileTrashId: string
 }
 
 export interface RecyclarrUserCf {
   name: string
   score: number
+  profileTrashId: string
   profileName: string
 }
 
 export interface RecyclarrProfileConfig {
-  slug: string
+  trash_id: string
+  name: string
   min_format_score?: number
   reset_unmatched_scores_enabled: boolean
   reset_unmatched_scores_except: string[]
@@ -38,7 +44,7 @@ export interface RecyclarrInstanceConfig {
   instanceName: string
   instanceType: 'radarr' | 'sonarr'
   enabled: boolean
-  templates: string[]
+  selectedProfiles: string[]
   scoreOverrides: RecyclarrScoreOverride[]
   userCfNames: RecyclarrUserCf[]
   preferredRatio: number
@@ -52,17 +58,9 @@ export interface RecyclarrInstanceConfig {
 
 export interface RecyclarrConfigsResponse {
   configs: RecyclarrInstanceConfig[]
-  importWarning?: string
-}
-
-export interface RecyclarrCfEntry {
-  trash_id: string
-  name: string
-  defaultScore: number
-  profileName: string
 }
 
 export interface RecyclarrSyncLine {
   line: string
-  type: 'stdout' | 'stderr'
+  type: 'stdout' | 'stderr' | 'done' | 'error'
 }

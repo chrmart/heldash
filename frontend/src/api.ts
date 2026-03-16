@@ -289,22 +289,28 @@ export const api = {
   },
 
   recyclarr: {
-    templates: () => req<import('./types/recyclarr').RecyclarrTemplatesResponse>('/recyclarr/templates'),
-    configs: () => req<import('./types/recyclarr').RecyclarrConfigsResponse>('/recyclarr/config'),
+    profiles: (service: 'radarr' | 'sonarr', forceRefresh = false) =>
+      req<{ profiles: import('./types/recyclarr').RecyclarrProfile[]; warning: boolean }>(
+        `/recyclarr/profiles/${service}${forceRefresh ? '?refresh=1' : ''}`
+      ),
+    cfs: (service: 'radarr' | 'sonarr', forceRefresh = false) =>
+      req<{ cfs: import('./types/recyclarr').RecyclarrCf[]; warning: boolean }>(
+        `/recyclarr/cfs/${service}${forceRefresh ? '?refresh=1' : ''}`
+      ),
+    configs: () => req<import('./types/recyclarr').RecyclarrConfigsResponse>('/recyclarr/configs'),
     saveConfig: (instanceId: string, data: {
       enabled: boolean
-      templates: string[]
+      selectedProfiles: string[]
       scoreOverrides: import('./types/recyclarr').RecyclarrScoreOverride[]
       userCfNames: import('./types/recyclarr').RecyclarrUserCf[]
       preferredRatio: number
       profilesConfig: import('./types/recyclarr').RecyclarrProfileConfig[]
       syncSchedule: string
       deleteOldCfs: boolean
-    }) => req<{ ok: boolean }>(`/recyclarr/config/${instanceId}`, { method: 'PUT', body: JSON.stringify(data) }),
-    cfList: (instanceId: string, profileSlugs?: string[]) => req<import('./types/recyclarr').RecyclarrCfEntry[]>(`/recyclarr/formats/${instanceId}${profileSlugs?.length ? `?profileSlugs=${profileSlugs.join(',')}` : ''}`),
-    refreshTemplates: () => req<{ updated: boolean; count: number; fetched_at: string; warning?: string }>('/recyclarr/refresh-templates', { method: 'POST', body: JSON.stringify({}) }),
-    refreshCache: () => req<{ ok: boolean }>('/recyclarr/refresh-cache', { method: 'POST', body: JSON.stringify({}) }),
-    resetConfig: () => req<{ ok: boolean }>('/recyclarr/config/reset', { method: 'DELETE', body: JSON.stringify({}) }),
+    }) => req<{ ok: boolean }>(`/recyclarr/configs/${instanceId}`, { method: 'POST', body: JSON.stringify(data) }),
+    previewYaml: () => req<{ yaml: string }>('/recyclarr/yaml-preview'),
+    resetConfig: () => req<{ ok: boolean }>('/recyclarr/reset', { method: 'POST', body: JSON.stringify({}) }),
+    clearCache: (service: 'radarr' | 'sonarr') => req<{ ok: boolean }>(`/recyclarr/cache/${service}`, { method: 'DELETE', body: JSON.stringify({}) }),
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),

@@ -45,6 +45,8 @@ export interface Settings {
   design_sidebar_style?: 'default' | 'minimal' | 'floating'
   design_custom_css?: string
   tmdb_api_key?: string
+  recyclarr_container_name?: string
+  recyclarr_config_path?: string
 }
 
 export interface AuthUser {

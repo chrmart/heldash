@@ -1,42 +1,36 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import type {
-  RecyclarrTemplate,
+  RecyclarrProfile,
+  RecyclarrCf,
+  RecyclarrSettings,
   RecyclarrInstanceConfig,
-  RecyclarrCfEntry,
   RecyclarrScoreOverride,
   RecyclarrUserCf,
   RecyclarrSyncLine,
   RecyclarrProfileConfig,
 } from '../types/recyclarr'
 
-interface SyncEvent {
-  line?: string
-  type?: 'stdout' | 'stderr'
-  done?: boolean
-  exitCode?: number
-  success?: boolean
-  error?: string
-}
-
 interface RecyclarrState {
-  templates: RecyclarrTemplate[]
-  templatesLastFetchedAt: string | null
-  templatesWarning: boolean
+  profiles: { radarr: RecyclarrProfile[]; sonarr: RecyclarrProfile[] }
+  cfs: { radarr: RecyclarrCf[]; sonarr: RecyclarrCf[] }
+  profilesWarning: boolean
+  cfsWarning: boolean
+  settings: RecyclarrSettings | null
   configs: RecyclarrInstanceConfig[]
-  importWarning: string | null
-  cfLists: Record<string, RecyclarrCfEntry[]>
   syncLines: RecyclarrSyncLine[]
   syncDone: boolean
-  syncExitCode: number | null
   syncing: boolean
   loading: boolean
 
-  loadTemplates: () => Promise<void>
+  loadProfiles: (service: 'radarr' | 'sonarr', forceRefresh?: boolean) => Promise<void>
+  loadCfs: (service: 'radarr' | 'sonarr', forceRefresh?: boolean) => Promise<void>
+  loadSettings: () => Promise<void>
+  saveSettings: (settings: Partial<RecyclarrSettings>) => Promise<void>
   loadConfigs: () => Promise<void>
   saveConfig: (instanceId: string, data: {
     enabled: boolean
-    templates: string[]
+    selectedProfiles: string[]
     scoreOverrides: RecyclarrScoreOverride[]
     userCfNames: RecyclarrUserCf[]
     preferredRatio: number
@@ -44,40 +38,62 @@ interface RecyclarrState {
     syncSchedule: string
     deleteOldCfs: boolean
   }) => Promise<void>
-  loadCfList: (instanceId: string, profileSlugs?: string[]) => Promise<void>
   sync: (instanceId?: string) => void
-  refreshTemplates: () => Promise<void>
-  refreshCache: () => Promise<void>
   resetConfig: () => Promise<void>
+  clearCache: (service: 'radarr' | 'sonarr') => Promise<void>
 }
 
 export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
-  templates: [],
-  templatesLastFetchedAt: null,
-  templatesWarning: false,
+  profiles: { radarr: [], sonarr: [] },
+  cfs: { radarr: [], sonarr: [] },
+  profilesWarning: false,
+  cfsWarning: false,
+  settings: null,
   configs: [],
-  importWarning: null,
-  cfLists: {},
   syncLines: [],
   syncDone: false,
-  syncExitCode: null,
   syncing: false,
   loading: false,
 
-  loadTemplates: async () => {
-    const data = await api.recyclarr.templates()
+  loadProfiles: async (service, forceRefresh = false) => {
+    const data = await api.recyclarr.profiles(service, forceRefresh)
+    set(s => ({
+      profiles: { ...s.profiles, [service]: data.profiles },
+      profilesWarning: data.warning,
+    }))
+  },
+
+  loadCfs: async (service, forceRefresh = false) => {
+    const data = await api.recyclarr.cfs(service, forceRefresh)
+    set(s => ({
+      cfs: { ...s.cfs, [service]: data.cfs },
+      cfsWarning: data.warning,
+    }))
+  },
+
+  loadSettings: async () => {
+    const data = await api.settings.get()
     set({
-      templates: data.templates,
-      templatesLastFetchedAt: data.lastFetchedAt,
-      templatesWarning: data.warning,
+      settings: {
+        containerName: (data.recyclarr_container_name as string | undefined) ?? 'recyclarr',
+        configPath: (data.recyclarr_config_path as string | undefined) ?? '/recyclarr/recyclarr.yml',
+      },
     })
+  },
+
+  saveSettings: async (settings) => {
+    const patch: Record<string, string> = {}
+    if (settings.containerName !== undefined) patch.recyclarr_container_name = settings.containerName
+    if (settings.configPath !== undefined) patch.recyclarr_config_path = settings.configPath
+    await api.settings.patch(patch)
+    await get().loadSettings()
   },
 
   loadConfigs: async () => {
     set({ loading: true })
     try {
       const data = await api.recyclarr.configs()
-      set({ configs: data.configs, importWarning: data.importWarning ?? null })
+      set({ configs: data.configs })
     } finally {
       set({ loading: false })
     }
@@ -88,37 +104,27 @@ export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
     await get().loadConfigs()
   },
 
-  loadCfList: async (instanceId, profileSlugs?) => {
-    const data = await api.recyclarr.cfList(instanceId, profileSlugs)
-    set(s => ({ cfLists: { ...s.cfLists, [instanceId]: data } }))
-  },
-
   sync: (instanceId?: string) => {
-    const url = `/api/recyclarr/sync${instanceId ? `?instanceId=${encodeURIComponent(instanceId)}` : ''}`
-    set({ syncing: true, syncLines: [], syncDone: false, syncExitCode: null })
+    const url = instanceId
+      ? `/api/recyclarr/sync/${encodeURIComponent(instanceId)}`
+      : '/api/recyclarr/global-sync'
+    set({ syncing: true, syncLines: [], syncDone: false })
 
     const es = new EventSource(url)
 
     es.onmessage = (evt) => {
       try {
-        const data = JSON.parse(evt.data as string) as SyncEvent
-        if (data.done) {
-          set({ syncing: false, syncDone: true, syncExitCode: data.exitCode ?? null })
-          es.close()
-          // Reload configs to update lastSyncedAt
-          get().loadConfigs().catch(() => {})
-        } else if (data.error) {
+        const data = JSON.parse(evt.data as string) as RecyclarrSyncLine
+        if (data.type === 'done' || data.type === 'error') {
           set(s => ({
             syncing: false,
-            syncLines: [...s.syncLines, { line: data.error!, type: 'stderr' }],
             syncDone: true,
-            syncExitCode: 1,
+            syncLines: [...s.syncLines, data],
           }))
           es.close()
           get().loadConfigs().catch(() => {})
-        } else if (data.line != null) {
-          const type: 'stdout' | 'stderr' = data.type === 'stderr' ? 'stderr' : 'stdout'
-          set(s => ({ syncLines: [...s.syncLines, { line: data.line!, type }] }))
+        } else {
+          set(s => ({ syncLines: [...s.syncLines, data] }))
         }
       } catch { /* ignore parse error */ }
     }
@@ -126,31 +132,19 @@ export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
     es.onerror = () => {
       set(s => ({
         syncing: false,
-        syncLines: [...s.syncLines, { line: 'Connection lost', type: 'stderr' }],
+        syncLines: [...s.syncLines, { line: 'Connection lost', type: 'error' as const }],
         syncDone: true,
-        syncExitCode: 1,
       }))
       es.close()
     }
   },
 
-  refreshTemplates: async () => {
-    const data = await api.recyclarr.refreshTemplates()
-    // Reload templates from cache after refresh
-    const templates = await api.recyclarr.templates()
-    set({
-      templates: templates.templates,
-      templatesLastFetchedAt: templates.lastFetchedAt,
-      templatesWarning: !!data.warning,
-    })
-  },
-
-  refreshCache: async () => {
-    await api.recyclarr.refreshCache()
-  },
-
   resetConfig: async () => {
     await api.recyclarr.resetConfig()
-    set({ configs: [], importWarning: null })
+    await get().loadConfigs()
+  },
+
+  clearCache: async (service) => {
+    await api.recyclarr.clearCache(service)
   },
 }))
