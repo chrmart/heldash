@@ -192,10 +192,36 @@ interface ScoreOverride {
 }
 
 interface UserCf {
+  trash_id?: string
   name: string
   score: number
   profileTrashId: string
   profileName: string
+}
+
+interface UserCfSpecification {
+  name: string
+  implementation: string
+  negate: boolean
+  required: boolean
+  fields: { name: string; value: unknown }[]
+}
+
+interface UserCfFile {
+  trash_id: string
+  name: string
+  includeCustomFormatWhenRenaming: boolean
+  specifications: UserCfSpecification[]
+}
+
+interface CreateUserCfBody {
+  name: string
+  specifications: UserCfSpecification[]
+}
+
+interface UpdateUserCfBody {
+  name: string
+  specifications: UserCfSpecification[]
 }
 
 interface SaveConfigBody {
@@ -255,6 +281,51 @@ function getRecyclarrSettings(): { containerName: string; configPath: string } {
     containerName: getSettingStr('recyclarr_container_name', 'recyclarr'),
     configPath: getSettingStr('recyclarr_config_path', '/recyclarr/recyclarr.yml'),
   }
+}
+
+const USER_CF_BASE = '/recyclarr/user-cfs'
+const SETTINGS_YML_PATH = '/recyclarr/settings.yml'
+
+function toUserCfSlug(name: string): string {
+  return 'user-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+function ensureUserCfFolders(): void {
+  fs.mkdirSync(`${USER_CF_BASE}/radarr`, { recursive: true })
+  fs.mkdirSync(`${USER_CF_BASE}/sonarr`, { recursive: true })
+}
+
+function writeSettingsYml(): void {
+  const content =
+    'resource_providers:\n' +
+    '  - name: user-cfs-radarr\n' +
+    '    type: custom-formats\n' +
+    '    path: /recyclarr/user-cfs/radarr\n' +
+    '    service: radarr\n' +
+    '  - name: user-cfs-sonarr\n' +
+    '    type: custom-formats\n' +
+    '    path: /recyclarr/user-cfs/sonarr\n' +
+    '    service: sonarr\n'
+  const dir = path.dirname(SETTINGS_YML_PATH)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  if (!fs.existsSync(SETTINGS_YML_PATH)) {
+    fs.writeFileSync(SETTINGS_YML_PATH, content, 'utf8')
+  }
+}
+
+function listUserCfs(service: 'radarr' | 'sonarr'): UserCfFile[] {
+  const folder = path.join(USER_CF_BASE, service)
+  ensureUserCfFolders()
+  let files: string[]
+  try { files = fs.readdirSync(folder).filter(f => f.endsWith('.json')) } catch { return [] }
+  const result: UserCfFile[] = []
+  for (const f of files) {
+    try {
+      const content = fs.readFileSync(path.join(folder, f), 'utf8')
+      result.push(JSON.parse(content) as UserCfFile)
+    } catch { /* skip malformed files */ }
+  }
+  return result.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 
@@ -412,6 +483,13 @@ function generateRecyclarrYaml(configs: RecyclarrConfig[], instances: ArrInstanc
     const qualityDefinition: Record<string, unknown> = { type: qdType }
     if (cfg.preferredRatio > 0) qualityDefinition.preferred_ratio = cfg.preferredRatio
 
+    // Collect user CF trash_ids for auto-protect in reset_unmatched_scores.except
+    const userCfTids: string[] = []
+    for (const ucf of cfg.userCfNames) {
+      const tid = (ucf.trash_id && ucf.trash_id.trim()) ? ucf.trash_id : ucf.name
+      if (tid) userCfTids.push(tid)
+    }
+
     const qualityProfiles = cfg.profilesConfig.map(pc => {
       const entry: Record<string, unknown> = { trash_id: pc.trash_id }
       if (pc.min_format_score != null && pc.min_format_score > 0) {
@@ -419,8 +497,9 @@ function generateRecyclarrYaml(configs: RecyclarrConfig[], instances: ArrInstanc
       }
       if (pc.reset_unmatched_scores_enabled) {
         const rusObj: Record<string, unknown> = { enabled: true }
-        if (pc.reset_unmatched_scores_except.length > 0) {
-          rusObj.except = pc.reset_unmatched_scores_except
+        const allExcept = [...new Set([...pc.reset_unmatched_scores_except, ...userCfTids])]
+        if (allExcept.length > 0) {
+          rusObj.except = allExcept
         }
         entry.reset_unmatched_scores = rusObj
       }
@@ -437,6 +516,26 @@ function generateRecyclarrYaml(configs: RecyclarrConfig[], instances: ArrInstanc
       }
       groupedOverrides[key].trash_ids.push(o.trash_id)
     }
+
+    // User CFs — use trash_id (new) or fall back to name (legacy)
+    for (const ucf of cfg.userCfNames) {
+      const tid = (ucf.trash_id && ucf.trash_id.trim()) ? ucf.trash_id : ucf.name
+      if (!tid) continue
+      const score = ucf.score
+      const profileTargets = ucf.profileTrashId
+        ? [ucf.profileTrashId]
+        : cfg.profilesConfig.map(pc => pc.trash_id)
+      for (const ptid of profileTargets) {
+        const key = `${ptid}::${score}`
+        if (!groupedOverrides[key]) {
+          groupedOverrides[key] = { trash_ids: [], profileTrashId: ptid, score }
+        }
+        if (!groupedOverrides[key].trash_ids.includes(tid)) {
+          groupedOverrides[key].trash_ids.push(tid)
+        }
+      }
+    }
+
     for (const g of Object.values(groupedOverrides)) {
       customFormats.push({
         trash_ids: g.trash_ids,
@@ -540,6 +639,14 @@ export function initRecyclarrSchedulers(logger: SimpleLogger): void {
 }
 
 export default async function recyclarrRoutes(app: FastifyInstance): Promise<void> {
+  // Init user CF folders and settings.yml on startup
+  try {
+    ensureUserCfFolders()
+    writeSettingsYml()
+  } catch (e) {
+    app.log.warn({ err: e }, 'Could not init user CF folders or settings.yml')
+  }
+
   // GET /api/recyclarr/profiles/:service
   app.get<{ Params: { service: string }; Querystring: { refresh?: string } }>(
     '/api/recyclarr/profiles/:service',
@@ -854,6 +961,106 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       } catch (e) {
         return reply.status(500).send({ error: e instanceof Error ? e.message : 'Failed' })
       }
+    }
+  )
+
+  // ── User CF filesystem routes ───────────────────────────────────────────────
+
+  // GET /api/recyclarr/user-cfs/:service
+  app.get<{ Params: { service: string } }>(
+    '/api/recyclarr/user-cfs/:service',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const service = req.params.service as 'radarr' | 'sonarr'
+      if (service !== 'radarr' && service !== 'sonarr') return reply.status(400).send({ error: 'service must be radarr or sonarr' })
+      try {
+        return reply.send({ cfs: listUserCfs(service) })
+      } catch (e) {
+        return reply.status(500).send({ error: e instanceof Error ? e.message : 'Failed to list user CFs' })
+      }
+    }
+  )
+
+  // POST /api/recyclarr/user-cfs/:service
+  app.post<{ Params: { service: string }; Body: CreateUserCfBody }>(
+    '/api/recyclarr/user-cfs/:service',
+    { onRequest: [app.requireAdmin] },
+    async (req, reply) => {
+      const service = req.params.service as 'radarr' | 'sonarr'
+      if (service !== 'radarr' && service !== 'sonarr') return reply.status(400).send({ error: 'service must be radarr or sonarr' })
+      const { name, specifications } = req.body
+      if (!name?.trim()) return reply.status(400).send({ error: 'name is required' })
+      const trashId = toUserCfSlug(name.trim())
+      ensureUserCfFolders()
+      const existing = listUserCfs(service)
+      if (existing.some(cf => cf.trash_id === trashId)) {
+        return reply.status(400).send({ error: `A user CF with trash_id "${trashId}" already exists` })
+      }
+      const cf: UserCfFile = {
+        trash_id: trashId,
+        name: name.trim(),
+        includeCustomFormatWhenRenaming: false,
+        specifications: specifications ?? [],
+      }
+      fs.writeFileSync(path.join(USER_CF_BASE, service, `${trashId}.json`), JSON.stringify(cf, null, 2), 'utf8')
+      return reply.status(201).send({ cf })
+    }
+  )
+
+  // PUT /api/recyclarr/user-cfs/:service/:trashId
+  app.put<{ Params: { service: string; trashId: string }; Body: UpdateUserCfBody }>(
+    '/api/recyclarr/user-cfs/:service/:trashId',
+    { onRequest: [app.requireAdmin] },
+    async (req, reply) => {
+      const service = req.params.service as 'radarr' | 'sonarr'
+      if (service !== 'radarr' && service !== 'sonarr') return reply.status(400).send({ error: 'service must be radarr or sonarr' })
+      const { trashId } = req.params
+      const { name, specifications } = req.body
+      if (!name?.trim()) return reply.status(400).send({ error: 'name is required' })
+      const filePath = path.join(USER_CF_BASE, service, `${trashId}.json`)
+      if (!fs.existsSync(filePath)) return reply.status(404).send({ error: 'CF not found' })
+      const cf: UserCfFile = {
+        trash_id: trashId,
+        name: name.trim(),
+        includeCustomFormatWhenRenaming: false,
+        specifications: specifications ?? [],
+      }
+      fs.writeFileSync(filePath, JSON.stringify(cf, null, 2), 'utf8')
+      return reply.send({ cf })
+    }
+  )
+
+  // DELETE /api/recyclarr/user-cfs/:service/:trashId
+  app.delete<{ Params: { service: string; trashId: string } }>(
+    '/api/recyclarr/user-cfs/:service/:trashId',
+    { onRequest: [app.requireAdmin] },
+    async (req, reply) => {
+      const service = req.params.service as 'radarr' | 'sonarr'
+      if (service !== 'radarr' && service !== 'sonarr') return reply.status(400).send({ error: 'service must be radarr or sonarr' })
+      const { trashId } = req.params
+      const filePath = path.join(USER_CF_BASE, service, `${trashId}.json`)
+      if (!fs.existsSync(filePath)) return reply.status(404).send({ error: 'CF not found' })
+      fs.unlinkSync(filePath)
+      // Remove references from recyclarr_config in DB
+      const db = getDb()
+      const rows = db.prepare('SELECT id, user_cf_names FROM recyclarr_config').all() as { id: string; user_cf_names: string }[]
+      for (const row of rows) {
+        const names = safeJson<UserCf[]>(row.user_cf_names, [])
+        const updated = names.filter(ucf => ucf.trash_id !== trashId && ucf.name !== trashId)
+        if (updated.length !== names.length) {
+          db.prepare("UPDATE recyclarr_config SET user_cf_names = ?, updated_at = datetime('now') WHERE id = ?")
+            .run(JSON.stringify(updated), row.id)
+        }
+      }
+      // Regenerate YAML
+      try {
+        const allRows = db.prepare('SELECT * FROM recyclarr_config WHERE enabled = 1').all() as RecyclarrConfigRow[]
+        const allInsts = db.prepare('SELECT * FROM arr_instances').all() as ArrInstanceRow[]
+        await writeYaml(allRows.map(rowToConfig), allInsts)
+      } catch (e) {
+        app.log.warn({ err: e }, 'Failed to write recyclarr YAML after user CF delete')
+      }
+      return reply.send({ ok: true })
     }
   )
 }

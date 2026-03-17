@@ -10,7 +10,7 @@ import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sort
 import { arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, Compass, Database, AlertTriangle, Sliders, Plus, ChevronDown, ChevronRight, Clock, Shield } from 'lucide-react'
-import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrStats, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile, RadarrMovie, SonarrSeries } from '../types/arr'
+import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrStats, ArrCFSpecification, RadarrMovie, SonarrSeries } from '../types/arr'
 import type { TmdbResult, TmdbFilters, TmdbDiscoverFilters } from '../types/tmdb'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
 // ── Tab type ──────────────────────────────────────────────────────────────────
@@ -2036,11 +2036,11 @@ function RecyclarrWizard({
   onClose: () => void
   instances: import('../types/arr').ArrInstance[]
 }) {
-  const { qualityProfiles, loadQualityProfiles, customFormats: arrCustomFormats, loadCustomFormats } = useArrStore()
-  const { profiles, cfs, loadProfiles, loadCfs, saveConfig } = useRecyclarrStore()
+  const { qualityProfiles, loadQualityProfiles } = useArrStore()
+  const { profiles, loadProfiles, saveConfig } = useRecyclarrStore()
 
   const [step, setStep] = useState(1)
-  const TOTAL_STEPS = 6
+  const TOTAL_STEPS = 5
   const [confirmClose, setConfirmClose] = useState(false)
 
   // Step 1
@@ -2051,9 +2051,6 @@ function RecyclarrWizard({
 
   // Step 3
   const [minScores, setMinScores] = useState<Record<string, string>>({})
-  const [resetScores, setResetScores] = useState<Record<string, boolean>>({})
-  const [exceptLists, setExceptLists] = useState<Record<string, string[]>>({})
-  const [exceptInputs, setExceptInputs] = useState<Record<string, string>>({})
   const [preferredRatio, setPreferredRatio] = useState(0)
   const [deleteOldCfs, setDeleteOldCfs] = useState(false)
 
@@ -2061,33 +2058,19 @@ function RecyclarrWizard({
   const [profilesLoading, setProfilesLoading] = useState(false)
   const [profilesLoadError, setProfilesLoadError] = useState<string | null>(null)
 
-  // Step 4 — score overrides using TRaSH CFs
-  const [cfLoading, setCfLoading] = useState(false)
-  const [cfLoadError, setCfLoadError] = useState<string | null>(null)
-  const [cfLoaded, setCfLoaded] = useState(false)
-  const [scoreOverrides, setScoreOverrides] = useState<import('../types/recyclarr').RecyclarrScoreOverride[]>([])
-  const [cfProfileFilter, setCfProfileFilter] = useState<string>('')
-  const [showOnlyChanged, setShowOnlyChanged] = useState(false)
+  // Step 4 — user CFs from filesystem
+  const [selectedUserCfs, setSelectedUserCfs] = useState<Array<{ trash_id: string; name: string; score: number }>>([])
+  const [userCfList, setUserCfList] = useState<import('../types/recyclarr').UserCfFile[]>([])
+  const [userCfsLoading, setUserCfsLoading] = useState(false)
+  const [userCfsLoadError, setUserCfsLoadError] = useState<string | null>(null)
 
-  // Step 5 — user CFs
-  const [userCfs, setUserCfs] = useState<import('../types/recyclarr').RecyclarrUserCf[]>([])
-  const [newUserCfName, setNewUserCfName] = useState('')
-  const [newUserCfScore, setNewUserCfScore] = useState('0')
-  const [newUserCfProfileTrashId, setNewUserCfProfileTrashId] = useState('')
-  const [showManualAdd, setShowManualAdd] = useState(false)
-
-  // Steps 3+5 — arr CF loading (for dynamic suggestions + checkbox list)
-  const [arrCfsLoaded, setArrCfsLoaded] = useState(false)
-  const [arrCfsLoading, setArrCfsLoading] = useState(false)
-  const [trashCfNameSet, setTrashCfNameSet] = useState<Set<string>>(new Set())
-
-  // Step 6 — schedule
+  // Step 5 — schedule
   const [scheduleType, setScheduleType] = useState<'manual' | 'daily' | 'weekly' | 'cron'>('manual')
   const [scheduleTime, setScheduleTime] = useState('04:00')
   const [scheduleDay, setScheduleDay] = useState('1')
   const [scheduleCron, setScheduleCron] = useState('')
 
-  // Step 6 — YAML preview
+  // Step 5 — YAML preview
   const [yamlPreview, setYamlPreview] = useState<string | null>(null)
   const [yamlPreviewLoading, setYamlPreviewLoading] = useState(false)
   const [yamlPreviewError, setYamlPreviewError] = useState<string | null>(null)
@@ -2100,7 +2083,6 @@ function RecyclarrWizard({
   const instType = selectedInstance?.type as 'radarr' | 'sonarr' | undefined
 
   const instProfiles = instType ? (profiles[instType] ?? []) : []
-  const instCfs = instType ? (cfs[instType] ?? []) : []
 
   const profileGroups = instProfiles.reduce<Record<string, typeof instProfiles>>((acc, p) => {
     const g = p.group ?? 'Standard'
@@ -2125,39 +2107,12 @@ function RecyclarrWizard({
     }
   }
 
-  // Auto-load profiles/CFs when instance selected
+  // Auto-load profiles when instance selected
   useEffect(() => {
     if (!instType) return
     if (instProfiles.length === 0) doLoadProfiles(instType)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instType])
-
-  // Auto-load CFs when entering Step 4
-  useEffect(() => {
-    if (step === 4 && !cfLoaded && !cfLoading && instType) {
-      handleLoadCfs()
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
-
-  // Load arr CFs + TRaSH CF names when entering steps 3 or 5
-  useEffect(() => {
-    if ((step === 3 || step === 5) && !arrCfsLoaded && !arrCfsLoading && selectedInstanceId && instType) {
-      setArrCfsLoading(true)
-      const service = instType
-      loadCustomFormats(selectedInstanceId)
-        .then(() => (cfs[service] ?? []).length === 0 ? loadCfs(service) : Promise.resolve())
-        .then(() => {
-          const latestCfs = useRecyclarrStore.getState().cfs
-          const trashNames = new Set((latestCfs[service] ?? []).map(c => c.name))
-          setTrashCfNameSet(trashNames)
-          setArrCfsLoaded(true)
-        })
-        .catch(() => {})
-        .finally(() => setArrCfsLoading(false))
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
 
   // Load arr quality profiles when entering step 2 (for adoption warning)
   useEffect(() => {
@@ -2167,9 +2122,20 @@ function RecyclarrWizard({
     }
   }, [step, selectedInstanceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load YAML preview when entering step 6
+  // Load user CFs from filesystem when entering step 4
   useEffect(() => {
-    if (step !== 6 || !selectedInstanceId) return
+    if (step !== 4 || !instType) return
+    setUserCfsLoading(true)
+    setUserCfsLoadError(null)
+    import('../api').then(({ api }) => api.recyclarr.listUserCfs(instType!))
+      .then(res => setUserCfList(res.cfs))
+      .catch((e: Error) => setUserCfsLoadError(e.message ?? 'Failed to load user CFs'))
+      .finally(() => setUserCfsLoading(false))
+  }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load YAML preview when entering step 5
+  useEffect(() => {
+    if (step !== 5 || !selectedInstanceId) return
     setYamlPreviewLoading(true)
     setYamlPreviewError(null)
     setYamlPreview(null)
@@ -2177,15 +2143,22 @@ function RecyclarrWizard({
       trash_id: p.trash_id,
       name: p.name,
       min_format_score: minScores[p.trash_id] ? parseInt(minScores[p.trash_id], 10) : undefined,
-      reset_unmatched_scores_enabled: resetScores[p.trash_id] !== false,
-      reset_unmatched_scores_except: exceptLists[p.trash_id] ?? [],
+      reset_unmatched_scores_enabled: true,
+      reset_unmatched_scores_except: selectedUserCfs.map(ucf => ucf.trash_id),
+    }))
+    const userCfNames = selectedUserCfs.map(ucf => ({
+      trash_id: ucf.trash_id,
+      name: ucf.name,
+      score: ucf.score,
+      profileTrashId: '',
+      profileName: '',
     }))
     import('../api').then(({ api }) =>
       api.recyclarr.previewYamlForInstance(selectedInstanceId, {
         enabled: true,
         selectedProfiles: selectedProfileTrashIds,
-        scoreOverrides,
-        userCfNames: userCfs,
+        scoreOverrides: [],
+        userCfNames,
         preferredRatio,
         profilesConfig: profilesConfigData,
         syncSchedule: buildScheduleStr(),
@@ -2199,20 +2172,6 @@ function RecyclarrWizard({
       setYamlPreviewLoading(false)
     })
   }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleLoadCfs = async () => {
-    if (!instType) return
-    setCfLoading(true)
-    setCfLoadError(null)
-    try {
-      await loadCfs(instType)
-      setCfLoaded(true)
-    } catch (e: unknown) {
-      setCfLoadError(e instanceof Error ? e.message : 'Failed to load custom formats')
-    } finally {
-      setCfLoading(false)
-    }
-  }
 
   const buildScheduleStr = (): string => {
     if (scheduleType === 'manual') return 'manual'
@@ -2228,19 +2187,27 @@ function RecyclarrWizard({
     if (!selectedInstanceId) return
     setSaving(true)
     setSaveError(null)
+    const userCfTrashIds = selectedUserCfs.map(ucf => ucf.trash_id)
     const profilesConfig: import('../types/recyclarr').RecyclarrProfileConfig[] = selectedProfileObjs.map(p => ({
       trash_id: p.trash_id,
       name: p.name,
       min_format_score: minScores[p.trash_id] ? parseInt(minScores[p.trash_id], 10) : undefined,
-      reset_unmatched_scores_enabled: resetScores[p.trash_id] !== false,
-      reset_unmatched_scores_except: exceptLists[p.trash_id] ?? [],
+      reset_unmatched_scores_enabled: true,
+      reset_unmatched_scores_except: userCfTrashIds,
+    }))
+    const userCfNames = selectedUserCfs.map(ucf => ({
+      trash_id: ucf.trash_id,
+      name: ucf.name,
+      score: ucf.score,
+      profileTrashId: '',
+      profileName: '',
     }))
     try {
       await saveConfig(selectedInstanceId, {
         enabled: true,
         selectedProfiles: selectedProfileTrashIds,
-        scoreOverrides,
-        userCfNames: userCfs,
+        scoreOverrides: [],
+        userCfNames,
         preferredRatio,
         profilesConfig,
         syncSchedule: buildScheduleStr(),
@@ -2274,17 +2241,6 @@ function RecyclarrWizard({
     color: 'var(--text-primary)',
     fontFamily: 'var(--font-sans)',
   }
-
-  // Filtered CFs for Step 4
-  const displayCfs = cfLoaded
-    ? (cfProfileFilter
-        ? instCfs.filter(cf => {
-            const override = scoreOverrides.find(o => o.trash_id === cf.trash_id)
-            return !showOnlyChanged || !!override
-          })
-        : instCfs.filter(cf => !showOnlyChanged || scoreOverrides.some(o => o.trash_id === cf.trash_id))
-      )
-    : []
 
   const renderStep = () => {
     switch (step) {
@@ -2389,86 +2345,18 @@ function RecyclarrWizard({
             {deleteOldCfs && <span className="badge-error" style={{ fontSize: 10 }}>Removes Recyclarr CFs when removed from config</span>}
           </label>
 
-          {/* Per-profile settings */}
+          {/* Per-profile min format score */}
           {selectedProfileObjs.map(p => {
             const tid = p.trash_id
-            const reset = resetScores[tid] !== false
-            const excepts = exceptLists[tid] ?? []
-            const exceptInput = exceptInputs[tid] ?? ''
-            const userOnlyNamesForExcept = arrCfsLoaded
-              ? (arrCustomFormats[selectedInstanceId] ?? [])
-                  .filter(cf => !trashCfNameSet.has(cf.name))
-                  .map(cf => cf.name)
-                  .slice(0, 10)
-              : []
             return (
-              <div key={tid} style={{ padding: '12px 14px', background: 'rgba(var(--text-rgb), 0.04)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div key={tid} style={{ padding: '12px 14px', background: 'rgba(var(--text-rgb), 0.04)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{p.name}</div>
-
-                {/* Min format score */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Min Format Score</label>
                   <input type="number" value={minScores[tid] ?? ''} placeholder="No minimum"
                     onChange={e => setMinScores(prev => ({ ...prev, [tid]: e.target.value }))}
                     style={{ ...sStyle, width: 150 }} />
                   <span className="badge-neutral" style={{ fontSize: 10, alignSelf: 'flex-start' }}>10000 = skip English releases (German profiles)</span>
-                </div>
-
-                {/* Reset unmatched scores */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={reset} onChange={e => setResetScores(prev => ({ ...prev, [tid]: e.target.checked }))} />
-                    Reset unmatched scores
-                  </label>
-
-                  {reset && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginLeft: 20 }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Exceptions:</div>
-                      {excepts.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {excepts.map((ex, idx) => (
-                            <span key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'rgba(var(--accent-rgb), 0.1)', border: '1px solid rgba(var(--accent-rgb), 0.25)', borderRadius: 'var(--radius-sm)', fontSize: 11, color: 'var(--accent)' }}>
-                              {ex}
-                              <button onClick={() => setExceptLists(prev => ({ ...prev, [tid]: excepts.filter((_, i) => i !== idx) }))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', lineHeight: 1 }}>
-                                <X size={9} />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <input style={{ ...sStyle, flex: 1 }} value={exceptInput} placeholder='e.g. "TDARR"'
-                          onChange={e => setExceptInputs(prev => ({ ...prev, [tid]: e.target.value }))}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              const val = (exceptInputs[tid] ?? '').trim()
-                              if (val && !excepts.includes(val)) {
-                                setExceptLists(prev => ({ ...prev, [tid]: [...excepts, val] }))
-                              }
-                              setExceptInputs(prev => ({ ...prev, [tid]: '' }))
-                            }
-                          }} />
-                        <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => {
-                          const val = (exceptInputs[tid] ?? '').trim()
-                          if (val && !excepts.includes(val)) {
-                            setExceptLists(prev => ({ ...prev, [tid]: [...excepts, val] }))
-                          }
-                          setExceptInputs(prev => ({ ...prev, [tid]: '' }))
-                        }}><Plus size={11} /></button>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                        {arrCfsLoading && (
-                          <div className="spinner" style={{ width: 11, height: 11, borderWidth: 2 }} />
-                        )}
-                        {userOnlyNamesForExcept.filter(s => !excepts.includes(s)).map(s => (
-                          <button key={s} onClick={() => setExceptLists(prev => ({ ...prev, [tid]: [...excepts, s] }))}
-                            style={{ padding: '2px 8px', fontSize: 11, borderRadius: 'var(--radius-sm)', background: 'rgba(var(--text-rgb), 0.06)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                            + {s}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             )
@@ -2479,94 +2367,53 @@ function RecyclarrWizard({
       case 4: return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
-            Optional: override default scores for specific custom formats from TRaSH Guides.
+            Select your user CFs and assign scores. These will be synced by Recyclarr to all selected profiles.
           </p>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button className="btn btn-ghost btn-sm" onClick={handleLoadCfs} disabled={cfLoading} style={{ fontSize: 12, gap: 4 }}>
-              {cfLoading ? <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <RefreshCw size={12} />}
-              Load formats
-            </button>
-            {cfLoaded && instCfs.length > 0 && (
-              <button onClick={() => setShowOnlyChanged(v => !v)} style={{ fontSize: 12, background: showOnlyChanged ? 'rgba(var(--accent-rgb), 0.1)' : 'transparent', border: `1px solid ${showOnlyChanged ? 'var(--accent)' : 'var(--border)'}`, color: showOnlyChanged ? 'var(--accent)' : 'var(--text-secondary)', borderRadius: 'var(--radius-sm)', padding: '4px 10px', cursor: 'pointer' }}>
-                Changed only
-              </button>
-            )}
-            {cfLoaded && instCfs.length > 0 && (
-              <select value={cfProfileFilter} onChange={e => setCfProfileFilter(e.target.value)}
-                style={{ ...sStyle, fontSize: 11 }}>
-                <option value="">All profiles</option>
-                {selectedProfileObjs.map(p => (
-                  <option key={p.trash_id} value={p.trash_id}>{p.name}</option>
-                ))}
-              </select>
-            )}
-          </div>
-          {cfLoadError && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-md)' }}>
-              <AlertTriangle size={13} style={{ color: 'var(--status-offline)' }} />
-              <span style={{ fontSize: 12, color: 'var(--status-offline)' }}>{cfLoadError}</span>
-              <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto', fontSize: 11 }} onClick={handleLoadCfs}>Retry</button>
+          {userCfsLoading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} />
+              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading user CFs…</span>
             </div>
           )}
-          {cfLoaded && instCfs.length === 0 && (
-            <span className="badge-neutral" style={{ fontSize: 11 }}>No TRaSH custom formats found — check container name in settings</span>
+          {!userCfsLoading && userCfsLoadError && (
+            <div style={{ fontSize: 12, color: '#f87171', padding: '8px 12px', background: 'rgba(248,113,113,0.08)', borderRadius: 'var(--radius-sm)' }}>
+              {userCfsLoadError}
+            </div>
           )}
-          {cfLoaded && instCfs.length > 0 && (
-            <div style={{ overflowX: 'auto', maxHeight: 340, overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 500 }}>Name</th>
-                    <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 500 }}>Profile</th>
-                    <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 500 }}>Score Override</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayCfs.map(cf => {
-                    const override = scoreOverrides.find(o => o.trash_id === cf.trash_id)
-                    // pick the first selected profile as default assign-to
-                    const defaultProfile = selectedProfileObjs[0]
-                    const overrideProfile = override ? selectedProfileObjs.find(p => p.trash_id === override.profileTrashId) : defaultProfile
-                    return (
-                      <tr key={cf.trash_id} style={{ borderBottom: '1px solid rgba(var(--text-rgb), 0.06)', background: override ? 'rgba(var(--accent-rgb), 0.04)' : 'transparent' }}>
-                        <td style={{ padding: '6px 8px' }}>{cf.name}</td>
-                        <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', fontSize: 11 }}>
-                          <select value={overrideProfile?.trash_id ?? (defaultProfile?.trash_id ?? '')}
-                            onChange={e => {
-                              const ptid = e.target.value
-                              const pname = selectedProfileObjs.find(p => p.trash_id === ptid)?.name ?? ''
-                              setScoreOverrides(prev => {
-                                const filtered = prev.filter(o => o.trash_id !== cf.trash_id)
-                                const existing = prev.find(o => o.trash_id === cf.trash_id)
-                                if (!existing) return filtered
-                                return [...filtered, { ...existing, profileTrashId: ptid, name: cf.name }]
-                              })
-                              void pname
-                            }}
-                            style={{ ...sStyle, fontSize: 11 }}>
-                            {selectedProfileObjs.map(p => (
-                              <option key={p.trash_id} value={p.trash_id}>{p.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                          <input type="number" value={override?.score ?? ''} placeholder="—"
-                            onChange={e => {
-                              const val = e.target.value
-                              const ptid = overrideProfile?.trash_id ?? (defaultProfile?.trash_id ?? '')
-                              setScoreOverrides(prev => {
-                                const filtered = prev.filter(o => o.trash_id !== cf.trash_id)
-                                if (val === '') return filtered
-                                return [...filtered, { trash_id: cf.trash_id, name: cf.name, score: parseInt(val, 10) || 0, profileTrashId: ptid }]
-                              })
-                            }}
-                            style={{ width: 70, textAlign: 'right', background: 'rgba(var(--text-rgb), 0.06)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '3px 6px', fontSize: 12, color: 'var(--text-primary)' }} />
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+          {!userCfsLoading && !userCfsLoadError && userCfList.length === 0 && (
+            <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(var(--text-rgb), 0.04)', border: '1px solid var(--border)' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 4px' }}>
+                No user CFs found. Create them in the CF Manager tab first.
+              </p>
+            </div>
+          )}
+          {!userCfsLoading && userCfList.length > 0 && (
+            <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {userCfList.map(cf => {
+                const selected = selectedUserCfs.find(u => u.trash_id === cf.trash_id)
+                const checked = !!selected
+                return (
+                  <div key={cf.trash_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: checked ? 'rgba(var(--accent-rgb), 0.06)' : 'rgba(var(--text-rgb), 0.03)', borderRadius: 'var(--radius-sm)', border: checked ? '1px solid rgba(var(--accent-rgb), 0.2)' : '1px solid transparent' }}>
+                    <input type="checkbox" checked={checked} onChange={e => {
+                      if (e.target.checked) {
+                        setSelectedUserCfs(prev => [...prev, { trash_id: cf.trash_id, name: cf.name, score: 0 }])
+                      } else {
+                        setSelectedUserCfs(prev => prev.filter(u => u.trash_id !== cf.trash_id))
+                      }
+                    }} />
+                    <span style={{ flex: 1, fontSize: 13 }}>{cf.name}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{cf.trash_id}</span>
+                    {checked && (
+                      <input
+                        type="number"
+                        value={selected!.score}
+                        onChange={e => setSelectedUserCfs(prev => prev.map(u => u.trash_id === cf.trash_id ? { ...u, score: parseInt(e.target.value, 10) || 0 } : u))}
+                        style={{ width: 70, textAlign: 'right', background: 'rgba(var(--text-rgb), 0.06)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: 12, color: 'var(--text-primary)' }}
+                      />
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
           <button className="btn btn-ghost btn-sm" onClick={() => setStep(s => s + 1)} style={{ alignSelf: 'flex-start', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -2575,107 +2422,7 @@ function RecyclarrWizard({
         </div>
       )
 
-      case 5: {
-        const allArrCfs = arrCustomFormats[selectedInstanceId] ?? []
-        const userArrCfs = allArrCfs.filter(cf => !trashCfNameSet.has(cf.name))
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
-              Optional: Füge eigene Custom Formats aus deiner Instanz hinzu. Diese werden mit einem Score versehen und gelten für alle ausgewählten Profile.
-            </p>
-
-            {/* Section 1: Checkbox list from arr instance */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
-                User Custom Formats in {selectedInstance?.name ?? 'Instanz'}
-              </div>
-              {arrCfsLoading && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Lade Custom Formats…</span>
-                </div>
-              )}
-              {!arrCfsLoading && arrCfsLoaded && userArrCfs.length === 0 && (
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Keine User Custom Formats in dieser Instanz gefunden.</span>
-              )}
-              {!arrCfsLoading && arrCfsLoaded && userArrCfs.length > 0 && (
-                <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {userArrCfs.map(cf => {
-                    const checked = userCfs.some(u => u.name === cf.name)
-                    const currentScore = userCfs.find(u => u.name === cf.name)?.score ?? 0
-                    return (
-                      <div key={cf.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: checked ? 'rgba(var(--accent-rgb), 0.06)' : 'rgba(var(--text-rgb), 0.03)', borderRadius: 'var(--radius-sm)', border: checked ? '1px solid rgba(var(--accent-rgb), 0.2)' : '1px solid transparent' }}>
-                        <input type="checkbox" checked={checked} onChange={e => {
-                          if (e.target.checked) {
-                            setUserCfs(prev => [...prev, { name: cf.name, score: 0, profileTrashId: '', profileName: '' }])
-                          } else {
-                            setUserCfs(prev => prev.filter(u => u.name !== cf.name))
-                          }
-                        }} />
-                        <span style={{ flex: 1, fontSize: 13 }}>{cf.name}</span>
-                        {checked && (
-                          <input
-                            type="number"
-                            value={currentScore}
-                            onChange={e => setUserCfs(prev => prev.map(u => u.name === cf.name ? { ...u, score: parseInt(e.target.value, 10) || 0 } : u))}
-                            style={{ width: 70, textAlign: 'right', background: 'rgba(var(--text-rgb), 0.06)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: 12, color: 'var(--text-primary)' }}
-                          />
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Section 2: Manual add (collapsible) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <button
-                onClick={() => setShowManualAdd(v => !v)}
-                style={{ alignSelf: 'flex-start', fontSize: 12, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}
-              >
-                {showManualAdd ? '▾' : '▸'} CF nicht in der Liste? Manuell hinzufügen
-              </button>
-              {showManualAdd && (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', paddingLeft: 12 }}>
-                  <input className="form-input" placeholder="CF-Name" value={newUserCfName} onChange={e => setNewUserCfName(e.target.value)} style={{ flex: 2, minWidth: 120, fontSize: 12 }} />
-                  <input className="form-input" type="number" placeholder="Score" value={newUserCfScore} onChange={e => setNewUserCfScore(e.target.value)} style={{ flex: 1, minWidth: 70, fontSize: 12 }} />
-                  <button className="btn btn-ghost btn-sm" onClick={() => {
-                    if (!newUserCfName.trim()) return
-                    if (userCfs.some(u => u.name === newUserCfName.trim())) return
-                    setUserCfs(prev => [...prev, { name: newUserCfName.trim(), score: parseInt(newUserCfScore, 10) || 0, profileTrashId: '', profileName: '' }])
-                    setNewUserCfName(''); setNewUserCfScore('0')
-                  }} style={{ fontSize: 12, gap: 4 }}>
-                    <Plus size={12} /> Hinzufügen
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Summary of selected user CFs */}
-            {userCfs.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Ausgewählt ({userCfs.length}):</div>
-                {userCfs.map((ucf, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 8px', background: 'rgba(var(--text-rgb), 0.04)', borderRadius: 'var(--radius-sm)' }}>
-                    <span style={{ flex: 1 }}>{ucf.name}</span>
-                    <span style={{ color: 'var(--accent)', minWidth: 40, textAlign: 'right' }}>{ucf.score}</span>
-                    <button className="btn btn-danger btn-icon btn-sm" onClick={() => setUserCfs(prev => prev.filter((_, i) => i !== idx))} style={{ width: 20, height: 20, padding: 2 }}>
-                      <X size={9} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button className="btn btn-ghost btn-sm" onClick={() => setStep(s => s + 1)} style={{ alignSelf: 'flex-start', fontSize: 12, color: 'var(--text-muted)' }}>
-              Überspringen →
-            </button>
-          </div>
-        )
-      }
-
-      case 6: return (
+      case 5: return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Wähle, wie Recyclarr automatisch synchronisiert werden soll.</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -2725,12 +2472,8 @@ function RecyclarrWizard({
               <span style={{ fontSize: 12 }}>{selectedProfileObjs.map(p => p.name).join(', ') || '—'}</span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 130 }}>Score Overrides</span>
-              <span style={{ fontSize: 12 }}>{scoreOverrides.length}</span>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 130 }}>User CFs</span>
-              <span style={{ fontSize: 12 }}>{userCfs.length}</span>
+              <span style={{ fontSize: 12 }}>{selectedUserCfs.length}</span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 130 }}>Preferred Ratio</span>
@@ -2798,7 +2541,7 @@ function RecyclarrWizard({
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {['Instanz', 'Profile', 'Einstellungen', 'Score Overrides', 'User CFs', 'Zeitplan'][step - 1]}
+              {['Instanz', 'Profile', 'Einstellungen', 'User CFs', 'Zeitplan'][step - 1]}
             </span>
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Schritt {step} / {TOTAL_STEPS}</span>
           </div>
@@ -3742,116 +3485,71 @@ function buildSpecPayload(ds: DraftSpec): ArrCFSpecification {
   }
 }
 
-// ── CF Row ─────────────────────────────────────────────────────────────────────
+// ── User CF Row ────────────────────────────────────────────────────────────────
 
-function CfRow({
+function UserCfRow({
   cf,
-  profiles,
-  scores,
-  isProtected,
-  isTrashed,
   isAdmin,
   onEdit,
   onDelete,
-  onExceptToggle,
 }: {
-  cf: ArrCustomFormat
-  profiles: ArrQualityProfile[]
-  scores: Record<number, number>
-  isProtected: boolean
-  isTrashed: boolean
+  cf: import('../types/recyclarr').UserCfFile
   isAdmin: boolean
   onEdit: () => void
   onDelete: () => void
-  onExceptToggle?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   return (
     <div
-      className="glass"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        borderRadius: 'var(--radius-md)',
-        padding: 'var(--spacing-md) var(--spacing-lg)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        flexWrap: 'wrap',
-        position: 'relative',
-        background: isTrashed ? 'rgba(var(--text-rgb), 0.02)' : undefined,
+        display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0 12px',
+        padding: '8px 12px', borderRadius: 'var(--radius-sm)', alignItems: 'center',
+        background: hovered ? 'rgba(var(--text-rgb), 0.04)' : 'transparent',
+        transition: 'background 100ms ease',
       }}
     >
-      <span style={{ fontWeight: 600, fontSize: 13, flex: 1, minWidth: 100, fontFamily: 'var(--font-sans)' }}>{cf.name}</span>
-      <span className="badge-neutral" style={{ fontSize: 11 }}>{cf.specifications.length} Conditions</span>
-      {profiles.map(p => {
-        const score = scores[p.id]
-        if (score == null || score === 0) return null
-        return (
-          <span
-            key={p.id}
-            className={score > 0 ? 'badge-success' : 'badge-error'}
-            style={{ fontSize: 11 }}
-            title={p.name}
-          >
-            {score > 0 ? '+' : ''}{score}
-          </span>
-        )
-      })}
-      {isTrashed ? (
-        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'rgba(var(--text-rgb), 0.08)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>TRaSH</span>
-      ) : (
-        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'rgba(var(--accent-rgb), 0.08)', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>User</span>
-      )}
-      {isProtected && (
-        <span className="badge-accent" style={{ fontSize: 11 }}>geschützt</span>
-      )}
-      {isAdmin && onExceptToggle && !isTrashed && (
-        <button
-          className={`btn btn-sm btn-icon ${isProtected ? 'btn-primary' : 'btn-ghost'}`}
-          onClick={e => { e.stopPropagation(); onExceptToggle() }}
-          title="Vor Recyclarr-Überschreibung schützen"
-          style={{ padding: 4, opacity: hovered || isProtected ? 1 : 0, transition: 'opacity 150ms ease' }}
-        >
-          <Shield size={12} />
-        </button>
-      )}
-      {isAdmin && hovered && !isTrashed && (
-        <div style={{ display: 'flex', gap: 4, marginLeft: 4 }}>
-          <button
-            onClick={onEdit}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}
-          >
-            <Pencil size={12} />
-          </button>
-          <button
-            onClick={onDelete}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', padding: 4 }}
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-      )}
+      <span style={{ fontSize: 13, fontWeight: 500 }}>{cf.name}</span>
+      <span className="badge-neutral" style={{ fontSize: 11, textAlign: 'center' }}>{cf.specifications.length}</span>
+      <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{cf.trash_id}</span>
+      <div style={{ display: 'flex', gap: 4, opacity: hovered && isAdmin ? 1 : 0, transition: 'opacity 150ms ease' }}>
+        {isAdmin && (
+          <>
+            <button onClick={onEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+              <Pencil size={12} />
+            </button>
+            <button onClick={onDelete} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', padding: 4 }}>
+              <Trash2 size={12} />
+            </button>
+          </>
+        )}
+      </div>
     </div>
   )
 }
 
-// ── CF Edit Modal ──────────────────────────────────────────────────────────────
+// ── User CF Edit Modal ─────────────────────────────────────────────────────────
 
-function CfEditModal({
+function UserCfEditModal({
   initial,
   onClose,
   onSave,
 }: {
-  initial: ArrCustomFormat | null
+  initial: import('../types/recyclarr').UserCfFile | null
   onClose: () => void
-  onSave: (data: { name: string; includeCustomFormatWhenRenaming: boolean; specifications: ArrCFSpecification[] }) => Promise<void>
+  onSave: (data: { name: string; specifications: ArrCFSpecification[] }) => Promise<void>
 }) {
   const [name, setName] = useState(initial?.name ?? '')
-  const [includeWhenRenaming, setIncludeWhenRenaming] = useState(initial?.includeCustomFormatWhenRenaming ?? false)
-  const [specs, setSpecs] = useState<DraftSpec[]>(initial ? initial.specifications.map(toDraftSpec) : [])
+  const [specs, setSpecs] = useState<DraftSpec[]>(
+    initial ? initial.specifications.map(s => toDraftSpec(s as ArrCFSpecification)) : []
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const previewTrashId = name.trim()
+    ? 'user-' + name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    : ''
 
   function updateSpec(idx: number, updater: (s: DraftSpec) => DraftSpec) {
     setSpecs(prev => prev.map((s, i) => i === idx ? updater(s) : s))
@@ -3862,11 +3560,7 @@ function CfEditModal({
     setSaving(true)
     setError(null)
     try {
-      await onSave({
-        name: name.trim(),
-        includeCustomFormatWhenRenaming: includeWhenRenaming,
-        specifications: specs.map(buildSpecPayload),
-      })
+      await onSave({ name: name.trim(), specifications: specs.map(buildSpecPayload) })
     } catch (e: unknown) {
       setError((e as Error).message)
       setSaving(false)
@@ -3877,7 +3571,7 @@ function CfEditModal({
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '40px 16px' }}>
       <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, width: '100%', maxWidth: 580 }}>
         <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>
-          {initial ? 'Custom Format bearbeiten' : 'Custom Format erstellen'}
+          {initial ? 'User CF bearbeiten' : 'User CF erstellen'}
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
@@ -3889,10 +3583,17 @@ function CfEditModal({
             />
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-            <input type="checkbox" checked={includeWhenRenaming} onChange={e => setIncludeWhenRenaming(e.target.checked)} />
-            Beim Umbenennen anwenden
-          </label>
+          {previewTrashId && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>trash_id:</span>
+              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)', padding: '2px 8px', background: 'rgba(var(--accent-rgb), 0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(var(--accent-rgb), 0.2)' }}>
+                {previewTrashId}
+              </span>
+              {initial && initial.trash_id !== previewTrashId && (
+                <span style={{ fontSize: 11, color: '#f59e0b' }}>⚠ trash_id locked to: {initial.trash_id}</span>
+              )}
+            </div>
+          )}
 
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -3972,18 +3673,12 @@ function CfEditModal({
                 )}
               </div>
             ))}
-
-            <span className="badge-neutral" style={{ fontSize: 11, padding: '4px 10px', borderRadius: 'var(--radius-sm)', display: 'inline-block', marginTop: 2 }}>
-              Conditions werden direkt in Radarr/Sonarr gespeichert.
-            </span>
           </div>
 
           {error && <p style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{error}</p>}
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-            <button onClick={onClose} className="btn btn-ghost">
-              Abbrechen
-            </button>
+            <button onClick={onClose} className="btn btn-ghost">Abbrechen</button>
             <button onClick={handleSave} disabled={saving} className="btn btn-primary">
               {saving ? 'Speichern…' : 'Speichern'}
             </button>
@@ -3998,280 +3693,142 @@ function CfEditModal({
 
 function CfManagerTab() {
   const { isAdmin } = useStore()
-  const {
-    instances,
-    customFormats,
-    qualityProfiles,
-    cfLoading,
-    loadCustomFormats,
-    loadQualityProfiles,
-    createCustomFormat,
-    updateCustomFormat,
-    deleteCustomFormat,
-  } = useArrStore()
-  const { configs, loadConfigs, saveConfig } = useRecyclarrStore()
-
-  const arrInstances = instances.filter(i => i.enabled && (i.type === 'radarr' || i.type === 'sonarr'))
-
-  const [activeInstance, setActiveInstance] = useState<string | null>(null)
-  const [cfSearch, setCfSearch] = useState('')
-  const [sortByScore, setSortByScore] = useState(false)
-  const [editingCf, setEditingCf] = useState<ArrCustomFormat | 'new' | null>(null)
-  const [confirmDeleteCfId, setConfirmDeleteCfId] = useState<number | null>(null)
+  const [service, setService] = useState<'radarr' | 'sonarr'>('radarr')
+  const [userCfs, setUserCfs] = useState<import('../types/recyclarr').UserCfFile[]>([])
+  const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [trashCfNames, setTrashCfNames] = useState<Set<string>>(new Set())
+  const [cfSearch, setCfSearch] = useState('')
+  const [editingCf, setEditingCf] = useState<import('../types/recyclarr').UserCfFile | 'new' | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
-  // Init active instance
-  useEffect(() => {
-    if (arrInstances.length > 0 && !activeInstance) {
-      setActiveInstance(arrInstances[0].id)
-    }
-  }, [arrInstances.length]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Load recyclarr configs if empty (needed for protected CF badges)
-  useEffect(() => {
-    if (configs.length === 0) loadConfigs().catch(() => {})
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Load CFs + profiles + trash CF names when active instance changes
-  useEffect(() => {
-    if (!activeInstance) return
+  const loadUserCfs = async (svc: 'radarr' | 'sonarr') => {
+    setLoading(true)
     setLoadError(null)
-    const inst = arrInstances.find(i => i.id === activeInstance)
-    const service = inst?.type as 'radarr' | 'sonarr' | undefined
-    Promise.all([
-      loadCustomFormats(activeInstance),
-      loadQualityProfiles(activeInstance),
-    ]).catch(e => setLoadError((e as Error).message ?? 'Ladefehler'))
-    if (service) {
-      import('../api').then(({ api }) => api.recyclarr.trashCfNames(service))
-        .then(res => setTrashCfNames(new Set(res.names)))
-        .catch(() => {}) // silently ignore — classification degrades gracefully
-    }
-  }, [activeInstance]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Protected CF names from recyclarr config (based on selectedProfiles)
-  const protectedCfNames = useMemo(() => {
-    if (!activeInstance) return new Set<string>()
-    const config = configs.find(c => c.instanceId === activeInstance)
-    if (!config) return new Set<string>()
-    const names = new Set<string>()
-    for (const pc of config.profilesConfig) {
-      // Only apply to profiles that are actually selected
-      if (!config.selectedProfiles.includes(pc.trash_id)) continue
-      for (const n of pc.reset_unmatched_scores_except) names.add(n)
-    }
-    return names
-  }, [configs, activeInstance])
-
-  // Toggle CF protection (except list) in recyclarr config
-  const handleExceptToggle = async (cfName: string) => {
-    if (!activeInstance) return
-    const config = configs.find(c => c.instanceId === activeInstance)
-    if (!config) return
-    const isCurrentlyProtected = protectedCfNames.has(cfName)
-    const updatedProfilesConfig = config.profilesConfig.map(pc => {
-      if (!config.selectedProfiles.includes(pc.trash_id)) return pc
-      if (isCurrentlyProtected) {
-        return { ...pc, reset_unmatched_scores_except: pc.reset_unmatched_scores_except.filter(n => n !== cfName) }
-      } else {
-        if (!pc.reset_unmatched_scores_except.includes(cfName)) {
-          return { ...pc, reset_unmatched_scores_except: [...pc.reset_unmatched_scores_except, cfName] }
-        }
-        return pc
-      }
-    })
     try {
-      await saveConfig(activeInstance, {
-        enabled: config.enabled,
-        selectedProfiles: config.selectedProfiles,
-        scoreOverrides: config.scoreOverrides,
-        userCfNames: config.userCfNames,
-        preferredRatio: config.preferredRatio,
-        profilesConfig: updatedProfilesConfig,
-        syncSchedule: config.syncSchedule,
-        deleteOldCfs: config.deleteOldCfs,
-      })
-    } catch { /* ignore */ }
+      const { api } = await import('../api')
+      const res = await api.recyclarr.listUserCfs(svc)
+      setUserCfs(res.cfs)
+    } catch (e: unknown) {
+      setLoadError((e as Error).message ?? 'Failed to load user CFs')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // cfId -> profileId -> score map for badge display
-  const profileScoreMap = useMemo(() => {
-    if (!activeInstance) return {} as Record<number, Record<number, number>>
-    const profs = qualityProfiles[activeInstance] ?? []
-    const map: Record<number, Record<number, number>> = {}
-    for (const profile of profs) {
-      for (const item of profile.formatItems) {
-        if (!map[item.format]) map[item.format] = {}
-        map[item.format][profile.id] = item.score
-      }
-    }
-    return map
-  }, [qualityProfiles, activeInstance])
+  useEffect(() => {
+    loadUserCfs(service)
+  }, [service]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Filtered + sorted CF list
-  const filteredCfs = useMemo(() => {
-    const cfs = customFormats[activeInstance ?? ''] ?? []
-    let filtered = cfs.filter(cf => cf.name.toLowerCase().includes(cfSearch.toLowerCase()))
-    if (sortByScore) {
-      filtered = [...filtered].sort((a, b) => {
-        const aScores = Object.values(profileScoreMap[a.id] ?? {})
-        const bScores = Object.values(profileScoreMap[b.id] ?? {})
-        const aMax = aScores.length ? Math.max(...aScores) : 0
-        const bMax = bScores.length ? Math.max(...bScores) : 0
-        if (bMax !== aMax) return bMax - aMax
-        return a.name.localeCompare(b.name)
-      })
-    } else {
-      filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name))
-    }
-    return filtered
-  }, [customFormats, activeInstance, cfSearch, sortByScore, profileScoreMap])
-
-  const isLoading = cfLoading[activeInstance ?? ''] === true
-  const cfs = customFormats[activeInstance ?? ''] ?? []
-  const profiles = qualityProfiles[activeInstance ?? ''] ?? []
-
-
-  if (arrInstances.length === 0) {
-    return (
-      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 48, textAlign: 'center' }}>
-        <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Keine Radarr oder Sonarr Instanzen konfiguriert.</p>
-      </div>
-    )
-  }
+  const filteredCfs = userCfs.filter(cf => cf.name.toLowerCase().includes(cfSearch.toLowerCase()))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Instance selector */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {arrInstances.map(inst => (
+      {/* Service tabs */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {(['radarr', 'sonarr'] as const).map(svc => (
           <button
-            key={inst.id}
-            onClick={() => {
-              setActiveInstance(inst.id)
-              setCfSearch('')
-            }}
-            className={`btn btn-sm ${activeInstance === inst.id ? 'btn-primary' : 'btn-ghost'}`}
+            key={svc}
+            onClick={() => { setService(svc); setCfSearch('') }}
+            className={`btn btn-sm ${service === svc ? 'btn-primary' : 'btn-ghost'}`}
           >
-            {inst.name}
-            <span style={{ opacity: 0.6, fontSize: 11, marginLeft: 4 }}>({inst.type})</span>
+            {svc.charAt(0).toUpperCase() + svc.slice(1)}
           </button>
         ))}
       </div>
 
-      {loadError && (
-        <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '10px 16px', color: '#f87171', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <AlertTriangle size={14} />
-          {loadError}
-          <button
-            onClick={() => {
-              if (!activeInstance) return
-              setLoadError(null)
-              Promise.all([loadCustomFormats(activeInstance), loadQualityProfiles(activeInstance)]).catch(e => setLoadError((e as Error).message))
-            }}
-            style={{ marginLeft: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', textDecoration: 'underline', fontSize: 13 }}
-          >
-            Wiederholen
-          </button>
-        </div>
-      )}
-
-      {/* CF list — full width */}
       <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20 }}>
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>Custom Formats</span>
-          <span className="badge-neutral" style={{ fontSize: 11 }}>{cfs.length}</span>
+          <span style={{ fontWeight: 600, fontSize: 15 }}>User Custom Formats</span>
+          <span className="badge-neutral" style={{ fontSize: 11 }}>{userCfs.length}</span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            Score-Verwaltung erfolgt im Recyclarr-Tab (Score Overrides).
+            Scores werden im Wizard (Step 4) oder im Recyclarr-Tab vergeben.
           </span>
           <div style={{ flex: 1 }} />
           {isAdmin && (
             <button onClick={() => setEditingCf('new')} className="btn btn-primary btn-sm">
-              <Plus size={12} /> Erstellen
+              <Plus size={12} /> Create
             </button>
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {/* Search */}
+        <div style={{ marginBottom: 12 }}>
           <input
             value={cfSearch}
             onChange={e => setCfSearch(e.target.value)}
-            placeholder="Suchen…"
-            style={{ flex: 1, borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: 13, border: '1px solid rgba(var(--border-rgb), 0.2)', background: 'rgba(var(--bg-secondary-rgb), 0.5)', color: 'var(--text)' }}
+            placeholder="Search…"
+            style={{ width: '100%', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: 13, border: '1px solid rgba(var(--border-rgb), 0.2)', background: 'rgba(var(--bg-secondary-rgb), 0.5)', color: 'var(--text)', boxSizing: 'border-box' }}
           />
-          <button
-            onClick={() => setSortByScore(!sortByScore)}
-            style={{
-              padding: '6px 10px', borderRadius: 'var(--radius-md)', fontSize: 12, whiteSpace: 'nowrap',
-              background: sortByScore ? 'rgba(var(--accent-rgb), 0.12)' : 'transparent',
-              color: sortByScore ? 'var(--accent)' : 'var(--text-secondary)',
-              border: sortByScore ? '1px solid rgba(var(--accent-rgb), 0.25)' : '1px solid rgba(var(--border-rgb), 0.2)',
-              cursor: 'pointer',
-            }}
-          >
-            Score &gt; 0 zuerst
-          </button>
         </div>
 
-        {isLoading ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: 24 }}>Lade…</p>
+        {loadError && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.08)', borderRadius: 'var(--radius-sm)', marginBottom: 10 }}>
+            <AlertTriangle size={13} style={{ color: '#f87171', flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: '#f87171', flex: 1 }}>{loadError}</span>
+            <button onClick={() => loadUserCfs(service)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', textDecoration: 'underline', fontSize: 12 }}>Retry</button>
+          </div>
+        )}
+
+        {loading ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: 24 }}>Loading…</p>
         ) : filteredCfs.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: 24 }}>
-            {cfSearch ? 'Keine Custom Formats gefunden' : 'Keine Custom Formats in dieser Instanz'}
+            {cfSearch ? 'No user CFs match your search' : `No user CFs for ${service}. Click Create to add one.`}
           </p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {/* Table header */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0 12px', padding: '4px 12px', marginBottom: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Name</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, textAlign: 'center' }}>Specs</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>trash_id</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Actions</span>
+            </div>
             {filteredCfs.map(cf => (
-              <CfRow
-                key={cf.id}
+              <UserCfRow
+                key={cf.trash_id}
                 cf={cf}
-                profiles={profiles}
-                scores={profileScoreMap[cf.id] ?? {}}
-                isProtected={protectedCfNames.has(cf.name)}
-                isTrashed={trashCfNames.has(cf.name)}
                 isAdmin={isAdmin}
                 onEdit={() => setEditingCf(cf)}
-                onDelete={() => setConfirmDeleteCfId(cf.id)}
-                onExceptToggle={() => handleExceptToggle(cf.name)}
+                onDelete={() => setConfirmDeleteId(cf.trash_id)}
               />
             ))}
           </div>
         )}
       </div>
 
-      {/* CF create/edit modal */}
+      {/* Create/edit modal */}
       {editingCf != null && (
-        <CfEditModal
-          initial={editingCf === 'new' ? null : editingCf}
+        <UserCfEditModal
+          initial={editingCf === 'new' ? null : editingCf as import('../types/recyclarr').UserCfFile}
           onClose={() => setEditingCf(null)}
           onSave={async data => {
-            if (!activeInstance) return
+            const { api } = await import('../api')
             if (editingCf === 'new') {
-              await createCustomFormat(activeInstance, data)
-            } else if (editingCf != null) {
-              await updateCustomFormat(activeInstance, (editingCf as ArrCustomFormat).id, data)
+              await api.recyclarr.createUserCf(service, data)
+            } else {
+              await api.recyclarr.updateUserCf(service, (editingCf as import('../types/recyclarr').UserCfFile).trash_id, data)
             }
-            await loadCustomFormats(activeInstance)
             setEditingCf(null)
+            await loadUserCfs(service)
           }}
         />
       )}
 
       {/* Delete confirm */}
-      {confirmDeleteCfId != null && (
+      {confirmDeleteId != null && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, maxWidth: 380, width: '90%' }}>
-            <p style={{ fontSize: 14, marginBottom: 16 }}>Custom Format wirklich löschen?</p>
+            <p style={{ fontSize: 14, marginBottom: 16 }}>User CF "{userCfs.find(c => c.trash_id === confirmDeleteId)?.name}" wirklich löschen?</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setConfirmDeleteCfId(null)} className="btn btn-ghost">Abbrechen</button>
+              <button onClick={() => setConfirmDeleteId(null)} className="btn btn-ghost">Abbrechen</button>
               <button
                 onClick={async () => {
-                  if (activeInstance) {
-                    await deleteCustomFormat(activeInstance, confirmDeleteCfId)
-                    await loadCustomFormats(activeInstance)
-                  }
-                  setConfirmDeleteCfId(null)
+                  const { api } = await import('../api')
+                  await api.recyclarr.deleteUserCf(service, confirmDeleteId)
+                  setConfirmDeleteId(null)
+                  await loadUserCfs(service)
                 }}
                 style={{ padding: '6px 14px', borderRadius: 'var(--radius-md)', background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)', cursor: 'pointer', fontSize: 13 }}
               >

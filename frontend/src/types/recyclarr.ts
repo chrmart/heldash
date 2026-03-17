@@ -25,10 +25,26 @@ export interface RecyclarrScoreOverride {
 }
 
 export interface RecyclarrUserCf {
+  trash_id?: string
   name: string
   score: number
   profileTrashId: string
   profileName: string
+}
+
+export interface UserCfSpecification {
+  name: string
+  implementation: string
+  negate: boolean
+  required: boolean
+  fields: { name: string; value: unknown }[]
+}
+
+export interface UserCfFile {
+  trash_id: string
+  name: string
+  includeCustomFormatWhenRenaming: boolean
+  specifications: UserCfSpecification[]
 }
 
 export interface RecyclarrProfileConfig {

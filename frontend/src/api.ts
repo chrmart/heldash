@@ -323,6 +323,14 @@ export const api = {
       req<{ names: string[]; cached: boolean; warning?: string }>(`/recyclarr/trash-cf-names?service=${service}`),
     resetConfig: () => req<{ ok: boolean }>('/recyclarr/reset', { method: 'POST', body: JSON.stringify({}) }),
     clearCache: (service: 'radarr' | 'sonarr') => req<{ ok: boolean }>(`/recyclarr/cache/${service}`, { method: 'DELETE', body: JSON.stringify({}) }),
+    listUserCfs: (service: 'radarr' | 'sonarr') =>
+      req<{ cfs: import('./types/recyclarr').UserCfFile[] }>(`/recyclarr/user-cfs/${service}`),
+    createUserCf: (service: 'radarr' | 'sonarr', data: { name: string; specifications: import('./types/recyclarr').UserCfSpecification[] }) =>
+      req<{ cf: import('./types/recyclarr').UserCfFile }>(`/recyclarr/user-cfs/${service}`, { method: 'POST', body: JSON.stringify(data) }),
+    updateUserCf: (service: 'radarr' | 'sonarr', trashId: string, data: { name: string; specifications: import('./types/recyclarr').UserCfSpecification[] }) =>
+      req<{ cf: import('./types/recyclarr').UserCfFile }>(`/recyclarr/user-cfs/${service}/${trashId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteUserCf: (service: 'radarr' | 'sonarr', trashId: string) =>
+      req<{ ok: boolean }>(`/recyclarr/user-cfs/${service}/${trashId}`, { method: 'DELETE', body: JSON.stringify({}) }),
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),
