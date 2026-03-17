@@ -301,11 +301,11 @@ function writeSettingsYml(): void {
     'resource_providers:',
     '  - name: user-cfs-radarr',
     '    type: custom-formats',
-    '    path: /recyclarr/user-cfs/radarr',
+    '    path: /config/user-cfs/radarr',
     '    service: radarr',
     '  - name: user-cfs-sonarr',
     '    type: custom-formats',
-    '    path: /recyclarr/user-cfs/sonarr',
+    '    path: /config/user-cfs/sonarr',
     '    service: sonarr',
   ].join('\n') + '\n'
   const dir = path.dirname(SETTINGS_YML_PATH)
