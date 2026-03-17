@@ -3511,7 +3511,7 @@ function buildSpecPayload(ds: DraftSpec): ArrCFSpecification {
   }
   let specValue: unknown = ds.value
   if (ds.implementation === 'ResolutionSpecification') {
-    specValue = RESOLUTION_MAP[ds.value] ?? parseInt(ds.value, 10) || 0
+    specValue = RESOLUTION_MAP[ds.value] ?? (parseInt(ds.value, 10) || 0)
   }
   return {
     name: ds.name,
