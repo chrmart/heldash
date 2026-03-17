@@ -532,7 +532,11 @@ function generateRecyclarrYaml(configs: RecyclarrConfig[], instances: ArrInstanc
         const userCfTrashIds = new Set(cfg.userCfNames.map(u => u.trash_id).filter(Boolean))
         const cleanedExcept = pc.reset_unmatched_scores_except
           .filter(e => !userCfTrashIds.has(e))
-        const allExcept = [...new Set([...cleanedExcept, ...userCfDisplayNames])]
+        const overriddenNames = cfg.scoreOverrides
+          .filter(o => o.profileTrashId === pc.trash_id)
+          .map(o => o.name)
+          .filter(Boolean)
+        const allExcept = [...new Set([...cleanedExcept, ...userCfDisplayNames, ...overriddenNames])].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
         if (allExcept.length > 0) {
           rusObj.except = allExcept
         }

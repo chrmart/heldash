@@ -2037,7 +2037,7 @@ function RecyclarrWizard({
   instances: import('../types/arr').ArrInstance[]
 }) {
   const { qualityProfiles, loadQualityProfiles } = useArrStore()
-  const { profiles, loadProfiles, saveConfig } = useRecyclarrStore()
+  const { profiles, configs, loadProfiles, saveConfig } = useRecyclarrStore()
 
   const [step, setStep] = useState(1)
   const TOTAL_STEPS = 5
@@ -2187,30 +2187,45 @@ function RecyclarrWizard({
     if (!selectedInstanceId) return
     setSaving(true)
     setSaveError(null)
+    const existing = configs.find(c => c.instanceId === selectedInstanceId)
     const userCfTrashIds = selectedUserCfs.map(ucf => ucf.trash_id)
-    const profilesConfig: import('../types/recyclarr').RecyclarrProfileConfig[] = selectedProfileObjs.map(p => ({
+    const newProfilesConfig: import('../types/recyclarr').RecyclarrProfileConfig[] = selectedProfileObjs.map(p => ({
       trash_id: p.trash_id,
       name: p.name,
       min_format_score: minScores[p.trash_id] ? parseInt(minScores[p.trash_id], 10) : undefined,
       reset_unmatched_scores_enabled: true,
       reset_unmatched_scores_except: userCfTrashIds,
     }))
-    const userCfNames = selectedUserCfs.map(ucf => ({
+    const newUserCfNames = selectedUserCfs.map(ucf => ({
       trash_id: ucf.trash_id,
       name: ucf.name,
       score: ucf.score,
       profileTrashId: '',
       profileName: '',
     }))
+    // Merge with existing config (append new, keep existing — no overwrites)
+    const mergedSelectedProfiles = existing
+      ? [...new Set([...existing.selectedProfiles, ...selectedProfileTrashIds])]
+      : selectedProfileTrashIds
+    const mergedProfilesConfig = existing
+      ? [...existing.profilesConfig, ...newProfilesConfig.filter(np => !existing.profilesConfig.some(ep => ep.trash_id === np.trash_id))]
+      : newProfilesConfig
+    const mergedUserCfNames = existing
+      ? [...existing.userCfNames, ...newUserCfNames.filter(nu => !existing.userCfNames.some(eu => eu.trash_id === nu.trash_id))]
+      : newUserCfNames
+    const mergedScoreOverrides = existing ? existing.scoreOverrides : []
+    const mergedSchedule = (existing?.syncSchedule && existing.syncSchedule !== 'manual')
+      ? existing.syncSchedule
+      : buildScheduleStr()
     try {
       await saveConfig(selectedInstanceId, {
         enabled: true,
-        selectedProfiles: selectedProfileTrashIds,
-        scoreOverrides: [],
-        userCfNames,
+        selectedProfiles: mergedSelectedProfiles,
+        scoreOverrides: mergedScoreOverrides,
+        userCfNames: mergedUserCfNames,
         preferredRatio,
-        profilesConfig,
-        syncSchedule: buildScheduleStr(),
+        profilesConfig: mergedProfilesConfig,
+        syncSchedule: mergedSchedule,
         deleteOldCfs,
       })
       onClose()
@@ -2257,11 +2272,19 @@ function RecyclarrWizard({
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{inst.url}</span>
             </label>
           ))}
-          {selectedInstanceId && (
-            <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'rgba(var(--accent-rgb), 0.06)', border: '1px solid rgba(var(--accent-rgb), 0.2)' }}>
-              <span className="badge-success" style={{ fontSize: 11 }}>Verbindung bereits konfiguriert — API Key wird automatisch übernommen</span>
-            </div>
-          )}
+          {selectedInstanceId && (() => {
+            const existingCfg = configs.find(c => c.instanceId === selectedInstanceId)
+            return (
+              <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'rgba(var(--accent-rgb), 0.06)', border: '1px solid rgba(var(--accent-rgb), 0.2)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span className="badge-success" style={{ fontSize: 11 }}>Verbindung bereits konfiguriert — API Key wird automatisch übernommen</span>
+                {existingCfg && (
+                  <span className="badge-neutral" style={{ fontSize: 11 }}>
+                    {existingCfg.selectedProfiles.length} Profile konfiguriert — Wizard ergänzt bestehende Konfiguration
+                  </span>
+                )}
+              </div>
+            )
+          })()}
         </div>
       )
 
@@ -2389,7 +2412,7 @@ function RecyclarrWizard({
           )}
           {!userCfsLoading && userCfList.length > 0 && (
             <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {userCfList.map(cf => {
+              {[...userCfList].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())).map(cf => {
                 const selected = selectedUserCfs.find(u => u.trash_id === cf.trash_id)
                 const checked = !!selected
                 return (
@@ -2683,6 +2706,12 @@ function RecyclarrTab() {
   // Active profile tab for score overrides
   const [activeScoreProfileId, setActiveScoreProfileId] = useState('')
 
+  // Profile Management section state
+  const [activePmProfileId, setActivePmProfileId] = useState('')
+  const [userCfsFromFs, setUserCfsFromFs] = useState<import('../types/recyclarr').UserCfFile[]>([])
+  const [userCfsFromFsLoading, setUserCfsFromFsLoading] = useState(false)
+  const [pmScoreSearch, setPmScoreSearch] = useState('')
+
   // User CFs add form
   const [newCfName, setNewCfName] = useState('')
   const [newCfScore, setNewCfScore] = useState('0')
@@ -2713,11 +2742,16 @@ function RecyclarrTab() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Auto-load profiles + CFs when instance type is known
+  // Auto-load profiles + CFs when instance type is known; also load user CFs from filesystem
   useEffect(() => {
     if (!instType) return
     if ((profiles[instType] ?? []).length === 0) loadProfiles(instType).catch(() => {})
     if ((cfs[instType] ?? []).length === 0) loadCfs(instType).catch(() => {})
+    setUserCfsFromFsLoading(true)
+    import('../api').then(({ api }) => api.recyclarr.listUserCfs(instType!))
+      .then(res => setUserCfsFromFs(res.cfs))
+      .catch(() => {})
+      .finally(() => setUserCfsFromFsLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instType])
 
@@ -2762,17 +2796,29 @@ function RecyclarrTab() {
     setNewExceptInputs({})
     setScoreSearch('')
     setShowOnlyOverridden(false)
+    setPmScoreSearch('')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId, configs])
 
-  // Sync active score profile tab when selected profiles change
+  // Sync active score profile tab and PM profile tab when selected profiles change
   useEffect(() => {
     if (localSelectedProfiles.length > 0 && (!activeScoreProfileId || !localSelectedProfiles.includes(activeScoreProfileId))) {
       setActiveScoreProfileId(localSelectedProfiles[0] ?? '')
     }
+    if (localSelectedProfiles.length > 0 && (!activePmProfileId || !localSelectedProfiles.includes(activePmProfileId))) {
+      setActivePmProfileId(localSelectedProfiles[0] ?? '')
+    }
   }, [localSelectedProfiles]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedProfileObjs = instProfiles.filter(p => localSelectedProfiles.includes(p.trash_id))
+
+  // Unsaved indicator for Profile Management section
+  const pmUnsaved = useMemo(() => {
+    const cfg = configs.find(c => c.instanceId === instanceId)
+    if (!cfg) return false
+    return JSON.stringify(cfg.userCfNames ?? []) !== JSON.stringify(localUserCfs) ||
+      JSON.stringify(cfg.scoreOverrides ?? []) !== JSON.stringify(localScoreOverrides)
+  }, [configs, instanceId, localUserCfs, localScoreOverrides])
 
   // Profile config helpers (keyed by trash_id)
   const getProfileConfig = (trashId: string): import('../types/recyclarr').RecyclarrProfileConfig =>
@@ -2913,12 +2959,12 @@ function RecyclarrTab() {
     fontFamily: 'var(--font-sans)',
   }
 
-  // Filtered CFs for score override table
+  // Filtered CFs for score override table (sorted A→Z)
   const filteredCfs = useMemo(() => {
     let list = instCfs
     if (scoreSearch) list = list.filter(cf => cf.name.toLowerCase().includes(scoreSearch.toLowerCase()))
     if (showOnlyOverridden) list = list.filter(cf => localScoreOverrides.some(o => o.trash_id === cf.trash_id))
-    return list
+    return [...list].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
   }, [instCfs, scoreSearch, showOnlyOverridden, localScoreOverrides])
 
   if (radarrSonarrInstances.length === 0) {
@@ -3197,6 +3243,172 @@ function RecyclarrTab() {
               </div>
             )}
           </div>
+
+          {/* ─ Profile Management section ─ */}
+          {isAdmin && localSelectedProfiles.length > 0 && (
+            <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h4 style={{ fontSize: 14, fontWeight: 600, margin: 0, flex: 1 }}>Profile Management</h4>
+                {pmUnsaved && <span className="badge badge-warning" style={{ fontSize: 10 }}>Unsaved changes</span>}
+                <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving} style={{ fontSize: 12, gap: 4 }}>
+                  <Check size={12} />
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+
+              {/* Profile tabs */}
+              {selectedProfileObjs.length > 1 && (
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {selectedProfileObjs.map(p => (
+                    <button
+                      key={p.trash_id}
+                      onClick={() => setActivePmProfileId(p.trash_id)}
+                      style={{
+                        padding: '5px 14px', borderRadius: 'var(--radius-md)', fontSize: 12, cursor: 'pointer',
+                        background: activePmProfileId === p.trash_id ? 'rgba(var(--accent-rgb), 0.12)' : 'transparent',
+                        color: activePmProfileId === p.trash_id ? 'var(--accent)' : 'var(--text-secondary)',
+                        border: activePmProfileId === p.trash_id ? '1px solid rgba(var(--accent-rgb), 0.25)' : '1px solid rgba(var(--border-rgb), 0.2)',
+                        transition: 'all 150ms ease',
+                      }}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {activePmProfileId && (
+                <>
+                  {/* User CFs subsection */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>User CFs</div>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+                      Eigene CFs aus dem Filesystem — Checkbox = aktiv für dieses Profil.
+                    </p>
+                    {userCfsFromFsLoading ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Lade User CFs…</span>
+                      </div>
+                    ) : userCfsFromFs.length === 0 ? (
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                        Keine User CFs gefunden. Erstelle sie im CF Manager Tab.
+                      </p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {(() => {
+                          const activePmProfileName = selectedProfileObjs.find(p => p.trash_id === activePmProfileId)?.name ?? ''
+                          return [...userCfsFromFs]
+                            .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+                            .map(cf => {
+                              const entry = localUserCfs.find(u => u.trash_id === cf.trash_id && u.profileTrashId === activePmProfileId)
+                              const checked = !!entry
+                              return (
+                                <div key={cf.trash_id} style={{
+                                  display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                                  background: checked ? 'rgba(var(--accent-rgb), 0.06)' : 'rgba(var(--text-rgb), 0.03)',
+                                  borderRadius: 'var(--radius-sm)',
+                                  border: checked ? '1px solid rgba(var(--accent-rgb), 0.2)' : '1px solid transparent',
+                                }}>
+                                  <input type="checkbox" checked={checked} onChange={e => {
+                                    if (e.target.checked) {
+                                      setLocalUserCfs(prev => [...prev, {
+                                        trash_id: cf.trash_id,
+                                        name: cf.name,
+                                        score: 0,
+                                        profileTrashId: activePmProfileId,
+                                        profileName: activePmProfileName,
+                                      }])
+                                    } else {
+                                      setLocalUserCfs(prev => prev.filter(u => !(u.trash_id === cf.trash_id && u.profileTrashId === activePmProfileId)))
+                                    }
+                                  }} />
+                                  <span style={{ flex: 1, fontSize: 13 }}>{cf.name}</span>
+                                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{cf.trash_id}</span>
+                                  {checked && (
+                                    <input
+                                      type="number"
+                                      value={entry.score}
+                                      onChange={e => setLocalUserCfs(prev => prev.map(u =>
+                                        u.trash_id === cf.trash_id && u.profileTrashId === activePmProfileId
+                                          ? { ...u, score: parseInt(e.target.value, 10) || 0 }
+                                          : u
+                                      ))}
+                                      style={{ width: 70, textAlign: 'right', background: 'rgba(var(--text-rgb), 0.06)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: 12, color: 'var(--text-primary)' }}
+                                    />
+                                  )}
+                                </div>
+                              )
+                            })
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Score Overrides subsection */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Score Overrides</div>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+                      TRaSH Custom Format Scores für dieses Profil überschreiben. Leer = TRaSH-Standard.
+                    </p>
+                    {instCfs.length === 0 ? (
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                        {loading ? 'Lade CFs…' : 'Keine TRaSH CFs verfügbar.'}
+                      </p>
+                    ) : (
+                      <>
+                        <input
+                          value={pmScoreSearch}
+                          onChange={e => setPmScoreSearch(e.target.value)}
+                          placeholder="Suchen…"
+                          style={{ ...sStyle, maxWidth: 280 }}
+                        />
+                        <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                                <th style={{ textAlign: 'left', padding: '5px 8px', color: 'var(--text-muted)', fontWeight: 500 }}>Name</th>
+                                <th style={{ textAlign: 'right', padding: '5px 8px', color: 'var(--text-muted)', fontWeight: 500, width: 110 }}>Override Score</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[...instCfs]
+                                .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+                                .filter(cf => !pmScoreSearch || cf.name.toLowerCase().includes(pmScoreSearch.toLowerCase()))
+                                .map(cf => {
+                                  const override = localScoreOverrides.find(o => o.trash_id === cf.trash_id && o.profileTrashId === activePmProfileId)
+                                  return (
+                                    <tr key={cf.trash_id} style={{ borderBottom: '1px solid rgba(var(--text-rgb), 0.05)', background: override ? 'rgba(var(--accent-rgb), 0.04)' : 'transparent' }}>
+                                      <td style={{ padding: '5px 8px', color: 'var(--text-primary)' }}>{cf.name}</td>
+                                      <td style={{ padding: '5px 8px', textAlign: 'right' }}>
+                                        <input
+                                          type="number"
+                                          value={override?.score ?? ''}
+                                          placeholder="—"
+                                          onChange={e => {
+                                            const val = e.target.value
+                                            setLocalScoreOverrides(prev => {
+                                              const filtered = prev.filter(o => !(o.trash_id === cf.trash_id && o.profileTrashId === activePmProfileId))
+                                              if (val === '') return filtered
+                                              return [...filtered, { trash_id: cf.trash_id, name: cf.name, score: parseInt(val, 10) || 0, profileTrashId: activePmProfileId }]
+                                            })
+                                          }}
+                                          style={{ width: 70, textAlign: 'right', background: 'rgba(var(--text-rgb), 0.06)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '3px 6px', fontSize: 12, color: 'var(--text-primary)' }}
+                                        />
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* ─ Section B: Score Overrides ─ */}
           <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -3773,7 +3985,9 @@ function CfManagerTab() {
     loadUserCfs(service)
   }, [service]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filteredCfs = userCfs.filter(cf => cf.name.toLowerCase().includes(cfSearch.toLowerCase()))
+  const filteredCfs = userCfs
+    .filter(cf => cf.name.toLowerCase().includes(cfSearch.toLowerCase()))
+    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
