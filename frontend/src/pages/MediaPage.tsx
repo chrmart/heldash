@@ -2647,7 +2647,7 @@ function RecyclarrTab() {
   const {
     profiles, cfs, profilesWarning, cfsWarning,
     configs, syncLines, syncDone, syncing, loading,
-    loadProfiles, loadCfs, loadConfigs, saveConfig, sync, clearCache, resetConfig,
+    loadProfiles, loadCfs, loadConfigs, saveConfig, sync, adoptCfs, clearCache, resetConfig,
   } = useRecyclarrStore()
   const syncExitCode = syncDone ? (syncLines.some(l => l.type === 'error') ? 1 : 0) : null
 
@@ -2693,6 +2693,10 @@ function RecyclarrTab() {
   const [scheduleTime, setScheduleTime] = useState('04:00')
   const [scheduleWeekday, setScheduleWeekday] = useState('1')
   const [scheduleCustom, setScheduleCustom] = useState('')
+
+  // Adopt state
+  const [adopting, setAdopting] = useState(false)
+  const [adoptResult, setAdoptResult] = useState<{ ok: boolean; output: string } | null>(null)
 
   // Sync output scroll ref
   const syncOutputRef = useRef<HTMLPreElement>(null)
@@ -2836,21 +2840,22 @@ function RecyclarrTab() {
   const handleAddUserCf = () => {
     if (!newCfName.trim()) return
     const cfNameTrimmed = newCfName.trim()
+    const cfTrashId = 'user-' + cfNameTrimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
     const profName = instProfiles.find(p => p.trash_id === newCfProfileTrashId)?.name ?? ''
-    setLocalUserCfs(prev => [...prev, { name: cfNameTrimmed, score: parseInt(newCfScore, 10) || 0, profileTrashId: newCfProfileTrashId, profileName: profName }])
-    // Auto-protect: add CF name to all selected profiles' except list
+    setLocalUserCfs(prev => [...prev, { trash_id: cfTrashId, name: cfNameTrimmed, score: parseInt(newCfScore, 10) || 0, profileTrashId: newCfProfileTrashId, profileName: profName }])
+    // Auto-protect: add CF trash_id to all selected profiles' except list
     setLocalProfilesConfig(prev => {
       const existingTrashIds = new Set(prev.map(pc => pc.trash_id))
       const updated = prev.map(pc => {
-        if (!pc.reset_unmatched_scores_except.includes(cfNameTrimmed)) {
-          return { ...pc, reset_unmatched_scores_except: [...pc.reset_unmatched_scores_except, cfNameTrimmed] }
+        if (!pc.reset_unmatched_scores_except.includes(cfTrashId)) {
+          return { ...pc, reset_unmatched_scores_except: [...pc.reset_unmatched_scores_except, cfTrashId] }
         }
         return pc
       })
       for (const tid of localSelectedProfiles) {
         if (!existingTrashIds.has(tid)) {
           const name = instProfiles.find(p => p.trash_id === tid)?.name ?? tid
-          updated.push({ trash_id: tid, name, reset_unmatched_scores_enabled: true, reset_unmatched_scores_except: [cfNameTrimmed] })
+          updated.push({ trash_id: tid, name, reset_unmatched_scores_enabled: true, reset_unmatched_scores_except: [cfTrashId] })
         }
       }
       return updated
@@ -2967,15 +2972,23 @@ function RecyclarrTab() {
             <span className="badge-neutral" style={{ fontSize: 10 }}>Synchronisiert alle konfigurierten Instanzen gleichzeitig</span>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <button className="btn btn-primary btn-sm" onClick={() => sync(undefined)} disabled={syncing} style={{ fontSize: 12, gap: 4 }}>
+            <button className="btn btn-primary btn-sm" onClick={() => { setAdoptResult(null); sync(undefined) }} disabled={syncing || adopting} style={{ fontSize: 12, gap: 4 }}>
               {syncing ? <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <Check size={12} />}
               {syncing ? 'Syncing…' : 'Global Sync'}
             </button>
-            {instanceId && (
-              <button className="btn btn-ghost btn-sm" onClick={() => sync(instanceId)} disabled={syncing} style={{ fontSize: 12, gap: 4 }}>
-                {syncing ? <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <Check size={12} />}
-                {syncing ? 'Syncing…' : `Nur ${selectedInstance?.name ?? 'diese Instanz'}`}
-              </button>
+            <button className="btn btn-ghost btn-sm" onClick={async () => {
+              setAdopting(true)
+              setAdoptResult(null)
+              try { setAdoptResult(await adoptCfs()) } catch { setAdoptResult({ ok: false, output: 'Request failed' }) }
+              setAdopting(false)
+            }} disabled={syncing || adopting} style={{ fontSize: 12, gap: 4 }}>
+              {adopting ? <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <Check size={12} />}
+              {adopting ? 'Adopting…' : 'Adopt CFs'}
+            </button>
+            {adoptResult && (
+              adoptResult.ok
+                ? <span className="badge-success" style={{ fontSize: 11 }}>Adoption erfolgreich</span>
+                : <span className="badge-error" style={{ fontSize: 11 }}>Adoption fehlgeschlagen</span>
             )}
             {syncDone && syncExitCode !== null && (
               syncExitCode === 0

@@ -331,6 +331,7 @@ export const api = {
       req<{ cf: import('./types/recyclarr').UserCfFile }>(`/recyclarr/user-cfs/${service}/${trashId}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteUserCf: (service: 'radarr' | 'sonarr', trashId: string) =>
       req<{ ok: boolean }>(`/recyclarr/user-cfs/${service}/${trashId}`, { method: 'DELETE', body: JSON.stringify({}) }),
+    adopt: () => req<{ ok: boolean; output: string }>('/recyclarr/adopt', { method: 'POST', body: JSON.stringify({}) }),
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),

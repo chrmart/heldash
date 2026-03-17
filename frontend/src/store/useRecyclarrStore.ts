@@ -39,6 +39,7 @@ interface RecyclarrState {
     deleteOldCfs: boolean
   }) => Promise<void>
   sync: (instanceId?: string) => void
+  adoptCfs: () => Promise<{ ok: boolean; output: string }>
   resetConfig: () => Promise<void>
   clearCache: (service: 'radarr' | 'sonarr') => Promise<void>
 }
@@ -137,6 +138,10 @@ export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
       }))
       es.close()
     }
+  },
+
+  adoptCfs: async () => {
+    return api.recyclarr.adopt()
   },
 
   resetConfig: async () => {

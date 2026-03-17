@@ -801,52 +801,6 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
     return reply.send({ ok: true })
   })
 
-  // GET /api/recyclarr/sync/:instanceId  (SSE streaming)
-  app.get<{ Params: { instanceId: string } }>(
-    '/api/recyclarr/sync/:instanceId',
-    { onRequest: [app.authenticate] },
-    async (req, reply) => {
-      const { instanceId } = req.params
-      const db = getDb()
-      const inst = db.prepare('SELECT * FROM arr_instances WHERE id = ?').get(instanceId) as ArrInstanceRow | undefined
-      if (!inst) return reply.status(404).send({ error: 'Instance not found' })
-
-      const inUse = db.prepare('SELECT 1 FROM recyclarr_config WHERE is_syncing = 1').get()
-      if (inUse) return reply.status(409).send({ error: 'A sync is already running' })
-
-      db.prepare('UPDATE recyclarr_config SET is_syncing = 1 WHERE instance_id = ?').run(instanceId)
-
-      reply.hijack()
-      const raw = reply.raw
-      raw.setHeader('Content-Type', 'text/event-stream')
-      raw.setHeader('Cache-Control', 'no-cache')
-      raw.setHeader('Connection', 'keep-alive')
-      raw.flushHeaders()
-
-      const send = (line: string, type: 'stdout' | 'stderr' | 'done' | 'error') => {
-        raw.write(`data: ${JSON.stringify({ line, type })}\n\n`)
-      }
-
-      const { containerName } = getRecyclarrSettings()
-      try {
-        const exitCode = await streamingDockerExec(
-          containerName,
-          ['recyclarr', 'sync', '--app', inst.type],
-          (stream, line) => send(line, stream),
-          300_000
-        )
-        const success = exitCode === 0
-        db.prepare("UPDATE recyclarr_config SET is_syncing = 0, last_synced_at = datetime('now'), last_sync_success = ? WHERE instance_id = ?").run(success ? 1 : 0, instanceId)
-        if (success) send('Sync completed successfully', 'done')
-        else send(`Sync failed with exit code ${exitCode}`, 'error')
-      } catch (e) {
-        db.prepare('UPDATE recyclarr_config SET is_syncing = 0 WHERE instance_id = ?').run(instanceId)
-        send(e instanceof Error ? e.message : 'Sync error', 'error')
-      }
-      raw.end()
-    }
-  )
-
   // GET /api/recyclarr/global-sync  (SSE streaming)
   app.get('/api/recyclarr/global-sync', { onRequest: [app.authenticate] }, async (req, reply) => {
     const db = getDb()
@@ -867,12 +821,40 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
     db.prepare('UPDATE recyclarr_config SET is_syncing = 1 WHERE enabled = 1').run()
     const { containerName } = getRecyclarrSettings()
     try {
-      const exitCode = await streamingDockerExec(
+      const collectedLines: string[] = []
+      let exitCode = await streamingDockerExec(
         containerName,
         ['recyclarr', 'sync'],
-        (stream, line) => send(line, stream),
+        (stream, line) => { send(line, stream); collectedLines.push(line) },
         300_000
       )
+
+      // Auto-adopt: if sync fails and output mentions existing CFs conflict
+      if (exitCode !== 0) {
+        const combined = collectedLines.join('\n')
+        if (combined.includes('state repair --adopt') || combined.includes('already exist')) {
+          send('Auto-adopting existing custom formats…', 'stdout')
+          try {
+            const adoptResult = await dockerExecInContainer(
+              containerName, ['recyclarr', 'state', 'repair', '--adopt'], 60_000
+            )
+            const adoptOutput = (adoptResult.stdout + adoptResult.stderr).trim()
+            if (adoptOutput) send(adoptOutput, 'stdout')
+            if (adoptResult.exitCode === 0) {
+              send('Retrying sync after adoption…', 'stdout')
+              exitCode = await streamingDockerExec(
+                containerName,
+                ['recyclarr', 'sync'],
+                (stream, line) => send(line, stream),
+                300_000
+              )
+            }
+          } catch (adoptError) {
+            send(`Adoption failed: ${adoptError instanceof Error ? adoptError.message : String(adoptError)}`, 'stderr')
+          }
+        }
+      }
+
       const success = exitCode === 0
       db.prepare("UPDATE recyclarr_config SET is_syncing = 0, last_synced_at = datetime('now'), last_sync_success = ? WHERE enabled = 1").run(success ? 1 : 0)
       if (success) send('Global sync completed successfully', 'done')
@@ -963,6 +945,19 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       }
     }
   )
+
+  // POST /api/recyclarr/adopt
+  app.post('/api/recyclarr/adopt', { onRequest: [app.requireAdmin] }, async (req, reply) => {
+    const { containerName } = getRecyclarrSettings()
+    try {
+      const { exitCode, stdout, stderr } = await dockerExecInContainer(
+        containerName, ['recyclarr', 'state', 'repair', '--adopt'], 60_000
+      )
+      return reply.send({ ok: exitCode === 0, output: stdout + stderr })
+    } catch (e) {
+      return reply.status(500).send({ error: e instanceof Error ? e.message : 'Adopt failed' })
+    }
+  })
 
   // ── User CF filesystem routes ───────────────────────────────────────────────
 
