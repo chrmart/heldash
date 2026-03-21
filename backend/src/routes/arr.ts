@@ -626,6 +626,12 @@ export async function arrRoutes(app: FastifyInstance) {
         } catch { /* best-effort file write */ }
         return reply.status(201).send(cf)
       } catch (e: unknown) {
+        app.log.error({
+          error: (e as Error).message,
+          stack: (e as Error).stack,
+          instanceId: req.params.id,
+          body: req.body,
+        }, 'Custom format create failed')
         return reply.status(502).send({ error: 'Upstream error', detail: (e as Error).message })
       }
     }
