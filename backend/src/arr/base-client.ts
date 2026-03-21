@@ -127,6 +127,10 @@ export class ArrBaseClient {
     return this.get<unknown[]>('customformat')
   }
 
+  getCustomFormatSchema(): Promise<unknown[]> {
+    return this.get<unknown[]>('customformat/schema')
+  }
+
   createCustomFormat(data: unknown): Promise<unknown> {
     return this.post<unknown>('customformat', data)
   }

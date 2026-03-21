@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { api } from '../api'
-import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequestsResponse, RadarrMovie, SonarrSeries, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile } from '../types/arr'
+import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequestsResponse, RadarrMovie, SonarrSeries, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile, ArrCFSchema } from '../types/arr'
 import type { SeerrMediaSeasonStatus } from '../types/seerr'
+import type { UserCfFile } from '../types/recyclarr'
 
 interface ArrState {
   instances: ArrInstance[]
@@ -40,13 +41,17 @@ interface ArrState {
   customFormats: Record<string, ArrCustomFormat[]>
   qualityProfiles: Record<string, ArrQualityProfile[]>
   cfLoading: Record<string, boolean>
+  cfSchemas: Record<string, ArrCFSchema[]>
+  userCfFiles: Record<string, UserCfFile[]>
 
   loadCustomFormats: (instanceId: string) => Promise<void>
   loadQualityProfiles: (instanceId: string) => Promise<void>
-  createCustomFormat: (instanceId: string, data: { name: string; includeCustomFormatWhenRenaming?: boolean; specifications: ArrCFSpecification[] }) => Promise<ArrCustomFormat>
-  updateCustomFormat: (instanceId: string, cfId: number, data: { name: string; includeCustomFormatWhenRenaming?: boolean; specifications: ArrCFSpecification[] }) => Promise<void>
-  deleteCustomFormat: (instanceId: string, cfId: number) => Promise<void>
+  createCustomFormat: (instanceId: string, data: { name: string; trash_id?: string; includeCustomFormatWhenRenaming?: boolean; specifications: ArrCFSpecification[] }) => Promise<ArrCustomFormat>
+  updateCustomFormat: (instanceId: string, cfId: number, data: { name: string; trash_id?: string; includeCustomFormatWhenRenaming?: boolean; specifications: ArrCFSpecification[] }) => Promise<void>
+  deleteCustomFormat: (instanceId: string, cfId: number, trashId?: string) => Promise<void>
   updateProfileScores: (instanceId: string, profileId: number, scores: { formatId: number; score: number }[]) => Promise<void>
+  loadCfSchema: (instanceId: string) => Promise<void>
+  loadUserCfFiles: (service: 'radarr' | 'sonarr') => Promise<void>
 
   createInstance: (data: { type: string; name: string; url: string; api_key: string }) => Promise<string>
   updateInstance: (id: string, data: { name?: string; url?: string; api_key?: string; enabled?: boolean; position?: number }) => Promise<void>
@@ -71,6 +76,8 @@ export const useArrStore = create<ArrState>((set, get) => ({
   customFormats: {},
   qualityProfiles: {},
   cfLoading: {},
+  cfSchemas: {},
+  userCfFiles: {},
 
   loadInstances: async () => {
     const instances = await api.arr.instances.list()
@@ -220,8 +227,19 @@ export const useArrStore = create<ArrState>((set, get) => ({
     await api.arr.customFormats.update(instanceId, cfId, data)
   },
 
-  deleteCustomFormat: async (instanceId, cfId) => {
-    await api.arr.customFormats.delete(instanceId, cfId)
+  deleteCustomFormat: async (instanceId, cfId, trashId) => {
+    await api.arr.customFormats.delete(instanceId, cfId, trashId)
+  },
+
+  loadCfSchema: async (instanceId) => {
+    if (get().cfSchemas[instanceId]) return
+    const schema = await api.arr.cfSchema(instanceId)
+    set(s => ({ cfSchemas: { ...s.cfSchemas, [instanceId]: schema } }))
+  },
+
+  loadUserCfFiles: async (service) => {
+    const res = await api.recyclarr.listUserCfs(service)
+    set(s => ({ userCfFiles: { ...s.userCfFiles, [service]: res.cfs } }))
   },
 
   updateProfileScores: async (instanceId, profileId, scores) => {
@@ -271,6 +289,7 @@ export const useArrStore = create<ArrState>((set, get) => ({
       customFormats: Object.fromEntries(Object.entries(state.customFormats).filter(([k]) => k !== id)),
       qualityProfiles: Object.fromEntries(Object.entries(state.qualityProfiles).filter(([k]) => k !== id)),
       cfLoading: Object.fromEntries(Object.entries(state.cfLoading).filter(([k]) => k !== id)),
+      cfSchemas: Object.fromEntries(Object.entries(state.cfSchemas).filter(([k]) => k !== id)),
     }))
   },
 }))

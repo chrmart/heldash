@@ -10,7 +10,8 @@ import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sort
 import { arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, Compass, Database, AlertTriangle, Sliders, Plus, ChevronDown, ChevronRight, Clock, Shield } from 'lucide-react'
-import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrStats, ArrCFSpecification, RadarrMovie, SonarrSeries } from '../types/arr'
+import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrStats, ArrCFSpecification, ArrCustomFormat, ArrCFSchema, ArrCFSchemaField, RadarrMovie, SonarrSeries } from '../types/arr'
+import type { UserCfFile } from '../types/recyclarr'
 import type { TmdbResult, TmdbFilters, TmdbDiscoverFilters } from '../types/tmdb'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
 // ── Tab type ──────────────────────────────────────────────────────────────────
@@ -3638,311 +3639,444 @@ function RecyclarrTab() {
 
 // ── CF Manager helpers ─────────────────────────────────────────────────────────
 
-const SPEC_TYPE_NAMES: Record<string, string> = {
-  ReleaseTitleSpecification: 'Release Titel',
-  LanguageSpecification: 'Sprache',
-  QualityModifierSpecification: 'Qualitäts-Modifier',
-  SizeSpecification: 'Dateigröße',
-  IndexerFlagSpecification: 'Indexer Flag',
-  SourceSpecification: 'Quelle',
-  ResolutionSpecification: 'Auflösung',
-  ReleaseGroupSpecification: 'Release-Gruppe',
-}
-
-const KNOWN_SPEC_IMPLS = new Set(Object.keys(SPEC_TYPE_NAMES))
-
 interface DraftSpec {
-  name: string
   implementation: string
+  implementationName: string
+  name: string
   negate: boolean
   required: boolean
-  value: string
-  isUnknown: boolean
-  rawJson: string
-  originalFields: { name: string; value: unknown }[]
+  fields: Array<{ name: string; value: unknown }>
 }
 
-function initDraftSpec(): DraftSpec {
+function initDraftSpec(schema: ArrCFSchema[]): DraftSpec {
+  const first = schema[0]
   return {
+    implementation: first?.implementation ?? 'ReleaseTitleSpecification',
+    implementationName: first?.implementationName ?? 'Release Title',
     name: '',
-    implementation: 'ReleaseTitleSpecification',
     negate: false,
     required: false,
-    value: '',
-    isUnknown: false,
-    rawJson: '[]',
-    originalFields: [],
+    fields: [],
   }
-}
-
-const RESOLUTION_REVERSE_MAP: Record<number, string> = {
-  360: 'R360p', 480: 'R480p', 540: 'R540p', 576: 'R576p',
-  720: 'R720p', 1080: 'R1080p', 2160: 'R2160p',
 }
 
 function toDraftSpec(spec: ArrCFSpecification): DraftSpec {
-  const isUnknown = !KNOWN_SPEC_IMPLS.has(spec.implementation)
-  // fields may be array (Radarr API / old format) or object (new file format)
   const fields = spec.fields as unknown
-  let value = ''
+  let normalizedFields: Array<{ name: string; value: unknown }>
   if (Array.isArray(fields)) {
-    const valueField = (fields as { name: string; value: unknown }[]).find(f => f.name === 'value')
-    value = valueField == null ? '' : typeof valueField.value === 'string' ? valueField.value : String(valueField.value)
+    normalizedFields = fields as Array<{ name: string; value: unknown }>
   } else if (fields && typeof fields === 'object') {
-    const v = (fields as Record<string, unknown>).value
-    value = v == null ? '' : typeof v === 'string' ? v : String(v)
+    normalizedFields = Object.entries(fields as Record<string, unknown>).map(([n, v]) => ({ name: n, value: v }))
+  } else {
+    normalizedFields = []
   }
-  if (spec.implementation === 'ResolutionSpecification') {
-    value = RESOLUTION_REVERSE_MAP[Number(value)] ?? value
+  return {
+    implementation: spec.implementation,
+    implementationName: spec.implementationName ?? spec.implementation,
+    name: spec.name,
+    negate: spec.negate,
+    required: spec.required,
+    fields: normalizedFields,
   }
+}
+
+function buildSpecPayload(spec: DraftSpec): ArrCFSpecification {
   return {
     name: spec.name,
     implementation: spec.implementation,
+    implementationName: spec.implementationName,
     negate: spec.negate,
     required: spec.required,
-    value,
-    isUnknown,
-    rawJson: isUnknown ? JSON.stringify(spec.fields, null, 2) : '[]',
-    originalFields: Array.isArray(fields) ? (fields as { name: string; value: unknown }[]) : [],
+    fields: spec.fields as { name: string; value: unknown }[],
   }
 }
 
-const RESOLUTION_MAP: Record<string, number> = {
-  R360p: 360, R480p: 480, R540p: 540, R576p: 576,
-  R720p: 720, R1080p: 1080, R2160p: 2160,
+function toUserSlug(name: string): string {
+  return 'user-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
-function buildSpecPayload(ds: DraftSpec): ArrCFSpecification {
-  if (ds.isUnknown) {
-    let fields: Record<string, unknown> = {}
-    try {
-      const arr = JSON.parse(ds.rawJson) as { name: string; value: unknown }[]
-      fields = Object.fromEntries(arr.map(f => [f.name, f.value]))
-    } catch { fields = {} }
-    return { name: ds.name, implementation: ds.implementation, implementationName: ds.implementation, negate: ds.negate, required: ds.required, fields: fields as unknown as { name: string; value: unknown }[] }
+function renderSpecField(
+  fieldDef: ArrCFSchemaField,
+  value: unknown,
+  onChange: (v: unknown) => void,
+) {
+  if (fieldDef.type === 'select' && fieldDef.selectOptions) {
+    const numVal = typeof value === 'number' ? value : (fieldDef.selectOptions[0]?.value ?? 0)
+    return (
+      <select
+        className="form-input"
+        value={numVal}
+        style={{ fontSize: 12, width: '100%', boxSizing: 'border-box' }}
+        onChange={e => onChange(parseInt(e.target.value, 10))}
+      >
+        {fieldDef.selectOptions.map(opt => (
+          <option key={opt.value} value={opt.value}>{opt.name}</option>
+        ))}
+      </select>
+    )
   }
-  let specValue: unknown = ds.value
-  if (ds.implementation === 'ResolutionSpecification') {
-    specValue = RESOLUTION_MAP[ds.value] ?? (parseInt(ds.value, 10) || 0)
+  if (fieldDef.type === 'number') {
+    return (
+      <input
+        type="number"
+        className="form-input"
+        style={{ fontSize: 12, width: '100%', boxSizing: 'border-box' }}
+        value={typeof value === 'number' ? value : 0}
+        onChange={e => onChange(parseFloat(e.target.value) || 0)}
+      />
+    )
   }
-  return {
-    name: ds.name,
-    implementation: ds.implementation,
-    implementationName: SPEC_TYPE_NAMES[ds.implementation] ?? ds.implementation,
-    negate: ds.negate,
-    required: ds.required,
-    fields: { value: specValue } as unknown as { name: string; value: unknown }[],
-  }
+  const isRegex = /regex|expression/i.test(fieldDef.label)
+  return (
+    <input
+      type="text"
+      className="form-input"
+      style={{ fontSize: 12, width: '100%', boxSizing: 'border-box', fontFamily: isRegex ? 'var(--font-mono)' : undefined }}
+      value={typeof value === 'string' ? value : String(value ?? '')}
+      onChange={e => onChange(e.target.value)}
+      placeholder={isRegex ? 'Regex (z.B. \\bx265\\b)' : fieldDef.label}
+    />
+  )
 }
 
 // ── User CF Row ────────────────────────────────────────────────────────────────
 
 function UserCfRow({
   cf,
+  inUse,
+  notInArr,
   isAdmin,
+  confirmingDelete,
+  deleteError,
   onEdit,
-  onDelete,
+  onDeleteRequest,
+  onDeleteConfirm,
+  onDeleteCancel,
 }: {
-  cf: import('../types/recyclarr').UserCfFile
+  cf: UserCfFile
+  inUse: boolean
+  notInArr: boolean
   isAdmin: boolean
+  confirmingDelete: boolean
+  deleteError: string | null
   onEdit: () => void
-  onDelete: () => void
+  onDeleteRequest: () => void
+  onDeleteConfirm: () => void
+  onDeleteCancel: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   return (
     <div
+      className="glass"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0 12px',
-        padding: '8px 12px', borderRadius: 'var(--radius-sm)', alignItems: 'center',
-        background: hovered ? 'rgba(var(--text-rgb), 0.04)' : 'transparent',
-        transition: 'background 100ms ease',
-      }}
+      style={{ borderRadius: 'var(--radius-md)', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}
     >
-      <span style={{ fontSize: 13, fontWeight: 500 }}>{cf.name}</span>
-      <span className="badge-neutral" style={{ fontSize: 11, textAlign: 'center' }}>{cf.specifications.length}</span>
-      <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{cf.trash_id}</span>
-      <div style={{ display: 'flex', gap: 4, opacity: hovered && isAdmin ? 1 : 0, transition: 'opacity 150ms ease' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontWeight: 600, fontSize: 13, fontFamily: 'var(--font-sans)', flex: 1 }}>{cf.name}</span>
+        <span className="badge-neutral" style={{ fontSize: 11 }}>{cf.specifications.length} Conditions</span>
+        {notInArr && <span className="badge-neutral" style={{ fontSize: 11 }}>Nicht in Arr</span>}
         {isAdmin && (
-          <>
-            <button onClick={onEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+          <div style={{ display: 'flex', gap: 4, opacity: hovered ? 1 : 0, transition: 'opacity var(--transition-fast)' }}>
+            <button
+              onClick={onEdit}
+              disabled={notInArr}
+              style={{ background: 'none', border: 'none', cursor: notInArr ? 'not-allowed' : 'pointer', color: 'var(--text-muted)', padding: 4 }}
+            >
               <Pencil size={12} />
             </button>
-            <button onClick={onDelete} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', padding: 4 }}>
+            <button onClick={onDeleteRequest} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
               <Trash2 size={12} />
             </button>
-          </>
+          </div>
         )}
       </div>
+      {confirmingDelete && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {inUse ? (
+            <span className="badge-error" style={{ fontSize: 11 }}>In Recyclarr aktiv — zuerst im Recyclarr-Tab entfernen</span>
+          ) : (
+            <>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Wirklich löschen?</span>
+              <button
+                onClick={onDeleteConfirm}
+                className="btn btn-sm"
+                style={{ fontSize: 11, padding: '2px 8px', background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}
+              >Ja</button>
+              <button onClick={onDeleteCancel} className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}>Nein</button>
+            </>
+          )}
+          {deleteError && !inUse && <span className="badge-error" style={{ fontSize: 11 }}>{deleteError}</span>}
+        </div>
+      )}
     </div>
   )
 }
 
-// ── User CF Edit Modal ─────────────────────────────────────────────────────────
+// ── CF Edit Modal ─────────────────────────────────────────────────────────────
 
-function UserCfEditModal({
+function CfEditModal({
   initial,
+  initialTrashId,
+  schema,
   onClose,
   onSave,
+  onSwitchToRecyclarr,
 }: {
-  initial: import('../types/recyclarr').UserCfFile | null
+  initial: { name: string; includeCustomFormatWhenRenaming: boolean; specifications: ArrCFSpecification[] } | null
+  initialTrashId: string | null
+  schema: ArrCFSchema[]
   onClose: () => void
-  onSave: (data: { name: string; specifications: ArrCFSpecification[] }) => Promise<void>
+  onSave: (data: { name: string; trash_id: string; includeCustomFormatWhenRenaming: boolean; specifications: ArrCFSpecification[] }) => Promise<void>
+  onSwitchToRecyclarr: () => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
+  const [renaming, setRenaming] = useState(initial?.includeCustomFormatWhenRenaming ?? false)
   const [specs, setSpecs] = useState<DraftSpec[]>(
-    initial ? initial.specifications.map(s => toDraftSpec(s as unknown as ArrCFSpecification)) : []
+    initial ? initial.specifications.map(toDraftSpec) : []
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [jsonImportOpen, setJsonImportOpen] = useState(false)
+  const [jsonText, setJsonText] = useState('')
+  const [jsonError, setJsonError] = useState<string | null>(null)
 
-  const previewTrashId = name.trim()
-    ? 'user-' + name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-    : ''
+  const isEdit = initial !== null
+  const frozenTrashId = initialTrashId
+  const displayTrashId = frozenTrashId ?? (name.trim() ? toUserSlug(name.trim()) : '')
 
   function updateSpec(idx: number, updater: (s: DraftSpec) => DraftSpec) {
     setSpecs(prev => prev.map((s, i) => i === idx ? updater(s) : s))
   }
 
+  function handleTypeChange(idx: number, impl: string) {
+    const entry = schema.find(s => s.implementation === impl)
+    updateSpec(idx, s => ({ ...s, implementation: impl, implementationName: entry?.implementationName ?? impl, fields: [] }))
+  }
+
+  function handleFieldChange(specIdx: number, fieldName: string, value: unknown) {
+    updateSpec(specIdx, s => ({
+      ...s,
+      fields: [...s.fields.filter(f => f.name !== fieldName), { name: fieldName, value }],
+    }))
+  }
+
+  function handleJsonImport() {
+    setJsonError(null)
+    try {
+      const parsed = JSON.parse(jsonText) as {
+        name?: string
+        includeCustomFormatWhenRenaming?: boolean
+        specifications?: ArrCFSpecification[]
+        trash_id?: string
+      }
+      if (parsed.name) setName(parsed.name)
+      if (parsed.includeCustomFormatWhenRenaming !== undefined) setRenaming(parsed.includeCustomFormatWhenRenaming)
+      if (Array.isArray(parsed.specifications)) setSpecs(parsed.specifications.map(toDraftSpec))
+      setJsonText('')
+      setJsonImportOpen(false)
+    } catch {
+      setJsonError('Ungültiges JSON')
+    }
+  }
+
   async function handleSave() {
     if (!name.trim()) { setError('Name ist erforderlich'); return }
+    const trashId = frozenTrashId ?? toUserSlug(name.trim())
     setSaving(true)
     setError(null)
     try {
-      await onSave({ name: name.trim(), specifications: specs.map(buildSpecPayload) })
+      await onSave({
+        name: name.trim(),
+        trash_id: trashId,
+        includeCustomFormatWhenRenaming: renaming,
+        specifications: specs.map(buildSpecPayload),
+      })
+      setSaved(true)
     } catch (e: unknown) {
       setError((e as Error).message)
       setSaving(false)
     }
   }
 
+  if (saved && !isEdit) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 16px' }}>
+        <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, width: '100%', maxWidth: 440 }}>
+          <div className="badge-success" style={{ fontSize: 13, display: 'inline-block', marginBottom: 16 }}>
+            CF erstellt — jetzt im Recyclarr-Tab einem Profil zuweisen
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={onClose} className="btn btn-ghost">Schließen</button>
+            <button onClick={() => { onClose(); onSwitchToRecyclarr() }} className="btn btn-primary">Zum Recyclarr-Tab</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '40px 16px' }}>
-      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, width: '100%', maxWidth: 580 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>
-          {initial ? 'User CF bearbeiten' : 'User CF erstellen'}
+      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, width: '100%', maxWidth: 600 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, fontFamily: 'var(--font-sans)' }}>
+          {isEdit ? 'Custom Format bearbeiten' : 'Custom Format erstellen'}
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Name */}
           <div>
-            <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Name *</label>
+            <label className="form-label">Name *</label>
             <input
+              className="form-input"
               value={name}
               onChange={e => setName(e.target.value)}
-              style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-md)', fontSize: 13, border: '1px solid rgba(var(--border-rgb), 0.2)', background: 'rgba(var(--bg-secondary-rgb), 0.5)', color: 'var(--text)', boxSizing: 'border-box' }}
+              style={{ width: '100%', boxSizing: 'border-box' }}
             />
+            {displayTrashId && (
+              <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>Trash ID:</span>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>{displayTrashId}</span>
+                {isEdit
+                  ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(unveränderlich)</span>
+                  : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(wird automatisch generiert)</span>
+                }
+              </div>
+            )}
           </div>
 
-          {previewTrashId && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>trash_id:</span>
-              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)', padding: '2px 8px', background: 'rgba(var(--accent-rgb), 0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(var(--accent-rgb), 0.2)' }}>
-                {previewTrashId}
-              </span>
-              {initial && initial.trash_id !== previewTrashId && (
-                <span style={{ fontSize: 11, color: '#f59e0b' }}>⚠ trash_id locked to: {initial.trash_id}</span>
-              )}
+          {/* includeCustomFormatWhenRenaming */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+            <div
+              onClick={() => setRenaming(v => !v)}
+              style={{
+                width: 32, height: 18, borderRadius: 9,
+                background: renaming ? 'var(--accent)' : 'rgba(var(--border-rgb), 0.5)',
+                position: 'relative', cursor: 'pointer', transition: 'background var(--transition-fast)', flexShrink: 0,
+              }}
+            >
+              <div style={{
+                position: 'absolute', top: 2, left: renaming ? 16 : 2, width: 14, height: 14,
+                borderRadius: '50%', background: 'white', transition: 'left var(--transition-fast)',
+              }} />
             </div>
-          )}
+            <span style={{ fontSize: 12, fontFamily: 'var(--font-sans)' }}>
+              Im Dateinamen verwenden (includeCustomFormatWhenRenaming)
+            </span>
+          </label>
 
+          {/* Conditions */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>Conditions</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>Conditions</span>
+                <span className="badge-neutral" style={{ fontSize: 11 }}>{specs.length}</span>
+              </div>
               <button
-                onClick={() => setSpecs(prev => [...prev, initDraftSpec()])}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, background: 'transparent', border: '1px solid rgba(var(--accent-rgb), 0.3)', color: 'var(--accent)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer' }}
+                onClick={() => setSpecs(prev => [...prev, initDraftSpec(schema)])}
+                className="btn btn-ghost"
+                style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
               >
                 <Plus size={11} /> Condition hinzufügen
               </button>
             </div>
-
             {specs.length === 0 && (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '4px 0 8px' }}>Keine Conditions definiert</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>Keine Conditions definiert</p>
             )}
-
-            {specs.map((spec, idx) => (
-              <div key={idx} style={{ background: 'rgba(var(--bg-secondary-rgb), 0.4)', borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: 8, border: '1px solid rgba(var(--border-rgb), 0.1)' }}>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-                  <select
-                    value={spec.implementation}
-                    onChange={e => {
-                      const newImpl = e.target.value
-                      updateSpec(idx, s => ({ ...s, implementation: newImpl, isUnknown: !KNOWN_SPEC_IMPLS.has(newImpl), originalFields: [] }))
-                    }}
-                    style={{ flex: 1, minWidth: 140, padding: '4px 6px', borderRadius: 'var(--radius-sm)', fontSize: 12, background: 'rgba(var(--bg-secondary-rgb), 0.8)', color: 'var(--text)', border: '1px solid rgba(var(--border-rgb), 0.2)' }}
-                  >
-                    {Object.entries(SPEC_TYPE_NAMES).map(([impl, label]) => (
-                      <option key={impl} value={impl}>{label}</option>
-                    ))}
-                    {spec.isUnknown && <option value={spec.implementation}>{spec.implementation}</option>}
-                  </select>
-                  <input
-                    value={spec.name}
-                    onChange={e => updateSpec(idx, s => ({ ...s, name: e.target.value }))}
-                    placeholder="Name"
-                    style={{ flex: 1, minWidth: 100, padding: '4px 6px', borderRadius: 'var(--radius-sm)', fontSize: 12, background: 'rgba(var(--bg-secondary-rgb), 0.8)', color: 'var(--text)', border: '1px solid rgba(var(--border-rgb), 0.2)' }}
-                  />
-                  <button
-                    onClick={() => setSpecs(prev => prev.filter((_, i) => i !== idx))}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', padding: '4px' }}
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-                <div style={{ display: 'flex', gap: 16, marginBottom: 8 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={spec.negate} onChange={e => updateSpec(idx, s => ({ ...s, negate: e.target.checked }))} />
-                    Nicht
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={spec.required} onChange={e => updateSpec(idx, s => ({ ...s, required: e.target.checked }))} />
-                    Pflicht
-                  </label>
-                </div>
-                {spec.isUnknown ? (
-                  <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Fields (JSON)</label>
-                    <textarea
-                      value={spec.rawJson}
-                      onChange={e => updateSpec(idx, s => ({ ...s, rawJson: e.target.value }))}
-                      rows={3}
-                      style={{ width: '100%', padding: '4px 6px', borderRadius: 'var(--radius-sm)', fontSize: 11, fontFamily: 'var(--font-mono)', background: 'rgba(var(--bg-secondary-rgb), 0.8)', color: 'var(--text)', border: '1px solid rgba(var(--border-rgb), 0.2)', resize: 'vertical', boxSizing: 'border-box' }}
+            {specs.map((spec, idx) => {
+              const schemaEntry = schema.find(s => s.implementation === spec.implementation)
+              const sameTypeCount = specs.filter(s => s.implementation === spec.implementation).length
+              const canRequired = sameTypeCount >= 2
+              return (
+                <div key={idx} className="glass" style={{ borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <select
+                      className="form-input"
+                      value={spec.implementation}
+                      style={{ flex: '1 1 160px', fontSize: 12 }}
+                      onChange={e => handleTypeChange(idx, e.target.value)}
+                    >
+                      {schema.map(s => (
+                        <option key={s.implementation} value={s.implementation}>{s.implementationName}</option>
+                      ))}
+                      {!schema.find(s => s.implementation === spec.implementation) && (
+                        <option value={spec.implementation}>{spec.implementationName}</option>
+                      )}
+                    </select>
+                    <input
+                      className="form-input"
+                      placeholder="Condition Name"
+                      value={spec.name}
+                      style={{ flex: '1 1 120px', fontSize: 12 }}
+                      onChange={e => updateSpec(idx, s => ({ ...s, name: e.target.value }))}
                     />
+                    <button
+                      onClick={() => setSpecs(prev => prev.filter((_, i) => i !== idx))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, flexShrink: 0 }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
-                ) : (
-                  <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>
-                      {spec.implementation === 'ReleaseTitleSpecification' || spec.implementation === 'ReleaseGroupSpecification' ? 'Regex' : 'Wert'}
+                  <div style={{ display: 'flex', gap: 16, marginBottom: schemaEntry && schemaEntry.fields.length > 0 ? 8 : 0, flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', userSelect: 'none' }}>
+                      <input type="checkbox" checked={spec.negate} onChange={e => updateSpec(idx, s => ({ ...s, negate: e.target.checked }))} />
+                      Nicht erfüllt
                     </label>
-                    {spec.implementation === 'ResolutionSpecification' ? (
-                      <select
-                        value={spec.value}
-                        onChange={e => updateSpec(idx, s => ({ ...s, value: e.target.value }))}
-                        style={{ width: '100%', padding: '4px 6px', borderRadius: 'var(--radius-sm)', fontSize: 12, background: 'rgba(var(--bg-secondary-rgb), 0.8)', color: 'var(--text)', border: '1px solid rgba(var(--border-rgb), 0.2)', boxSizing: 'border-box' }}
-                      >
-                        <option value="R360p">360p</option>
-                        <option value="R480p">480p</option>
-                        <option value="R540p">540p</option>
-                        <option value="R576p">576p</option>
-                        <option value="R720p">720p</option>
-                        <option value="R1080p">1080p</option>
-                        <option value="R2160p">2160p</option>
-                      </select>
-                    ) : (
-                      <input
-                        value={spec.value}
-                        onChange={e => updateSpec(idx, s => ({ ...s, value: e.target.value }))}
-                        style={{ width: '100%', padding: '4px 6px', borderRadius: 'var(--radius-sm)', fontSize: 12, background: 'rgba(var(--bg-secondary-rgb), 0.8)', color: 'var(--text)', border: '1px solid rgba(var(--border-rgb), 0.2)', boxSizing: 'border-box' }}
-                      />
-                    )}
+                    <label
+                      title={canRequired ? undefined : 'Nur wenn mehrere Conditions desselben Typs vorhanden'}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: canRequired ? 'pointer' : 'default', userSelect: 'none', opacity: canRequired ? 1 : 0.5 }}
+                    >
+                      <input type="checkbox" checked={spec.required} disabled={!canRequired} onChange={e => updateSpec(idx, s => ({ ...s, required: e.target.checked }))} />
+                      Pflichtbedingung
+                    </label>
                   </div>
-                )}
+                  {schemaEntry && schemaEntry.fields.map(fieldDef => {
+                    const currentVal = spec.fields.find(f => f.name === fieldDef.name)?.value
+                    return (
+                      <div key={fieldDef.name} style={{ marginBottom: 6 }}>
+                        <label className="form-label" style={{ fontSize: 11, marginBottom: 3 }}>{fieldDef.label}</label>
+                        {renderSpecField(fieldDef, currentVal, v => handleFieldChange(idx, fieldDef.name, v))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+            {specs.length >= 2 && (
+              <div className="badge-neutral" style={{ fontSize: 11, display: 'inline-block', marginTop: 4 }}>
+                Verschiedene Typen: UND — Gleicher Typ mehrfach: ODER (außer Pflicht)
               </div>
-            ))}
+            )}
           </div>
 
-          {error && <p style={{ color: '#f87171', fontSize: 13, margin: 0 }}>{error}</p>}
+          {/* JSON Import */}
+          <div>
+            <button
+              onClick={() => setJsonImportOpen(v => !v)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--accent)', fontFamily: 'var(--font-sans)', padding: 0 }}
+            >
+              JSON importieren {jsonImportOpen ? '▴' : '▾'}
+            </button>
+            {jsonImportOpen && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <textarea
+                  className="form-input"
+                  value={jsonText}
+                  onChange={e => setJsonText(e.target.value)}
+                  rows={8}
+                  style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'var(--font-mono)', fontSize: 12, resize: 'vertical' }}
+                  placeholder="Radarr/Sonarr Custom Format JSON einfügen..."
+                />
+                {jsonError && <span className="badge-error" style={{ fontSize: 11 }}>{jsonError}</span>}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={handleJsonImport} className="btn btn-ghost" style={{ fontSize: 12 }}>Importieren</button>
+                  <span className="badge-neutral" style={{ fontSize: 11 }}>Kompatibel mit Radarr/Sonarr Export und TRaSH Guides JSON</span>
+                </div>
+              </div>
+            )}
+          </div>
 
+          {error && <span className="badge-error" style={{ fontSize: 12 }}>{error}</span>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
             <button onClick={onClose} className="btn btn-ghost">Abbrechen</button>
             <button onClick={handleSave} disabled={saving} className="btn btn-primary">
@@ -3957,47 +4091,96 @@ function UserCfEditModal({
 
 // ── CF Manager Tab ─────────────────────────────────────────────────────────────
 
-function CfManagerTab() {
+function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void }) {
   const { isAdmin } = useStore()
-  const [service, setService] = useState<'radarr' | 'sonarr'>('radarr')
-  const [userCfs, setUserCfs] = useState<import('../types/recyclarr').UserCfFile[]>([])
-  const [loading, setLoading] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [cfSearch, setCfSearch] = useState('')
-  const [editingCf, setEditingCf] = useState<import('../types/recyclarr').UserCfFile | 'new' | null>(null)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const {
+    instances, customFormats, cfSchemas, userCfFiles,
+    loadCustomFormats, loadCfSchema, loadUserCfFiles,
+    createCustomFormat, updateCustomFormat, deleteCustomFormat,
+  } = useArrStore()
 
-  const loadUserCfs = async (svc: 'radarr' | 'sonarr') => {
-    setLoading(true)
+  const serviceTypes = useMemo(() => {
+    const types = new Set(
+      instances.filter(i => i.enabled && (i.type === 'radarr' || i.type === 'sonarr')).map(i => i.type as 'radarr' | 'sonarr')
+    )
+    return (['radarr', 'sonarr'] as const).filter(t => types.has(t))
+  }, [instances])
+
+  const [service, setService] = useState<'radarr' | 'sonarr'>(() => serviceTypes[0] ?? 'radarr')
+  const [search, setSearch] = useState('')
+  const [editingCf, setEditingCf] = useState<{ file: UserCfFile; arrId: number } | 'new' | null>(null)
+  const [confirmDeleteTrashId, setConfirmDeleteTrashId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteInUse, setDeleteInUse] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const activeInstance = useMemo(() => (
+    instances.find(i => i.type === service && i.enabled) ?? null
+  ), [instances, service])
+
+  useEffect(() => {
+    if (!activeInstance) return
     setLoadError(null)
+    Promise.all([
+      loadCustomFormats(activeInstance.id),
+      loadUserCfFiles(service),
+      loadCfSchema(activeInstance.id),
+    ]).catch((e: unknown) => setLoadError((e as Error).message ?? 'Fehler beim Laden'))
+  }, [activeInstance?.id, service]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cfFiles = userCfFiles[service] ?? []
+  const arrCfList = customFormats[activeInstance?.id ?? ''] ?? []
+  const schema = cfSchemas[activeInstance?.id ?? ''] ?? []
+
+  const displayItems = useMemo(() => (
+    cfFiles
+      .filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+      .map(file => ({
+        file,
+        arrCf: (arrCfList.find(c => c.name === file.name) as ArrCustomFormat | undefined) ?? null,
+      }))
+  ), [cfFiles, arrCfList, search])
+
+  async function handleDelete(trashId: string, arrCf: ArrCustomFormat | null) {
+    setDeleteError(null)
+    setDeleteInUse(false)
+    if (!activeInstance || !arrCf) {
+      setDeleteError('CF nicht in Arr gefunden — direkt im Recyclarr-Tab verwalten')
+      return
+    }
     try {
-      const { api } = await import('../api')
-      const res = await api.recyclarr.listUserCfs(svc)
-      setUserCfs(res.cfs)
+      await deleteCustomFormat(activeInstance.id, arrCf.id, trashId)
+      setConfirmDeleteTrashId(null)
+      await Promise.all([loadCustomFormats(activeInstance.id), loadUserCfFiles(service)])
     } catch (e: unknown) {
-      setLoadError((e as Error).message ?? 'Failed to load user CFs')
-    } finally {
-      setLoading(false)
+      const msg = (e as Error).message ?? ''
+      if (msg.includes('aktiv in Recyclarr')) {
+        setDeleteInUse(true)
+      } else {
+        setDeleteError(msg)
+      }
     }
   }
 
-  useEffect(() => {
-    loadUserCfs(service)
-  }, [service]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const filteredCfs = userCfs
-    .filter(cf => cf.name.toLowerCase().includes(cfSearch.toLowerCase()))
-    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+  if (serviceTypes.length === 0) {
+    return (
+      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 48, textAlign: 'center' }}>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Keine Radarr/Sonarr-Instanzen konfiguriert.</p>
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
       {/* Service tabs */}
-      <div style={{ display: 'flex', gap: 8 }}>
-        {(['radarr', 'sonarr'] as const).map(svc => (
+      <div className="tabs" style={{ display: 'flex', gap: 4 }}>
+        {serviceTypes.map(svc => (
           <button
             key={svc}
-            onClick={() => { setService(svc); setCfSearch('') }}
-            className={`btn btn-sm ${service === svc ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => { setService(svc); setSearch(''); setConfirmDeleteTrashId(null) }}
+            className={`tab ${service === svc ? 'tab-active' : ''}`}
           >
             {svc.charAt(0).toUpperCase() + svc.slice(1)}
           </button>
@@ -4007,104 +4190,105 @@ function CfManagerTab() {
       <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20 }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>User Custom Formats</span>
-          <span className="badge-neutral" style={{ fontSize: 11 }}>{userCfs.length}</span>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            Scores werden im Wizard (Step 4) oder im Recyclarr-Tab vergeben.
-          </span>
+          <span style={{ fontWeight: 600, fontSize: 15, fontFamily: 'var(--font-sans)' }}>Custom Formats</span>
+          <span className="badge-neutral" style={{ fontSize: 11 }}>{cfFiles.length}</span>
           <div style={{ flex: 1 }} />
           {isAdmin && (
-            <button onClick={() => setEditingCf('new')} className="btn btn-primary btn-sm">
-              <Plus size={12} /> Create
+            <button
+              onClick={() => setEditingCf('new')}
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+            >
+              <Plus size={12} /> Erstellen
             </button>
           )}
         </div>
 
         {/* Search */}
-        <div style={{ marginBottom: 12 }}>
+        <div style={{ position: 'relative', marginBottom: 12 }}>
           <input
-            value={cfSearch}
-            onChange={e => setCfSearch(e.target.value)}
-            placeholder="Search…"
-            style={{ width: '100%', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: 13, border: '1px solid rgba(var(--border-rgb), 0.2)', background: 'rgba(var(--bg-secondary-rgb), 0.5)', color: 'var(--text)', boxSizing: 'border-box' }}
+            className="form-input"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Suchen…"
+            style={{ width: '100%', boxSizing: 'border-box', paddingRight: search ? 32 : undefined }}
           />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}
+            >
+              <X size={12} />
+            </button>
+          )}
         </div>
 
         {loadError && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.08)', borderRadius: 'var(--radius-sm)', marginBottom: 10 }}>
             <AlertTriangle size={13} style={{ color: '#f87171', flexShrink: 0 }} />
-            <span style={{ fontSize: 12, color: '#f87171', flex: 1 }}>{loadError}</span>
-            <button onClick={() => loadUserCfs(service)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171', textDecoration: 'underline', fontSize: 12 }}>Retry</button>
+            <span style={{ fontSize: 12, color: '#f87171' }}>{loadError}</span>
           </div>
         )}
 
-        {loading ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: 24 }}>Loading…</p>
-        ) : filteredCfs.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: 24 }}>
-            {cfSearch ? 'No user CFs match your search' : `No user CFs for ${service}. Click Create to add one.`}
-          </p>
+        {displayItems.length === 0 ? (
+          <div style={{ padding: '32px 0', textAlign: 'center' }}>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: cfFiles.length === 0 && isAdmin && !search ? 16 : 0 }}>
+              {search ? 'Keine Custom Formats gefunden' : 'Keine eigenen Custom Formats vorhanden'}
+            </p>
+            {cfFiles.length === 0 && isAdmin && !search && (
+              <button
+                onClick={() => setEditingCf('new')}
+                className="btn btn-primary"
+                style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                <Plus size={12} /> CF erstellen
+              </button>
+            )}
+          </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {/* Table header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0 12px', padding: '4px 12px', marginBottom: 4 }}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Name</span>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, textAlign: 'center' }}>Specs</span>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>trash_id</span>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Actions</span>
-            </div>
-            {filteredCfs.map(cf => (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {displayItems.map(({ file, arrCf }) => (
               <UserCfRow
-                key={cf.trash_id}
-                cf={cf}
+                key={file.trash_id}
+                cf={file}
+                inUse={confirmDeleteTrashId === file.trash_id && deleteInUse}
+                notInArr={arrCf === null}
                 isAdmin={isAdmin}
-                onEdit={() => setEditingCf(cf)}
-                onDelete={() => setConfirmDeleteId(cf.trash_id)}
+                confirmingDelete={confirmDeleteTrashId === file.trash_id}
+                deleteError={confirmDeleteTrashId === file.trash_id ? deleteError : null}
+                onEdit={() => { if (arrCf) setEditingCf({ file, arrId: arrCf.id }) }}
+                onDeleteRequest={() => { setConfirmDeleteTrashId(file.trash_id); setDeleteError(null); setDeleteInUse(false) }}
+                onDeleteConfirm={() => handleDelete(file.trash_id, arrCf)}
+                onDeleteCancel={() => { setConfirmDeleteTrashId(null); setDeleteError(null); setDeleteInUse(false) }}
               />
             ))}
           </div>
         )}
       </div>
 
-      {/* Create/edit modal */}
-      {editingCf != null && (
-        <UserCfEditModal
-          initial={editingCf === 'new' ? null : editingCf as import('../types/recyclarr').UserCfFile}
+      {/* Edit / Create Modal */}
+      {editingCf != null && activeInstance && (
+        <CfEditModal
+          initial={editingCf === 'new' ? null : {
+            name: (editingCf as { file: UserCfFile; arrId: number }).file.name,
+            includeCustomFormatWhenRenaming: (editingCf as { file: UserCfFile; arrId: number }).file.includeCustomFormatWhenRenaming,
+            specifications: (editingCf as { file: UserCfFile; arrId: number }).file.specifications as unknown as ArrCFSpecification[],
+          }}
+          initialTrashId={editingCf === 'new' ? null : (editingCf as { file: UserCfFile; arrId: number }).file.trash_id}
+          schema={schema}
           onClose={() => setEditingCf(null)}
+          onSwitchToRecyclarr={() => onSwitchTab('recyclarr')}
           onSave={async data => {
-            const { api } = await import('../api')
             if (editingCf === 'new') {
-              await api.recyclarr.createUserCf(service, data)
+              await createCustomFormat(activeInstance.id, data)
             } else {
-              await api.recyclarr.updateUserCf(service, (editingCf as import('../types/recyclarr').UserCfFile).trash_id, data)
+              const arrId = (editingCf as { file: UserCfFile; arrId: number }).arrId
+              await updateCustomFormat(activeInstance.id, arrId, data)
             }
-            setEditingCf(null)
-            await loadUserCfs(service)
+            await Promise.all([loadCustomFormats(activeInstance.id), loadUserCfFiles(service)])
+            if (editingCf !== 'new') setEditingCf(null)
           }}
         />
-      )}
-
-      {/* Delete confirm */}
-      {confirmDeleteId != null && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, maxWidth: 380, width: '90%' }}>
-            <p style={{ fontSize: 14, marginBottom: 16 }}>User CF "{userCfs.find(c => c.trash_id === confirmDeleteId)?.name}" wirklich löschen?</p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setConfirmDeleteId(null)} className="btn btn-ghost">Abbrechen</button>
-              <button
-                onClick={async () => {
-                  const { api } = await import('../api')
-                  await api.recyclarr.deleteUserCf(service, confirmDeleteId)
-                  setConfirmDeleteId(null)
-                  await loadUserCfs(service)
-                }}
-                style={{ padding: '6px 14px', borderRadius: 'var(--radius-md)', background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)', cursor: 'pointer', fontSize: 13 }}
-              >
-                Löschen
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )
@@ -4157,7 +4341,7 @@ export function MediaPage({ showAddForm: showFromParent, onFormClose, onNavigate
       {activeTab === 'indexers' && <IndexersTab />}
       {activeTab === 'discover' && <DiscoverTab hasTmdbKey={hasTmdbKey} onNavigate={onNavigate ?? (() => {})} />}
       {activeTab === 'recyclarr' && <RecyclarrTab />}
-      {activeTab === 'cf-manager' && <CfManagerTab />}
+      {activeTab === 'cf-manager' && <CfManagerTab onSwitchTab={tab => setActiveTab(tab as MediaTab)} />}
     </div>
   )
 }

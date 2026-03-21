@@ -202,6 +202,21 @@ export interface ProwlarrIndexer {
   privacy: string
 }
 
+// ── Custom Format Schema ──────────────────────────────────────────────────────
+export interface ArrCFSchemaField {
+  name: string
+  label: string
+  type: 'textbox' | 'select' | 'number' | string
+  selectOptions?: { value: number; name: string }[]
+}
+
+export interface ArrCFSchema {
+  implementation: string
+  implementationName: string
+  infoLink?: string
+  fields: ArrCFSchemaField[]
+}
+
 // ── Custom Formats ────────────────────────────────────────────────────────────
 export interface ArrCFSpecification {
   name: string

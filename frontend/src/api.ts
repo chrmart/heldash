@@ -136,12 +136,14 @@ export const api = {
       req<unknown>(`/arr/${id}/discover/request`, { method: 'POST', body: JSON.stringify({ mediaType, mediaId, seasons }) }),
     customFormats: {
       list: (id: string) => req<ArrCustomFormat[]>(`/arr/${id}/custom-formats`),
-      create: (id: string, data: { name: string; includeCustomFormatWhenRenaming?: boolean; specifications: ArrCFSpecification[] }) =>
+      create: (id: string, data: { name: string; trash_id?: string; includeCustomFormatWhenRenaming?: boolean; specifications: ArrCFSpecification[] }) =>
         req<ArrCustomFormat>(`/arr/${id}/custom-formats`, { method: 'POST', body: JSON.stringify(data) }),
-      update: (id: string, cfId: number, data: { name: string; includeCustomFormatWhenRenaming?: boolean; specifications: ArrCFSpecification[] }) =>
+      update: (id: string, cfId: number, data: { name: string; trash_id?: string; includeCustomFormatWhenRenaming?: boolean; specifications: ArrCFSpecification[] }) =>
         req<ArrCustomFormat>(`/arr/${id}/custom-formats/${cfId}`, { method: 'PUT', body: JSON.stringify(data) }),
-      delete: (id: string, cfId: number) => req<void>(`/arr/${id}/custom-formats/${cfId}`, { method: 'DELETE' }),
+      delete: (id: string, cfId: number, trashId?: string) =>
+        req<void>(`/arr/${id}/custom-formats/${cfId}${trashId ? `?trashId=${encodeURIComponent(trashId)}` : ''}`, { method: 'DELETE' }),
     },
+    cfSchema: (id: string) => req<import('./types/arr').ArrCFSchema[]>(`/arr/${id}/custom-format-schema`),
     qualityProfiles: {
       list: (id: string) => req<ArrQualityProfile[]>(`/arr/${id}/quality-profiles`),
       updateScores: (id: string, profileId: number, scores: { formatId: number; score: number }[]) =>

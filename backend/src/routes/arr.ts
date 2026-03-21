@@ -1,6 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { nanoid } from 'nanoid'
-import { getDb } from '../db/database'
+import * as fs from 'fs'
+import * as path from 'path'
+import { getDb, safeJson } from '../db/database'
 import { callerGroupId as _callerGroupId, isValidHttpUrl } from './_helpers'
 import { RadarrClient } from '../arr/radarr'
 import { SonarrClient } from '../arr/sonarr'
@@ -133,17 +135,48 @@ interface CreateCfBody {
   name: string
   includeCustomFormatWhenRenaming?: boolean
   specifications: object[]
+  trash_id?: string
 }
 
 interface PutCfBody {
   name: string
   includeCustomFormatWhenRenaming?: boolean
   specifications: object[]
+  trash_id?: string
+}
+
+interface DeleteCfQuerystring {
+  trashId?: string
 }
 
 interface UpdateProfileScoresBody {
   scores: { formatId: number; score: number }[]
 }
+
+// ── CF file helpers ───────────────────────────────────────────────────────────
+
+function getUserCfBase(): string {
+  const db = getDb()
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'recyclarr_config_path'").get() as { value: string } | undefined
+  let configPath = '/recyclarr/recyclarr.yml'
+  if (row) { try { configPath = JSON.parse(row.value) as string } catch { configPath = row.value } }
+  return path.join(path.dirname(configPath), 'user-cfs')
+}
+
+function toUserCfSlugLocal(name: string): string {
+  return 'user-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+function writeUserCfJson(base: string, service: string, trashId: string, cf: object): void {
+  const dir = path.join(base, service)
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, `${trashId}.json`), JSON.stringify(cf, null, 2), 'utf8')
+}
+
+// ── CF schema cache (1h per instance) ────────────────────────────────────────
+
+const cfSchemaCache = new Map<string, { data: unknown[]; ts: number }>()
+const CF_SCHEMA_TTL = 60 * 60 * 1000
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -579,8 +612,18 @@ export async function arrRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'Only available for Radarr and Sonarr' })
       }
       if (!req.body.name?.trim()) return reply.status(400).send({ error: 'name is required' })
+      const trashId = req.body.trash_id ?? toUserCfSlugLocal(req.body.name.trim())
       try {
-        const cf = await makeClient(row).createCustomFormat(req.body)
+        const { trash_id: _tid, ...cfPayload } = req.body
+        const cf = await makeClient(row).createCustomFormat(cfPayload)
+        try {
+          writeUserCfJson(getUserCfBase(), row.type, trashId, {
+            trash_id: trashId,
+            name: req.body.name.trim(),
+            includeCustomFormatWhenRenaming: req.body.includeCustomFormatWhenRenaming ?? false,
+            specifications: req.body.specifications ?? [],
+          })
+        } catch { /* best-effort file write */ }
         return reply.status(201).send(cf)
       } catch (e: unknown) {
         return reply.status(502).send({ error: 'Upstream error', detail: (e as Error).message })
@@ -601,7 +644,19 @@ export async function arrRoutes(app: FastifyInstance) {
       const cfId = parseInt(req.params.cfId, 10)
       if (isNaN(cfId)) return reply.status(400).send({ error: 'Invalid cfId' })
       try {
-        return await makeClient(row).updateCustomFormat(cfId, req.body)
+        const { trash_id: trashId, ...cfPayload } = req.body
+        const result = await makeClient(row).updateCustomFormat(cfId, cfPayload)
+        if (trashId) {
+          try {
+            writeUserCfJson(getUserCfBase(), row.type, trashId, {
+              trash_id: trashId,
+              name: req.body.name,
+              includeCustomFormatWhenRenaming: req.body.includeCustomFormatWhenRenaming ?? false,
+              specifications: req.body.specifications ?? [],
+            })
+          } catch { /* best-effort */ }
+        }
+        return result
       } catch (e: unknown) {
         return reply.status(502).send({ error: 'Upstream error', detail: (e as Error).message })
       }
@@ -609,7 +664,7 @@ export async function arrRoutes(app: FastifyInstance) {
   )
 
   // DELETE /api/arr/:id/custom-formats/:cfId
-  app.delete<{ Params: { id: string; cfId: string } }>(
+  app.delete<{ Params: { id: string; cfId: string }; Querystring: DeleteCfQuerystring }>(
     '/api/arr/:id/custom-formats/:cfId',
     { preHandler: [app.requireAdmin] },
     async (req, reply) => {
@@ -620,8 +675,36 @@ export async function arrRoutes(app: FastifyInstance) {
       }
       const cfId = parseInt(req.params.cfId, 10)
       if (isNaN(cfId)) return reply.status(400).send({ error: 'Invalid cfId' })
+
+      const { trashId } = req.query
+      if (trashId) {
+        const cfBase = getUserCfBase()
+        const filePath = path.join(cfBase, row.type, `${trashId}.json`)
+        let cfName: string | null = null
+        if (fs.existsSync(filePath)) {
+          try { cfName = (JSON.parse(fs.readFileSync(filePath, 'utf8')) as { name?: string }).name ?? null } catch { /* skip */ }
+        }
+        if (cfName) {
+          const sameTypeInsts = db.prepare('SELECT id FROM arr_instances WHERE type = ?').all(row.type) as { id: string }[]
+          for (const inst of sameTypeInsts) {
+            const configRow = db.prepare('SELECT user_cf_names FROM recyclarr_config WHERE instance_id = ?').get(inst.id) as { user_cf_names: string } | undefined
+            if (!configRow) continue
+            const userCfNames = safeJson<Array<{ name: string; profileName?: string }>>(configRow.user_cf_names, [])
+            const found = userCfNames.find(ucf => ucf.name === cfName)
+            if (found) {
+              const profileName = found.profileName ?? 'einem Recyclarr-Profil'
+              return reply.status(409).send({ error: `CF ist aktiv in Recyclarr-Profil "${profileName}" — zuerst dort entfernen` })
+            }
+          }
+        }
+      }
+
       try {
         await makeClient(row).deleteCustomFormat(cfId)
+        if (trashId) {
+          const fp = path.join(getUserCfBase(), row.type, `${trashId}.json`)
+          if (fs.existsSync(fp)) fs.unlinkSync(fp)
+        }
         return reply.status(204).send()
       } catch (e: unknown) {
         return reply.status(502).send({ error: 'Upstream error', detail: (e as Error).message })
@@ -689,6 +772,28 @@ export async function arrRoutes(app: FastifyInstance) {
         }
         await client.updateQualityProfile(profileId, updatedProfile)
         return { ok: true }
+      } catch (e: unknown) {
+        return reply.status(502).send({ error: 'Upstream error', detail: (e as Error).message })
+      }
+    }
+  )
+
+  // GET /api/arr/:id/custom-format-schema (cached 1h per instance)
+  app.get<{ Params: { id: string } }>(
+    '/api/arr/:id/custom-format-schema',
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const row = await resolveInstance(req, reply, req.params.id)
+      if (!row) return
+      if (row.type !== 'radarr' && row.type !== 'sonarr') {
+        return reply.status(400).send({ error: 'Only available for Radarr and Sonarr' })
+      }
+      const cached = cfSchemaCache.get(req.params.id)
+      if (cached && Date.now() - cached.ts < CF_SCHEMA_TTL) return cached.data
+      try {
+        const schema = await makeClient(row).getCustomFormatSchema()
+        cfSchemaCache.set(req.params.id, { data: schema, ts: Date.now() })
+        return schema
       } catch (e: unknown) {
         return reply.status(502).send({ error: 'Upstream error', detail: (e as Error).message })
       }
