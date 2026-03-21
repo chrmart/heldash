@@ -68,6 +68,13 @@ function runMigrations(db: Database.Database): number {
     'ALTER TABLE recyclarr_config ADD COLUMN is_syncing INTEGER NOT NULL DEFAULT 0',
     // HA panel area assignment for grouped view
     'ALTER TABLE ha_panels ADD COLUMN area_id TEXT',
+    // Recyclarr v2: frozen instance key for YAML
+    'ALTER TABLE recyclarr_config ADD COLUMN yaml_instance_key TEXT',
+    // Recyclarr v2: quality definition type override (series|anime for sonarr)
+    "ALTER TABLE recyclarr_config ADD COLUMN quality_def_type TEXT NOT NULL DEFAULT 'movie'",
+    // Recyclarr v2: last known scores for change detection (JSON)
+    "ALTER TABLE recyclarr_config ADD COLUMN last_known_scores TEXT NOT NULL DEFAULT '{}'",
+    // Recyclarr v2 per-profile: score_set and min_upgrade_format_score stored in profiles_config JSON
   ]
   for (const sql of migrations) {
     try {

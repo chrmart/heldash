@@ -309,6 +309,9 @@ export const api = {
       profilesConfig: import('./types/recyclarr').RecyclarrProfileConfig[]
       syncSchedule: string
       deleteOldCfs: boolean
+      qualityDefType?: string
+      yamlInstanceKey?: string
+      lastKnownScores?: import('./types/recyclarr').LastKnownScores
     }) => req<{ ok: boolean }>(`/recyclarr/configs/${instanceId}`, { method: 'POST', body: JSON.stringify(data) }),
     previewYaml: () => req<{ yaml: string }>('/recyclarr/yaml-preview'),
     previewYamlForInstance: (instanceId: string, data: {
@@ -320,6 +323,8 @@ export const api = {
       profilesConfig: import('./types/recyclarr').RecyclarrProfileConfig[]
       syncSchedule: string
       deleteOldCfs: boolean
+      qualityDefType?: string
+      yamlInstanceKey?: string
     }) => req<{ yaml: string }>(`/recyclarr/preview-yaml/${instanceId}`, { method: 'POST', body: JSON.stringify(data) }),
     trashCfNames: (service: 'radarr' | 'sonarr') =>
       req<{ names: string[]; cached: boolean; warning?: string }>(`/recyclarr/trash-cf-names?service=${service}`),
@@ -334,6 +339,18 @@ export const api = {
     deleteUserCf: (service: 'radarr' | 'sonarr', trashId: string) =>
       req<{ ok: boolean }>(`/recyclarr/user-cfs/${service}/${trashId}`, { method: 'DELETE', body: JSON.stringify({}) }),
     adopt: () => req<{ ok: boolean; output: string }>('/recyclarr/adopt', { method: 'POST', body: JSON.stringify({}) }),
+    arrData: (instanceId: string) =>
+      req<{ profiles: import('./types/recyclarr').ArrQualityProfile[]; customFormats: import('./types/recyclarr').ArrCustomFormat[]; error?: string }>(`/recyclarr/arr-data/${instanceId}`),
+    checkScoreChanges: (instanceId: string, profileData: import('./types/recyclarr').ArrQualityProfile[]) =>
+      req<{ hasChanges: boolean; changes: import('./types/recyclarr').ScoreChange[] }>(`/recyclarr/check-score-changes/${instanceId}`, { method: 'POST', body: JSON.stringify({ profileData }) }),
+    acceptScoreChanges: (instanceId: string, changes: import('./types/recyclarr').ScoreChange[]) =>
+      req<{ ok: boolean }>(`/recyclarr/accept-score-changes/${instanceId}`, { method: 'POST', body: JSON.stringify({ changes }) }),
+    listProfiles: (instanceId: string) =>
+      req<{ profiles: { trash_id: string; name: string }[] }>(`/recyclarr/list-profiles/${instanceId}`),
+    listScoreSets: (instanceId: string) =>
+      req<{ scoreSets: string[] }>(`/recyclarr/list-score-sets/${instanceId}`),
+    containerStatus: (containerName: string) =>
+      req<{ running: boolean; name: string }>(`/recyclarr/container-status?name=${encodeURIComponent(containerName)}`),
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),

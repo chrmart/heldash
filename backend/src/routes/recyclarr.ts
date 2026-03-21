@@ -4,7 +4,7 @@ import { getDb } from '../db/database'
 import { stringify } from 'yaml'
 import * as fs from 'fs'
 import * as path from 'path'
-import { Pool } from 'undici'
+import { Pool, Agent, request as undiciRequest } from 'undici'
 import * as cron from 'node-cron'
 
 const dockerPool = new Pool('http://localhost', {
@@ -155,8 +155,11 @@ interface ProfileConfig {
   trash_id: string
   name: string
   min_format_score?: number
+  min_upgrade_format_score?: number
+  score_set?: string
   reset_unmatched_scores_enabled: boolean
   reset_unmatched_scores_except: string[]
+  reset_unmatched_scores_except_patterns?: string[]
 }
 
 interface RecyclarrConfigRow {
@@ -173,6 +176,9 @@ interface RecyclarrConfigRow {
   last_sync_success: number | null
   delete_old_cfs: number
   is_syncing: number
+  yaml_instance_key: string | null
+  quality_def_type: string | null
+  last_known_scores: string | null
   updated_at: string
 }
 
@@ -198,6 +204,37 @@ interface UserCf {
   profileTrashId: string
   profileName: string
 }
+
+interface ArrFormatItem {
+  id: number
+  name: string
+  format: number
+  score: number
+}
+
+interface ArrQualityProfile {
+  id: number
+  name: string
+  formatItems: ArrFormatItem[]
+  trash_id?: string
+}
+
+interface ArrCustomFormat {
+  id: number
+  name: string
+  trash_id?: string
+}
+
+interface ScoreChange {
+  profileTrashId: string
+  profileName: string
+  cfTrashId: string
+  cfName: string
+  oldScore: number
+  newScore: number
+}
+
+type LastKnownScores = Record<string, Record<string, number>>
 
 interface UserCfSpecification {
   name: string
@@ -233,6 +270,9 @@ interface SaveConfigBody {
   profilesConfig: ProfileConfig[]
   syncSchedule: string
   deleteOldCfs: boolean
+  qualityDefType?: string
+  yamlInstanceKey?: string
+  lastKnownScores?: Record<string, Record<string, number>>
 }
 
 interface RecyclarrConfig {
@@ -244,6 +284,9 @@ interface RecyclarrConfig {
   preferredRatio: number
   profilesConfig: ProfileConfig[]
   deleteOldCfs: boolean
+  yamlInstanceKey: string | null
+  qualityDefType: string
+  lastKnownScores: LastKnownScores
 }
 
 interface SimpleLogger {
@@ -497,10 +540,8 @@ async function getCustomFormats(
   }
 }
 
-function deriveQdType(instType: string, profileNames: string[]): string {
-  if (instType === 'radarr') return 'movie'
-  if (profileNames.some(n => n.toLowerCase().includes('anime'))) return 'anime'
-  return 'series'
+function sanitizeInstanceKey(name: string): string {
+  return name.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '').replace(/^_+|_+$/g, '') || 'instance'
 }
 
 function generateRecyclarrYaml(configs: RecyclarrConfig[], instances: ArrInstanceRow[]): string {
@@ -512,62 +553,69 @@ function generateRecyclarrYaml(configs: RecyclarrConfig[], instances: ArrInstanc
     const inst = instances.find(i => i.id === cfg.instanceId)
     if (!inst || (inst.type !== 'radarr' && inst.type !== 'sonarr')) continue
 
-    const profileNames = cfg.profilesConfig.map(pc => pc.name)
-    const qdType = deriveQdType(inst.type, profileNames)
+    const instanceKey = cfg.yamlInstanceKey || sanitizeInstanceKey(inst.name)
 
+    // Quality definition
+    const qdType = cfg.qualityDefType || (inst.type === 'radarr' ? 'movie' : 'series')
     const qualityDefinition: Record<string, unknown> = { type: qdType }
     if (cfg.preferredRatio > 0) qualityDefinition.preferred_ratio = cfg.preferredRatio
 
+    // Quality profiles
     const qualityProfiles = cfg.profilesConfig.map(pc => {
       const entry: Record<string, unknown> = { trash_id: pc.trash_id }
       if (pc.min_format_score != null && pc.min_format_score > 0) {
         entry.min_format_score = pc.min_format_score
       }
+      if (pc.min_upgrade_format_score != null && pc.min_upgrade_format_score > 0) {
+        entry.min_upgrade_format_score = pc.min_upgrade_format_score
+      }
+      if (pc.score_set) {
+        entry.score_set = pc.score_set
+      }
       if (pc.reset_unmatched_scores_enabled) {
         const rusObj: Record<string, unknown> = { enabled: true }
-        const userCfDisplayNames = cfg.userCfNames
-          .filter(u => !u.profileTrashId || u.profileTrashId === pc.trash_id)
-          .map(u => u.name)
-          .filter(Boolean)
         const userCfTrashIds = new Set(cfg.userCfNames.map(u => u.trash_id).filter(Boolean))
-        const cleanedExcept = pc.reset_unmatched_scores_except
+        // except: user-provided list minus user CF trash IDs (they never need to be in except)
+        const cleanedExcept = (pc.reset_unmatched_scores_except ?? [])
           .filter(e => !userCfTrashIds.has(e))
-        const overriddenNames = cfg.scoreOverrides
-          .filter(o => o.profileTrashId === pc.trash_id)
-          .map(o => o.name)
-          .filter(Boolean)
-        const allExcept = [...new Set([...cleanedExcept, ...userCfDisplayNames, ...overriddenNames])].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
-        if (allExcept.length > 0) {
-          rusObj.except = allExcept
+        if (cleanedExcept.length > 0) {
+          rusObj.except = [...cleanedExcept].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+        }
+        if (pc.reset_unmatched_scores_except_patterns && pc.reset_unmatched_scores_except_patterns.length > 0) {
+          rusObj.except_patterns = pc.reset_unmatched_scores_except_patterns
         }
         entry.reset_unmatched_scores = rusObj
       }
       return entry
     })
 
-    const customFormats: unknown[] = []
-
+    // Custom formats: score overrides (only where override != current API score) + user CFs
+    // Group by profileTrashId+score for compact output
     const groupedOverrides: Record<string, { trash_ids: string[]; profileTrashId: string; score: number }> = {}
+
     for (const o of cfg.scoreOverrides) {
+      if (!o.trash_id) continue
       const key = `${o.profileTrashId}::${o.score}`
       if (!groupedOverrides[key]) {
         groupedOverrides[key] = { trash_ids: [], profileTrashId: o.profileTrashId, score: o.score }
       }
-      groupedOverrides[key].trash_ids.push(o.trash_id)
+      if (!groupedOverrides[key].trash_ids.includes(o.trash_id)) {
+        groupedOverrides[key].trash_ids.push(o.trash_id)
+      }
     }
 
-    // User CFs — use trash_id (new) or fall back to name (legacy)
+    // User CFs with non-zero score
     for (const ucf of cfg.userCfNames) {
+      if (ucf.score === 0) continue
       const tid = (ucf.trash_id && ucf.trash_id.trim()) ? ucf.trash_id : ucf.name
       if (!tid) continue
-      const score = ucf.score
       const profileTargets = ucf.profileTrashId
         ? [ucf.profileTrashId]
         : cfg.profilesConfig.map(pc => pc.trash_id)
       for (const ptid of profileTargets) {
-        const key = `${ptid}::${score}`
+        const key = `${ptid}::${ucf.score}`
         if (!groupedOverrides[key]) {
-          groupedOverrides[key] = { trash_ids: [], profileTrashId: ptid, score }
+          groupedOverrides[key] = { trash_ids: [], profileTrashId: ptid, score: ucf.score }
         }
         if (!groupedOverrides[key].trash_ids.includes(tid)) {
           groupedOverrides[key].trash_ids.push(tid)
@@ -575,6 +623,7 @@ function generateRecyclarrYaml(configs: RecyclarrConfig[], instances: ArrInstanc
       }
     }
 
+    const customFormats: unknown[] = []
     for (const g of Object.values(groupedOverrides)) {
       customFormats.push({
         trash_ids: g.trash_ids,
@@ -582,7 +631,6 @@ function generateRecyclarrYaml(configs: RecyclarrConfig[], instances: ArrInstanc
       })
     }
 
-    const instanceKey = inst.name.replace(/\s+/g, '-')
     const instanceConfig: Record<string, unknown> = {
       base_url: inst.url,
       api_key: inst.api_key,
@@ -624,6 +672,9 @@ function rowToConfig(row: RecyclarrConfigRow): RecyclarrConfig {
     preferredRatio: row.preferred_ratio ?? 0,
     profilesConfig: safeJson<ProfileConfig[]>(row.profiles_config, []),
     deleteOldCfs: row.delete_old_cfs === 1,
+    yamlInstanceKey: row.yaml_instance_key ?? null,
+    qualityDefType: row.quality_def_type ?? 'movie',
+    lastKnownScores: safeJson<LastKnownScores>(row.last_known_scores ?? '', {}),
   }
 }
 
@@ -748,6 +799,9 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       lastSyncSuccess: row.last_sync_success === null ? null : row.last_sync_success === 1,
       deleteOldCfs: row.delete_old_cfs === 1,
       isSyncing: row.is_syncing === 1,
+      yamlInstanceKey: row.yaml_instance_key ?? null,
+      qualityDefType: row.quality_def_type ?? (row.instance_type === 'radarr' ? 'movie' : 'series'),
+      lastKnownScores: safeJson<LastKnownScores>(row.last_known_scores ?? '', {}),
     }))
     return reply.send({ configs })
   })
@@ -773,12 +827,25 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
 
       const existing = db.prepare('SELECT id FROM recyclarr_config WHERE instance_id = ?').get(instanceId) as { id: string } | undefined
 
+      // Compute yaml_instance_key: set once on first save, never change
+      const existingKey = existing
+        ? (db.prepare('SELECT yaml_instance_key FROM recyclarr_config WHERE instance_id = ?').get(instanceId) as { yaml_instance_key: string | null } | undefined)?.yaml_instance_key
+        : null
+      const yamlInstanceKey = existingKey || body.yamlInstanceKey || sanitizeInstanceKey(inst.name)
+
+      // Update last_known_scores if provided
+      const lastKnownScores = body.lastKnownScores != null
+        ? JSON.stringify(body.lastKnownScores)
+        : null
+
       if (existing) {
-        db.prepare(`UPDATE recyclarr_config SET
-          enabled = ?, templates = ?, score_overrides = ?, user_cf_names = ?,
-          preferred_ratio = ?, profiles_config = ?, sync_schedule = ?, delete_old_cfs = ?,
-          updated_at = datetime('now')
-          WHERE instance_id = ?`).run(
+        const updateParts: string[] = [
+          'enabled = ?', 'templates = ?', 'score_overrides = ?', 'user_cf_names = ?',
+          'preferred_ratio = ?', 'profiles_config = ?', 'sync_schedule = ?', 'delete_old_cfs = ?',
+          'quality_def_type = ?',
+          "updated_at = datetime('now')",
+        ]
+        const updateVals: unknown[] = [
           body.enabled ? 1 : 0,
           JSON.stringify(body.selectedProfiles ?? []),
           JSON.stringify(body.scoreOverrides ?? []),
@@ -787,13 +854,24 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
           JSON.stringify(cleanedProfilesConfig),
           body.syncSchedule ?? 'manual',
           body.deleteOldCfs ? 1 : 0,
-          instanceId
-        )
+          body.qualityDefType ?? 'movie',
+        ]
+        // Only set yaml_instance_key if not already set
+        if (!existingKey) {
+          updateParts.splice(updateParts.length - 1, 0, 'yaml_instance_key = ?')
+          updateVals.push(yamlInstanceKey)
+        }
+        if (lastKnownScores != null) {
+          updateParts.splice(updateParts.length - 1, 0, 'last_known_scores = ?')
+          updateVals.push(lastKnownScores)
+        }
+        updateVals.push(instanceId)
+        db.prepare(`UPDATE recyclarr_config SET ${updateParts.join(', ')} WHERE instance_id = ?`).run(...updateVals)
       } else {
         const id = nanoid()
         db.prepare(`INSERT INTO recyclarr_config
-          (id, instance_id, enabled, templates, score_overrides, user_cf_names, preferred_ratio, profiles_config, sync_schedule, delete_old_cfs, is_syncing, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`).run(
+          (id, instance_id, enabled, templates, score_overrides, user_cf_names, preferred_ratio, profiles_config, sync_schedule, delete_old_cfs, is_syncing, yaml_instance_key, quality_def_type, last_known_scores, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, datetime('now'))`).run(
           id, instanceId,
           body.enabled ? 1 : 0,
           JSON.stringify(body.selectedProfiles ?? []),
@@ -802,7 +880,10 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
           body.preferredRatio ?? 0,
           JSON.stringify(cleanedProfilesConfig),
           body.syncSchedule ?? 'manual',
-          body.deleteOldCfs ? 1 : 0
+          body.deleteOldCfs ? 1 : 0,
+          yamlInstanceKey,
+          body.qualityDefType ?? (inst.type === 'radarr' ? 'movie' : 'series'),
+          lastKnownScores ?? '{}'
         )
       }
 
@@ -951,6 +1032,9 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
         preferredRatio: body.preferredRatio ?? 0,
         profilesConfig: body.profilesConfig ?? [],
         deleteOldCfs: body.deleteOldCfs ?? false,
+        yamlInstanceKey: body.yamlInstanceKey ?? null,
+        qualityDefType: body.qualityDefType ?? (inst.type === 'radarr' ? 'movie' : 'series'),
+        lastKnownScores: {},
       }
       const yaml = generateRecyclarrYaml([tempConfig], [inst])
       return reply.send({ yaml })
@@ -1106,6 +1190,176 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
         app.log.warn({ err: e }, 'Failed to write recyclarr YAML after user CF delete')
       }
       return reply.send({ ok: true })
+    }
+  )
+
+  // ── New routes for arr-data, score changes, list-profiles, list-score-sets ──
+
+  // GET /api/recyclarr/arr-data/:instanceId
+  // Fetches quality profiles + custom formats directly from the Arr instance API
+  app.get<{ Params: { instanceId: string } }>(
+    '/api/recyclarr/arr-data/:instanceId',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { instanceId } = req.params
+      const db = getDb()
+      const inst = db.prepare('SELECT * FROM arr_instances WHERE id = ?').get(instanceId) as ArrInstanceRow | undefined
+      if (!inst) return reply.status(404).send({ error: 'Instance not found' })
+      if (inst.type !== 'radarr' && inst.type !== 'sonarr') return reply.status(400).send({ error: 'Only radarr/sonarr supported' })
+
+      const agent = new Agent({ connect: { rejectUnauthorized: false } })
+      const baseUrl = inst.url.replace(/\/$/, '')
+      const headers = { 'X-Api-Key': inst.api_key, 'Content-Type': 'application/json' }
+
+      try {
+        const [profilesRes, cfsRes] = await Promise.all([
+          undiciRequest(`${baseUrl}/api/v3/qualityprofile`, { method: 'GET', headers, dispatcher: agent }),
+          undiciRequest(`${baseUrl}/api/v3/customformat`, { method: 'GET', headers, dispatcher: agent }),
+        ])
+        const profiles = await profilesRes.body.json() as ArrQualityProfile[]
+        const customFormats = await cfsRes.body.json() as ArrCustomFormat[]
+        return reply.send({ profiles, customFormats })
+      } catch (e) {
+        return reply.send({ profiles: [], customFormats: [], error: e instanceof Error ? e.message : 'Failed to reach instance' })
+      }
+    }
+  )
+
+  // POST /api/recyclarr/check-score-changes/:instanceId
+  app.post<{ Params: { instanceId: string }; Body: { profileData: ArrQualityProfile[] } }>(
+    '/api/recyclarr/check-score-changes/:instanceId',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { instanceId } = req.params
+      const db = getDb()
+      const row = db.prepare('SELECT last_known_scores FROM recyclarr_config WHERE instance_id = ?').get(instanceId) as { last_known_scores: string | null } | undefined
+      const lastKnown: LastKnownScores = safeJson<LastKnownScores>(row?.last_known_scores ?? '', {})
+      const profileData: ArrQualityProfile[] = req.body.profileData ?? []
+
+      const changes: ScoreChange[] = []
+      for (const profile of profileData) {
+        const profileTid = profile.trash_id
+        if (!profileTid) continue
+        const knownForProfile = lastKnown[profileTid] ?? {}
+        for (const item of profile.formatItems ?? []) {
+          // Only care about CFs that have a trash_id (known to recyclarr)
+          // We store by CF name since Arr API doesn't give trash_id here; use format id as key
+          const cfKey = String(item.format)
+          if (!(cfKey in knownForProfile)) continue
+          const oldScore = knownForProfile[cfKey]!
+          if (oldScore !== item.score) {
+            changes.push({
+              profileTrashId: profileTid,
+              profileName: profile.name,
+              cfTrashId: cfKey,
+              cfName: item.name,
+              oldScore,
+              newScore: item.score,
+            })
+          }
+        }
+      }
+      return reply.send({ hasChanges: changes.length > 0, changes })
+    }
+  )
+
+  // POST /api/recyclarr/accept-score-changes/:instanceId
+  app.post<{ Params: { instanceId: string }; Body: { changes: ScoreChange[] } }>(
+    '/api/recyclarr/accept-score-changes/:instanceId',
+    { onRequest: [app.requireAdmin] },
+    async (req, reply) => {
+      const { instanceId } = req.params
+      const db = getDb()
+      const row = db.prepare('SELECT last_known_scores FROM recyclarr_config WHERE instance_id = ?').get(instanceId) as { last_known_scores: string | null } | undefined
+      if (!row) return reply.status(404).send({ error: 'Config not found' })
+      const lastKnown: LastKnownScores = safeJson<LastKnownScores>(row.last_known_scores ?? '', {})
+
+      for (const change of req.body.changes ?? []) {
+        if (!lastKnown[change.profileTrashId]) lastKnown[change.profileTrashId] = {}
+        lastKnown[change.profileTrashId]![change.cfTrashId] = change.newScore
+      }
+      db.prepare("UPDATE recyclarr_config SET last_known_scores = ?, updated_at = datetime('now') WHERE instance_id = ?")
+        .run(JSON.stringify(lastKnown), instanceId)
+      return reply.send({ ok: true })
+    }
+  )
+
+  // GET /api/recyclarr/list-profiles/:instanceId
+  app.get<{ Params: { instanceId: string } }>(
+    '/api/recyclarr/list-profiles/:instanceId',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { instanceId } = req.params
+      const db = getDb()
+      const inst = db.prepare('SELECT * FROM arr_instances WHERE id = ?').get(instanceId) as ArrInstanceRow | undefined
+      if (!inst) return reply.status(404).send({ error: 'Instance not found' })
+      if (inst.type !== 'radarr' && inst.type !== 'sonarr') return reply.status(400).send({ error: 'Only radarr/sonarr supported' })
+      const { containerName } = getRecyclarrSettings()
+      try {
+        const { stdout, exitCode } = await dockerExecInContainer(
+          containerName,
+          ['recyclarr', 'list', 'quality-profiles', inst.type, '--raw'],
+          15_000
+        )
+        if (exitCode !== 0) throw new Error(`exit ${exitCode}`)
+        const parsed = parseQualityProfiles(stdout, inst.type, 'container')
+        return reply.send({ profiles: parsed.map(p => ({ trash_id: p.trash_id, name: p.name })) })
+      } catch (e) {
+        return reply.status(500).send({ error: e instanceof Error ? e.message : 'Failed to list profiles' })
+      }
+    }
+  )
+
+  // GET /api/recyclarr/list-score-sets/:instanceId
+  app.get<{ Params: { instanceId: string } }>(
+    '/api/recyclarr/list-score-sets/:instanceId',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { instanceId } = req.params
+      const db = getDb()
+      const inst = db.prepare('SELECT * FROM arr_instances WHERE id = ?').get(instanceId) as ArrInstanceRow | undefined
+      if (!inst) return reply.status(404).send({ error: 'Instance not found' })
+      if (inst.type !== 'radarr' && inst.type !== 'sonarr') return reply.status(400).send({ error: 'Only radarr/sonarr supported' })
+      const { containerName } = getRecyclarrSettings()
+      try {
+        const { stdout, exitCode } = await dockerExecInContainer(
+          containerName,
+          ['recyclarr', 'list', 'score-sets', inst.type],
+          15_000
+        )
+        if (exitCode !== 0) throw new Error(`exit ${exitCode}`)
+        // Parse lines: filter out header/box-drawing chars
+        const scoreSets = stdout.split('\n')
+          .map(l => l.replace(/[│┌└─┐┘]/g, '').trim())
+          .filter(l => l && !/^(Name|score.set)/i.test(l))
+          .filter(l => !/^\s*$/.test(l))
+        return reply.send({ scoreSets })
+      } catch (e) {
+        return reply.status(500).send({ error: e instanceof Error ? e.message : 'Failed to list score sets' })
+      }
+    }
+  )
+
+  // GET /api/recyclarr/container-status?name=recyclarr
+  app.get<{ Querystring: { name?: string } }>(
+    '/api/recyclarr/container-status',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const name = req.query.name || 'recyclarr'
+      try {
+        const res = await dockerPool.request({
+          path: `/v1.41/containers/${encodeURIComponent(name)}/json`,
+          method: 'GET',
+        })
+        if (res.statusCode === 404) {
+          await res.body.dump()
+          return reply.send({ running: false, name })
+        }
+        const info = await res.body.json() as { State?: { Running?: boolean } }
+        return reply.send({ running: info.State?.Running === true, name })
+      } catch (e) {
+        return reply.send({ running: false, name })
+      }
     }
   )
 }

@@ -9,7 +9,17 @@ import type {
   RecyclarrUserCf,
   RecyclarrSyncLine,
   RecyclarrProfileConfig,
+  ArrQualityProfile,
+  ArrCustomFormat,
+  ScoreChange,
 } from '../types/recyclarr'
+
+interface ArrData {
+  profiles: ArrQualityProfile[]
+  customFormats: ArrCustomFormat[]
+  error?: string
+  loadedAt: number
+}
 
 interface RecyclarrState {
   profiles: { radarr: RecyclarrProfile[]; sonarr: RecyclarrProfile[] }
@@ -22,6 +32,9 @@ interface RecyclarrState {
   syncDone: boolean
   syncing: boolean
   loading: boolean
+  // arrData keyed by instanceId
+  arrData: Record<string, ArrData>
+  arrDataLoading: Record<string, boolean>
 
   loadProfiles: (service: 'radarr' | 'sonarr', forceRefresh?: boolean) => Promise<void>
   loadCfs: (service: 'radarr' | 'sonarr', forceRefresh?: boolean) => Promise<void>
@@ -37,7 +50,13 @@ interface RecyclarrState {
     profilesConfig: RecyclarrProfileConfig[]
     syncSchedule: string
     deleteOldCfs: boolean
+    qualityDefType?: string
+    yamlInstanceKey?: string
+    lastKnownScores?: LastKnownScores
   }) => Promise<void>
+  loadArrData: (instanceId: string) => Promise<ArrData>
+  checkScoreChanges: (instanceId: string) => Promise<{ hasChanges: boolean; changes: ScoreChange[] }>
+  acceptScoreChanges: (instanceId: string, changes: ScoreChange[]) => Promise<void>
   sync: (instanceId?: string) => void
   adoptCfs: () => Promise<{ ok: boolean; output: string }>
   resetConfig: () => Promise<void>
@@ -55,6 +74,8 @@ export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
   syncDone: false,
   syncing: false,
   loading: false,
+  arrData: {},
+  arrDataLoading: {},
 
   loadProfiles: async (service, forceRefresh = false) => {
     const data = await api.recyclarr.profiles(service, forceRefresh)
@@ -102,6 +123,38 @@ export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
 
   saveConfig: async (instanceId, data) => {
     await api.recyclarr.saveConfig(instanceId, data)
+    await get().loadConfigs()
+  },
+
+  loadArrData: async (instanceId: string): Promise<ArrData> => {
+    set(s => ({ arrDataLoading: { ...s.arrDataLoading, [instanceId]: true } }))
+    try {
+      const result = await api.recyclarr.arrData(instanceId)
+      const data: ArrData = { ...result, loadedAt: Date.now() }
+      set(s => ({
+        arrData: { ...s.arrData, [instanceId]: data },
+        arrDataLoading: { ...s.arrDataLoading, [instanceId]: false },
+      }))
+      return data
+    } catch (e) {
+      const data: ArrData = { profiles: [], customFormats: [], error: e instanceof Error ? e.message : 'Failed', loadedAt: Date.now() }
+      set(s => ({
+        arrData: { ...s.arrData, [instanceId]: data },
+        arrDataLoading: { ...s.arrDataLoading, [instanceId]: false },
+      }))
+      return data
+    }
+  },
+
+  checkScoreChanges: async (instanceId: string) => {
+    const ad = get().arrData[instanceId]
+    if (!ad || ad.profiles.length === 0) return { hasChanges: false, changes: [] }
+    return api.recyclarr.checkScoreChanges(instanceId, ad.profiles)
+  },
+
+  acceptScoreChanges: async (instanceId: string, changes: ScoreChange[]) => {
+    await api.recyclarr.acceptScoreChanges(instanceId, changes)
+    // Reload configs to get updated lastKnownScores
     await get().loadConfigs()
   },
 

@@ -51,8 +51,11 @@ export interface RecyclarrProfileConfig {
   trash_id: string
   name: string
   min_format_score?: number
+  min_upgrade_format_score?: number
+  score_set?: string
   reset_unmatched_scores_enabled: boolean
   reset_unmatched_scores_except: string[]
+  reset_unmatched_scores_except_patterns: string[]
 }
 
 export interface RecyclarrInstanceConfig {
@@ -70,6 +73,9 @@ export interface RecyclarrInstanceConfig {
   lastSyncSuccess: boolean | null
   deleteOldCfs: boolean
   isSyncing: boolean
+  yamlInstanceKey: string | null
+  qualityDefType: string
+  lastKnownScores: LastKnownScores
 }
 
 export interface RecyclarrConfigsResponse {
@@ -79,4 +85,42 @@ export interface RecyclarrConfigsResponse {
 export interface RecyclarrSyncLine {
   line: string
   type: 'stdout' | 'stderr' | 'done' | 'error'
+}
+
+// { profileTrashId: { cfTrashId: score } }
+export type LastKnownScores = Record<string, Record<string, number>>
+
+export interface ArrFormatItem {
+  id: number
+  name: string
+  format: number
+  score: number
+}
+
+export interface ArrQualityProfile {
+  id: number
+  name: string
+  upgradeAllowed: boolean
+  cutoffFormatScore: number
+  minFormatScore: number
+  formatItems: ArrFormatItem[]
+  // trash_id may not exist if profile is not from guide
+  trash_id?: string
+}
+
+export interface ArrCustomFormat {
+  id: number
+  name: string
+  trash_id?: string
+  includeCustomFormatWhenRenaming: boolean
+  specifications: unknown[]
+}
+
+export interface ScoreChange {
+  profileTrashId: string
+  profileName: string
+  cfTrashId: string
+  cfName: string
+  oldScore: number
+  newScore: number
 }
