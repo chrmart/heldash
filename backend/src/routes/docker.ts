@@ -82,6 +82,7 @@ function parseMuxedFrame(buf: Buffer): { consumed: number; stream: 'stdout' | 's
 const containerStates = new Map<string, { name: string; state: string }>()
 
 export function initDockerPoller(): void {
+  console.log('[Docker Poller] Starting with 10s delay, 15s interval')
   const poll = async () => {
     try {
       const res = await dockerReq('/v1.41/containers/json?all=true')
@@ -93,6 +94,7 @@ export function initDockerPoller(): void {
         const prev = containerStates.get(c.Id)
         if (prev && prev.state !== c.State) {
           anyStateChange = true
+          console.log(`[Docker Poller] State change: ${name} ${prev.state} → ${c.State}`)
           if (c.State === 'restarting' && prev.state === 'running') {
             logActivity('docker', `Container '${name}' wird neugestartet`, 'info', { containerId: c.Id })
           } else if (c.State === 'running' && prev.state === 'restarting') {
@@ -116,7 +118,12 @@ export function initDockerPoller(): void {
         setTimeout(() => poll().catch(() => {}), 5_000)
         setTimeout(() => poll().catch(() => {}), 10_000)
       }
-    } catch { /* docker socket unavailable */ }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (!msg.includes('ENOENT') && !msg.includes('ECONNREFUSED')) {
+        console.error('[Docker Poller]', msg)
+      }
+    }
   }
   // 10s startup delay so Docker socket is settled, then every 15s
   setTimeout(() => {

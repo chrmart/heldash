@@ -261,8 +261,8 @@ async function start() {
   // ── Server-side service health check scheduler (every 2 minutes) ─────────────
   const HEALTH_INTERVAL_MS = 2 * 60 * 1000
   const healthPingAgent = new Agent({
-    headersTimeout: 5_000,
-    bodyTimeout: 5_000,
+    headersTimeout: 10_000,
+    bodyTimeout: 10_000,
     connect: { rejectUnauthorized: false },
   })
 
@@ -277,9 +277,15 @@ async function start() {
       const prevStatus = svc.last_status
       let status: 'online' | 'offline' = 'offline'
       try {
-        const res = await undiciRequest(checkUrl, { method: 'GET', dispatcher: healthPingAgent })
-        status = res.statusCode < 500 ? 'online' : 'offline'
-        for await (const _ of res.body) { /* drain */ }
+        const res = await undiciRequest(checkUrl, { method: 'HEAD', dispatcher: healthPingAgent })
+        if (res.statusCode === 405) {
+          const res2 = await undiciRequest(checkUrl, { method: 'GET', dispatcher: healthPingAgent })
+          status = res2.statusCode < 500 ? 'online' : 'offline'
+          for await (const _ of res2.body) { /* drain */ }
+        } else {
+          status = res.statusCode < 500 ? 'online' : 'offline'
+          for await (const _ of res.body) { /* drain */ }
+        }
       } catch { status = 'offline' }
 
       db.prepare("UPDATE services SET last_status = ?, last_checked = datetime('now') WHERE id = ?")
