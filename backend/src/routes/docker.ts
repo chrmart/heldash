@@ -133,7 +133,7 @@ export function initDockerPoller(): void {
       .catch(e => console.error('[Docker Poller] First poll failed:', e))
     setInterval(() => {
       poll().catch(e => console.error('[Docker Poller] Poll failed:', e))
-    }, 15_000)
+    }, 5_000)
   }, 10_000)
 }
 
