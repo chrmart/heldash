@@ -2772,15 +2772,6 @@ function RecyclarrTab() {
                 : <span className="badge-error" style={{ fontSize: 11 }}>Sync fehlgeschlagen</span>
             )}
           </div>
-          {(syncLines.length > 0 || syncing) && (
-            <pre ref={syncOutputRef} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 12, overflowY: 'auto', whiteSpace: 'pre-wrap', maxHeight: 240, margin: 0 }}>
-              {syncLines.map((sl, i) => (
-                <span key={i} style={{ display: 'block', color: sl.type === 'stderr' ? 'var(--status-offline)' : 'var(--text-primary)' }}>{sl.line}</span>
-              ))}
-              {syncing && <span style={{ color: 'var(--text-muted)', display: 'block' }}>…</span>}
-            </pre>
-          )}
-
           {/* Sync history collapsible */}
           {isAdmin && (
             <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 8 }}>
@@ -2796,28 +2787,37 @@ function RecyclarrTab() {
                 Verlauf anzeigen
               </button>
               {historyOpen && (
-                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {syncHistory.length === 0
-                    ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Kein Verlauf vorhanden</div>
-                    : syncHistory.map(h => (
-                        <div key={h.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'rgba(0,0,0,0.15)' }}>
-                          <span className={h.success ? 'badge-success' : 'badge-error'} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
-                            {h.success ? 'OK' : 'Fehler'}
-                          </span>
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
-                            {new Date(h.synced_at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
-                          </span>
-                          {h.changes_summary && (
-                            <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1 }}>
-                              {h.changes_summary.created > 0 && `+${h.changes_summary.created} `}
-                              {h.changes_summary.updated > 0 && `~${h.changes_summary.updated} `}
-                              {h.changes_summary.deleted > 0 && `-${h.changes_summary.deleted}`}
+                <>
+                  {!syncing && syncLines.length > 0 && (
+                    <pre ref={syncOutputRef} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 12, overflowY: 'auto', whiteSpace: 'pre-wrap', maxHeight: 240, margin: '8px 0 0' }}>
+                      {syncLines.map((sl, i) => (
+                        <span key={i} style={{ display: 'block', color: sl.type === 'stderr' ? 'var(--status-offline)' : 'var(--text-primary)' }}>{sl.line}</span>
+                      ))}
+                    </pre>
+                  )}
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {syncHistory.length === 0
+                      ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Kein Verlauf vorhanden</div>
+                      : syncHistory.map(h => (
+                          <div key={h.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'rgba(0,0,0,0.15)' }}>
+                            <span className={h.success ? 'badge-success' : 'badge-error'} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
+                              {h.success ? 'OK' : 'Fehler'}
                             </span>
-                          )}
-                        </div>
-                      ))
-                  }
-                </div>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                              {new Date(h.synced_at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                            {h.changes_summary && (
+                              <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1 }}>
+                                {h.changes_summary.created > 0 && `+${h.changes_summary.created} `}
+                                {h.changes_summary.updated > 0 && `~${h.changes_summary.updated} `}
+                                {h.changes_summary.deleted > 0 && `-${h.changes_summary.deleted}`}
+                              </span>
+                            )}
+                          </div>
+                        ))
+                    }
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -3639,6 +3639,81 @@ function RecyclarrTab() {
             } catch { /* ignore */ }
           }}
         />
+      )}
+
+      {/* ── Profile Comparison Modal ── */}
+      {showProfileComparison && currentArrData && configuredProfiles.length > 1 && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => setShowProfileComparison(false)}>
+          <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, maxWidth: 900, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 16 }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, margin: 0, flex: 1 }}>Profil-Vergleich</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowProfileComparison(false)} style={{ width: 28, height: 28, padding: 0 }}>
+                <X size={14} />
+              </button>
+            </div>
+            <div style={{ overflow: 'auto', flex: 1 }}>
+              {(() => {
+                // Collect all CF names across profiles
+                const allCfNames = new Set<string>()
+                configuredProfiles.forEach(pc => {
+                  const arrProfile = currentArrData.profiles.find(p => p.name === pc.name)
+                  arrProfile?.formatItems.forEach(fi => allCfNames.add(fi.name))
+                })
+                const cfList = Array.from(allCfNames).sort()
+                if (cfList.length === 0) return (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: 24 }}>
+                    Noch kein Sync — Daten werden nach dem ersten Sync angezeigt
+                  </div>
+                )
+                return (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '6px 8px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--glass-border)', position: 'sticky', top: 0, background: 'var(--bg-elevated)' }}>
+                          Custom Format
+                        </th>
+                        {configuredProfiles.map(pc => (
+                          <th key={pc.trash_id} style={{ textAlign: 'right', padding: '6px 8px', fontSize: 11, color: 'var(--accent)', fontWeight: 600, borderBottom: '1px solid var(--glass-border)', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: 'var(--bg-elevated)' }}>
+                            {pc.name}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cfList.map(cfName => {
+                        const scores = configuredProfiles.map(pc => {
+                          const arrProfile = currentArrData.profiles.find(p => p.name === pc.name)
+                          const fi = arrProfile?.formatItems.find(f => f.name === cfName)
+                          if (!fi) return null
+                          const override = getOverride(String(fi.format), pc.trash_id)
+                          return override !== null ? override : fi.score
+                        })
+                        const allSame = scores.every(s => s === scores[0])
+                        return (
+                          <tr key={cfName} style={{ borderBottom: '1px solid rgba(var(--glass-border-rgb,255,255,255),0.05)' }}>
+                            <td style={{ padding: '5px 8px', color: 'var(--text-secondary)' }}>{cfName}</td>
+                            {scores.map((score, i) => (
+                              <td key={i} style={{ padding: '5px 8px', textAlign: 'right',
+                                color: score === null ? 'var(--text-muted)'
+                                  : !allSame ? (score > 0 ? '#4ade80' : score < 0 ? '#f87171' : 'var(--text-muted)')
+                                  : 'var(--text-secondary)',
+                                fontWeight: !allSame ? 600 : 400,
+                              }}>
+                                {score === null ? '—' : score > 0 ? `+${score}` : score}
+                              </td>
+                            ))}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -4744,81 +4819,6 @@ function ImportModal({
           </div>
         )}
       </div>
-
-      {/* ── Profile Comparison Modal ── */}
-      {showProfileComparison && currentArrData && configuredProfiles.length > 1 && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={() => setShowProfileComparison(false)}>
-          <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, maxWidth: 900, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 16 }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, margin: 0, flex: 1 }}>Profil-Vergleich</h3>
-              <button className="btn btn-ghost btn-icon" onClick={() => setShowProfileComparison(false)} style={{ width: 28, height: 28, padding: 0 }}>
-                <X size={14} />
-              </button>
-            </div>
-            <div style={{ overflow: 'auto', flex: 1 }}>
-              {(() => {
-                // Collect all CF names across profiles
-                const allCfNames = new Set<string>()
-                configuredProfiles.forEach(pc => {
-                  const arrProfile = currentArrData.profiles.find(p => p.name === pc.name)
-                  arrProfile?.formatItems.forEach(fi => allCfNames.add(fi.name))
-                })
-                const cfList = Array.from(allCfNames).sort()
-                if (cfList.length === 0) return (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: 24 }}>
-                    Noch kein Sync — Daten werden nach dem ersten Sync angezeigt
-                  </div>
-                )
-                return (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: 'left', padding: '6px 8px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--glass-border)', position: 'sticky', top: 0, background: 'var(--bg-elevated)' }}>
-                          Custom Format
-                        </th>
-                        {configuredProfiles.map(pc => (
-                          <th key={pc.trash_id} style={{ textAlign: 'right', padding: '6px 8px', fontSize: 11, color: 'var(--accent)', fontWeight: 600, borderBottom: '1px solid var(--glass-border)', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: 'var(--bg-elevated)' }}>
-                            {pc.name}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cfList.map(cfName => {
-                        const scores = configuredProfiles.map(pc => {
-                          const arrProfile = currentArrData.profiles.find(p => p.name === pc.name)
-                          const fi = arrProfile?.formatItems.find(f => f.name === cfName)
-                          if (!fi) return null
-                          const override = getOverride(String(fi.format), pc.trash_id)
-                          return override !== null ? override : fi.score
-                        })
-                        const allSame = scores.every(s => s === scores[0])
-                        return (
-                          <tr key={cfName} style={{ borderBottom: '1px solid rgba(var(--glass-border-rgb,255,255,255),0.05)' }}>
-                            <td style={{ padding: '5px 8px', color: 'var(--text-secondary)' }}>{cfName}</td>
-                            {scores.map((score, i) => (
-                              <td key={i} style={{ padding: '5px 8px', textAlign: 'right',
-                                color: score === null ? 'var(--text-muted)'
-                                  : !allSame ? (score > 0 ? '#4ade80' : score < 0 ? '#f87171' : 'var(--text-muted)')
-                                  : 'var(--text-secondary)',
-                                fontWeight: !allSame ? 600 : 400,
-                              }}>
-                                {score === null ? '—' : score > 0 ? `+${score}` : score}
-                              </td>
-                            ))}
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                )
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

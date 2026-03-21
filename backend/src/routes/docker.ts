@@ -91,7 +91,11 @@ export function initDockerPoller(): void {
         const name = (c.Names[0] ?? c.Id).replace(/^\//, '')
         const prev = containerStates.get(c.Id)
         if (prev && prev.state !== c.State) {
-          if (c.State === 'running') {
+          if (c.State === 'restarting' && prev.state === 'running') {
+            logActivity('docker', `Container '${name}' wird neugestartet`, 'info', { containerId: c.Id })
+          } else if (c.State === 'running' && prev.state === 'restarting') {
+            logActivity('docker', `Container '${name}' neugestartet`, 'info', { containerId: c.Id })
+          } else if (c.State === 'running') {
             logActivity('docker', `Container '${name}' gestartet`, 'info', { containerId: c.Id })
           } else if (c.State === 'exited' || c.State === 'dead') {
             logActivity('docker', `Container '${name}' gestoppt`, 'warning', { containerId: c.Id })

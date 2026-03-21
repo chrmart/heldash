@@ -209,11 +209,12 @@ export class HaWsClient {
     if (!oldState) return
     if (oldState.state === newState.state) return
 
-    // Rate limit: max 1 entry per entity per 60s
+    // Rate limit: max 1 entry per entity+direction per 60s
     const now = Date.now()
-    const lastLogged = this.activityRateLimit.get(entityId) ?? 0
+    const directionKey = `${entityId}:${oldState.state}→${newState.state}`
+    const lastLogged = this.activityRateLimit.get(directionKey) ?? 0
     if (now - lastLogged < RATE_LIMIT_MS) return
-    this.activityRateLimit.set(entityId, now)
+    this.activityRateLimit.set(directionKey, now)
 
     const friendly = (newState.attributes.friendly_name as string | undefined) ?? entityId
     const message = `${friendly} — ${oldState.state} → ${newState.state}`

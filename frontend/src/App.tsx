@@ -47,7 +47,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 
 function App() {
-  const { loadAll, checkAllServices, checkAuth, settings, authReady, needsSetup, isAdmin, isAuthenticated, authUser, userGroups, myBackground, loadMyBackground } = useStore()
+  const { loadAll, loadServices, checkAllServices, checkAuth, settings, authReady, needsSetup, isAdmin, isAuthenticated, authUser, userGroups, myBackground, loadMyBackground } = useStore()
   const { loadDashboard } = useDashboardStore()
   const [page, setPage] = useState('dashboard')
   const [showModal, setShowModal] = useState(false)
@@ -116,11 +116,11 @@ function App() {
     if (!canSeeDocker) setPage('dashboard')
   }, [isAdmin, authReady, authUser, userGroups, page])
 
-  // Auto-check services every 60s
+  // Poll service statuses every 30s (reads DB, no pinging)
   useEffect(() => {
     const interval = setInterval(() => {
-      checkAllServices()
-    }, 60_000)
+      loadServices()
+    }, 30_000)
     return () => clearInterval(interval)
   }, [])
 
