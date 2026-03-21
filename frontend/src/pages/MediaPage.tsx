@@ -21,7 +21,7 @@ type MediaTab = 'instances' | 'library' | 'calendar' | 'indexers' | 'discover' |
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
-function TabBar({ active, onChange, cfBadge }: { active: MediaTab; onChange: (t: MediaTab) => void; cfBadge?: string }) {
+function TabBar({ active, onChange }: { active: MediaTab; onChange: (t: MediaTab) => void }) {
   const tabs: { id: MediaTab; label: string; icon: React.ReactNode }[] = [
     { id: 'instances',  label: 'Instances',  icon: <LayoutGrid size={13} /> },
     { id: 'library',    label: 'Library',    icon: <Database size={13} /> },
@@ -29,7 +29,7 @@ function TabBar({ active, onChange, cfBadge }: { active: MediaTab; onChange: (t:
     { id: 'indexers',   label: 'Indexers',   icon: <Search size={13} /> },
     { id: 'discover' as MediaTab, label: 'Discover', icon: <Compass size={13} /> },
     { id: 'recyclarr' as MediaTab, label: 'Recyclarr', icon: <Sliders size={13} /> },
-    { id: 'cf-manager' as MediaTab, label: cfBadge ? `CF-Manager (${cfBadge})` : 'CF-Manager', icon: <Shield size={13} /> },
+    { id: 'cf-manager' as MediaTab, label: 'CF-Manager', icon: <Shield size={13} /> },
   ]
   return (
     <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -2382,6 +2382,14 @@ function RecyclarrTab() {
   const [userCfsFromFs, setUserCfsFromFs] = useState<import('../types/recyclarr').UserCfFile[]>([])
   const [userCfsFromFsLoading, setUserCfsFromFsLoading] = useState(false)
 
+  // ── CF groups (for grouped TRaSH CF view) ──
+  const [profileCfGroups, setProfileCfGroups] = useState<{ name: string; cfTrashIds: string[] }[]>([])
+  const [profileCfGroupsWarning, setProfileCfGroupsWarning] = useState(false)
+  const [profileCfGroupsLoading, setProfileCfGroupsLoading] = useState(false)
+
+  // ── Local config state init tracking ──
+  const localStateInstanceRef = useRef<string | null>(null)
+
   // ── Local config state ──
   const [localProfilesConfig, setLocalProfilesConfig] = useState<import('../types/recyclarr').RecyclarrProfileConfig[]>([])
   const [localScoreOverrides, setLocalScoreOverrides] = useState<import('../types/recyclarr').RecyclarrScoreOverride[]>([])
@@ -2487,37 +2495,25 @@ function RecyclarrTab() {
     if (syncOutputRef.current) syncOutputRef.current.scrollTop = syncOutputRef.current.scrollHeight
   }, [syncLines])
 
+  // Effect 1: side effects on instance change — reset init tracking + defaults + async loads
   useEffect(() => {
+    localStateInstanceRef.current = null // mark local state as uninitialized for this instance
     if (!instanceId || !currentInstance) return
-    const cfg = configs.find(c => c.instanceId === instanceId)
-    if (cfg) {
-      setLocalProfilesConfig(cfg.profilesConfig ?? [])
-      setLocalScoreOverrides(cfg.scoreOverrides ?? [])
-      setLocalUserCfs(cfg.userCfNames ?? [])
-      setLocalEnabled(cfg.enabled)
-      setLocalPreferredRatio(cfg.preferredRatio ?? 0)
-      setLocalDeleteOldCfs(cfg.deleteOldCfs ?? false)
-      setLocalQualityDefType(cfg.qualityDefType ?? (currentInstance.type === 'radarr' ? 'movie' : 'series'))
-      const parsed = parseCronExpression(cfg.syncSchedule ?? 'manual')
-      setScheduleMode(parsed.mode)
-      setScheduleTime(parsed.time)
-      setScheduleWeekday(parsed.weekday)
-      setScheduleCustom(parsed.custom)
-      setSelectedProfileId(prev => cfg.profilesConfig.find(pc => pc.trash_id === prev) ? prev : cfg.profilesConfig[0]?.trash_id ?? '')
-    } else {
-      setLocalProfilesConfig([])
-      setLocalScoreOverrides([])
-      setLocalUserCfs([])
-      setLocalEnabled(true)
-      setLocalPreferredRatio(0)
-      setLocalDeleteOldCfs(false)
-      setLocalQualityDefType(currentInstance.type === 'radarr' ? 'movie' : 'series')
-      setScheduleMode('manual')
-      setScheduleTime('04:00')
-      setScheduleWeekday('1')
-      setScheduleCustom('')
-      setSelectedProfileId('')
-    }
+    // Reset to defaults immediately; Effect 2 will override with saved config once configs load
+    setLocalProfilesConfig([])
+    setLocalScoreOverrides([])
+    setLocalUserCfs([])
+    setLocalEnabled(true)
+    setLocalPreferredRatio(0)
+    setLocalDeleteOldCfs(false)
+    setLocalQualityDefType(currentInstance.type === 'radarr' ? 'movie' : 'series')
+    setScheduleMode('manual')
+    setScheduleTime('04:00')
+    setScheduleWeekday('1')
+    setScheduleCustom('')
+    setSelectedProfileId('')
+    setScoreChanges([])
+    setScoreChangesChecked(false)
     loadArrData(instanceId).then(ad => {
       if (ad.profiles.length > 0) {
         checkScoreChanges(instanceId).then(res => {
@@ -2532,16 +2528,58 @@ function RecyclarrTab() {
       .catch(() => {})
       .finally(() => setUserCfsFromFsLoading(false))
     api.recyclarr.listScoreSets(instanceId).then(r => setScoreSets(r.scoreSets)).catch(() => {})
-    setScoreChanges([])
-    setScoreChangesChecked(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId])
+
+  // Effect 2: initialize local state from config — waits for configs to load, runs once per instance
+  useEffect(() => {
+    if (!instanceId || !currentInstance) return
+    if (localStateInstanceRef.current === instanceId) return // already initialized for this instance
+    const cfg = configs.find(c => c.instanceId === instanceId)
+    if (!cfg) return // configs not loaded yet — will re-run when configs change
+    localStateInstanceRef.current = instanceId
+    setLocalProfilesConfig(cfg.profilesConfig ?? [])
+    setLocalScoreOverrides(cfg.scoreOverrides ?? [])
+    setLocalUserCfs(cfg.userCfNames ?? [])
+    setLocalEnabled(cfg.enabled)
+    setLocalPreferredRatio(cfg.preferredRatio ?? 0)
+    setLocalDeleteOldCfs(cfg.deleteOldCfs ?? false)
+    setLocalQualityDefType(cfg.qualityDefType ?? (currentInstance.type === 'radarr' ? 'movie' : 'series'))
+    const parsed = parseCronExpression(cfg.syncSchedule ?? 'manual')
+    setScheduleMode(parsed.mode)
+    setScheduleTime(parsed.time)
+    setScheduleWeekday(parsed.weekday)
+    setScheduleCustom(parsed.custom)
+    setSelectedProfileId(prev => cfg.profilesConfig.find(pc => pc.trash_id === prev) ? prev : cfg.profilesConfig[0]?.trash_id ?? '')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instanceId, configs])
 
   useEffect(() => {
     api.recyclarr.containerStatus('recyclarr')
       .then(r => setContainerRunning(r.running))
       .catch(() => setContainerRunning(null))
   }, [])
+
+  // Effect: fetch CF groups when profile selection changes
+  useEffect(() => {
+    if (!instanceId || !selectedProfileId) {
+      setProfileCfGroups([])
+      setProfileCfGroupsWarning(false)
+      return
+    }
+    setProfileCfGroupsLoading(true)
+    api.recyclarr.profileCfs(instanceId, selectedProfileId)
+      .then(r => {
+        setProfileCfGroups(r.groups)
+        setProfileCfGroupsWarning(r.warning)
+      })
+      .catch(() => {
+        setProfileCfGroups([])
+        setProfileCfGroupsWarning(true)
+      })
+      .finally(() => setProfileCfGroupsLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instanceId, selectedProfileId])
 
   // ── handleSave ──
   const handleSave = async () => {
@@ -2551,7 +2589,7 @@ function RecyclarrTab() {
     setSaveSuccess(false)
     try {
       const syncSchedule = buildCronExpression(scheduleMode, scheduleTime, scheduleWeekday, scheduleCustom)
-      await saveConfig(instanceId, {
+      const savePayload = {
         enabled: localEnabled,
         selectedProfiles: localProfilesConfig.map(pc => pc.trash_id),
         scoreOverrides: localScoreOverrides,
@@ -2561,7 +2599,9 @@ function RecyclarrTab() {
         syncSchedule,
         deleteOldCfs: localDeleteOldCfs,
         qualityDefType: localQualityDefType,
-      })
+      }
+      console.log('[RecyclarrTab] handleSave payload:', JSON.stringify(savePayload))
+      await saveConfig(instanceId, savePayload)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (e) {
@@ -3067,6 +3107,9 @@ function RecyclarrTab() {
 
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              {profileCfGroupsWarning && !profileCfGroupsLoading && (
+                                <span className="badge-warning" style={{ fontSize: 10, alignSelf: 'flex-start', marginBottom: 4 }}>Gruppen konnten nicht geladen werden</span>
+                              )}
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px 100px', gap: 8, padding: '4px 8px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>
                                 <span>Name</span><span style={{ textAlign: 'right' }}>Guide-Score</span><span style={{ textAlign: 'right' }}>Override</span><span />
                               </div>
@@ -5005,7 +5048,6 @@ interface Props {
 
 export function MediaPage({ showAddForm: showFromParent, onFormClose, onNavigate }: Props) {
   const { settings } = useStore()
-  const { instances, customFormats, userCfFiles } = useArrStore()
   const [activeTab, setActiveTab] = useState<MediaTab>('instances')
 
   // When Topbar "Add Instance" fires, switch to Instances tab
@@ -5017,22 +5059,13 @@ export function MediaPage({ showAddForm: showFromParent, onFormClose, onNavigate
 
   const hasTmdbKey = !!(settings?.tmdb_api_key)
 
-  const cfBadge = useMemo(() => {
-    const inst = instances.find(i => i.enabled && (i.type === 'radarr' || i.type === 'sonarr'))
-    if (!inst) return undefined
-    const cfs = customFormats[inst.id]
-    const ucs = userCfFiles[inst.type as 'radarr' | 'sonarr']
-    if (cfs === undefined || ucs === undefined) return undefined
-    return `${ucs.length}/${cfs.length}`
-  }, [instances, customFormats, userCfFiles])
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, flex: 1 }}>Media</h2>
       </div>
 
-      <TabBar active={activeTab} onChange={setActiveTab} cfBadge={cfBadge} />
+      <TabBar active={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'instances' && (
         <InstancesTab showAddForm={showFromParent} onFormClose={onFormClose} />

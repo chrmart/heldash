@@ -348,6 +348,8 @@ export const api = {
       req<{ hasChanges: boolean; changes: import('./types/recyclarr').ScoreChange[] }>(`/recyclarr/check-score-changes/${instanceId}`, { method: 'POST', body: JSON.stringify({ profileData }) }),
     acceptScoreChanges: (instanceId: string, changes: import('./types/recyclarr').ScoreChange[]) =>
       req<{ ok: boolean }>(`/recyclarr/accept-score-changes/${instanceId}`, { method: 'POST', body: JSON.stringify({ changes }) }),
+    profileCfs: (instanceId: string, profileTrashId: string) =>
+      req<{ groups: { name: string; cfTrashIds: string[] }[]; warning: boolean }>(`/recyclarr/profile-cfs/${instanceId}?profileTrashId=${encodeURIComponent(profileTrashId)}`),
     listProfiles: (instanceId: string) =>
       req<{ profiles: { trash_id: string; name: string }[] }>(`/recyclarr/list-profiles/${instanceId}`),
     listScoreSets: (instanceId: string) =>

@@ -639,8 +639,8 @@ function generateRecyclarrYaml(configs: RecyclarrConfig[], instances: ArrInstanc
     const qualityDefinition: Record<string, unknown> = { type: qdType }
     if (cfg.preferredRatio > 0) qualityDefinition.preferred_ratio = cfg.preferredRatio
 
-    // Quality profiles
-    const qualityProfiles = cfg.profilesConfig.map(pc => {
+    // Quality profiles — skip entries with missing/empty trash_id
+    const qualityProfiles = cfg.profilesConfig.filter(pc => pc.trash_id && pc.trash_id.trim()).map(pc => {
       const entry: Record<string, unknown> = { trash_id: pc.trash_id }
       if (pc.min_format_score != null && pc.min_format_score > 0) {
         entry.min_format_score = pc.min_format_score
@@ -1434,6 +1434,54 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       db.prepare("UPDATE recyclarr_config SET last_known_scores = ?, updated_at = datetime('now') WHERE instance_id = ?")
         .run(JSON.stringify(lastKnown), instanceId)
       return reply.send({ ok: true })
+    }
+  )
+
+  // GET /api/recyclarr/profile-cfs/:instanceId?profileTrashId=xxx
+  app.get<{ Params: { instanceId: string }; Querystring: { profileTrashId?: string } }>(
+    '/api/recyclarr/profile-cfs/:instanceId',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { instanceId } = req.params
+      const db = getDb()
+      const inst = db.prepare('SELECT * FROM arr_instances WHERE id = ?').get(instanceId) as ArrInstanceRow | undefined
+      if (!inst) return reply.status(404).send({ error: 'Instance not found' })
+      if (inst.type !== 'radarr' && inst.type !== 'sonarr') return reply.status(400).send({ error: 'Only radarr/sonarr supported' })
+      const service = inst.type as 'radarr' | 'sonarr'
+      const { containerName } = getRecyclarrSettings()
+
+      let groups: { name: string; cfTrashIds: string[] }[] = []
+      let warning = false
+
+      try {
+        const { stdout, exitCode } = await dockerExecInContainer(
+          containerName,
+          ['recyclarr', 'list', 'custom-format-groups', service, '--raw'],
+          15_000
+        )
+        if (exitCode !== 0) {
+          app.log.warn({ exitCode, service }, 'recyclarr list custom-format-groups exited non-zero — groups unavailable')
+          warning = true
+        } else {
+          // Parse groups: expected format "groupName\ttrash_id1,trash_id2,..."
+          for (const line of stdout.split('\n')) {
+            const trimmed = line.trim()
+            if (!trimmed) continue
+            const parts = trimmed.split('\t')
+            const groupName = parts[0]?.trim()
+            const ids = (parts[1] ?? '').split(',').map(s => s.trim()).filter(Boolean)
+            if (groupName && ids.length > 0) {
+              groups.push({ name: groupName, cfTrashIds: ids })
+            }
+          }
+          if (groups.length === 0) warning = true
+        }
+      } catch (e) {
+        app.log.error({ err: e, service }, 'Failed to fetch CF groups via docker exec — groups unavailable')
+        warning = true
+      }
+
+      return reply.send({ groups, warning })
     }
   )
 
