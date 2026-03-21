@@ -3388,14 +3388,25 @@ function toDraftSpec(spec: ArrCFSpecification): DraftSpec {
   }
 }
 
-function buildSpecPayload(spec: DraftSpec): ArrCFSpecification {
+function buildSpecPayload(spec: DraftSpec, schemaEntry?: ArrCFSchema): ArrCFSpecification {
+  let fields: { name: string; value: unknown }[]
+  if (schemaEntry && schemaEntry.fields.length > 0) {
+    fields = schemaEntry.fields.map(fieldDef => ({
+      name: fieldDef.name,
+      value: spec.fields.find(f => f.name === fieldDef.name)?.value ?? (
+        fieldDef.type === 'select' ? (fieldDef.selectOptions?.[0]?.value ?? 0) : ''
+      ),
+    }))
+  } else {
+    fields = spec.fields as { name: string; value: unknown }[]
+  }
   return {
     name: spec.name,
     implementation: spec.implementation,
     implementationName: spec.implementationName,
     negate: spec.negate,
     required: spec.required,
-    fields: spec.fields as { name: string; value: unknown }[],
+    fields,
   }
 }
 
@@ -3546,6 +3557,7 @@ function CfEditModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [specErrors, setSpecErrors] = useState<Record<number, { name?: string; field?: string }>>({})
   const [jsonImportOpen, setJsonImportOpen] = useState(false)
   const [jsonText, setJsonText] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
@@ -3591,6 +3603,30 @@ function CfEditModal({
 
   async function handleSave() {
     if (!name.trim()) { setError('Name ist erforderlich'); return }
+
+    const errors: Record<number, { name?: string; field?: string }> = {}
+    specs.forEach((spec, idx) => {
+      if (!spec.name.trim()) {
+        errors[idx] = { ...errors[idx], name: 'Condition Name ist Pflichtfeld' }
+      }
+      const entry = schema.find(s => s.implementation === spec.implementation)
+      if (entry && entry.fields.length > 0) {
+        const hasEmptyField = entry.fields.some(fieldDef => {
+          if (fieldDef.type === 'select') return false
+          const val = spec.fields.find(f => f.name === fieldDef.name)?.value
+          return val === undefined || val === null || String(val).trim() === ''
+        })
+        if (hasEmptyField) errors[idx] = { ...errors[idx], field: 'Wert ist Pflichtfeld' }
+      }
+    })
+    if (Object.keys(errors).length > 0) {
+      setSpecErrors(errors)
+      const firstIdx = parseInt(Object.keys(errors)[0], 10)
+      document.getElementById(`spec-row-${firstIdx}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      return
+    }
+    setSpecErrors({})
+
     const trashId = frozenTrashId ?? toUserSlug(name.trim())
     setSaving(true)
     setError(null)
@@ -3599,7 +3635,7 @@ function CfEditModal({
         name: name.trim(),
         trash_id: trashId,
         includeCustomFormatWhenRenaming: renaming,
-        specifications: specs.map(buildSpecPayload),
+        specifications: specs.map(spec => buildSpecPayload(spec, schema.find(s => s.implementation === spec.implementation))),
       })
       setSaved(true)
     } catch (e: unknown) {
@@ -3693,8 +3729,9 @@ function CfEditModal({
             )}
             {specs.map((spec, idx) => {
               const schemaEntry = schema.find(s => s.implementation === spec.implementation)
+              const specErr = specErrors[idx]
               return (
-                <div key={idx} className="glass" style={{ borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: 8 }}>
+                <div key={idx} id={`spec-row-${idx}`} className="glass" style={{ borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: 8 }}>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <select
                       className="form-input"
@@ -3711,7 +3748,7 @@ function CfEditModal({
                     </select>
                     <input
                       className="form-input"
-                      placeholder="Condition Name"
+                      placeholder="Name für diese Condition (z.B. 'x265 Release')"
                       value={spec.name}
                       style={{ flex: '1 1 120px', fontSize: 12 }}
                       onChange={e => updateSpec(idx, s => ({ ...s, name: e.target.value }))}
@@ -3744,6 +3781,8 @@ function CfEditModal({
                       </div>
                     )
                   })}
+                  {specErr?.name && <span className="badge-error" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>{specErr.name}</span>}
+                  {specErr?.field && <span className="badge-error" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>{specErr.field}</span>}
                 </div>
               )
             })}
