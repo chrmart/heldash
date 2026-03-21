@@ -132,6 +132,7 @@ export function initDockerPoller(): void {
       .then(() => console.log('[Docker Poller] First poll complete'))
       .catch(e => console.error('[Docker Poller] First poll failed:', e))
     setInterval(() => {
+      console.log('[Docker Poller] Interval tick')
       poll().catch(e => console.error('[Docker Poller] Poll failed:', e))
     }, 5_000)
   }, 10_000)
