@@ -40,12 +40,19 @@ export class HaWsClient {
   private pendingCommands = new Map<number, PendingCommand>()
   private commandQueue: { id: number; msg: string }[] = []
   private activityRateLimit = new Map<string, number>()
+  private persistent = false
 
   constructor(
     private readonly url: string,
     private readonly token: string,
     private readonly instanceId: string = '',
   ) {}
+
+  /** Start a persistent always-on connection — stays connected even without SSE listeners. */
+  startPersistent(): void {
+    this.persistent = true
+    if (!this.ws) this.connect()
+  }
 
   /** Register a listener. Returns an unsubscribe function. */
   subscribe(listener: StateListener): () => void {
@@ -83,6 +90,7 @@ export class HaWsClient {
   }
 
   private maybeDisconnect(): void {
+    if (this.persistent) return
     if (!this.destroyed && this.listeners.size === 0 && this.pendingCommands.size === 0 && this.commandQueue.length === 0) {
       this.disconnect()
     }
@@ -116,7 +124,7 @@ export class HaWsClient {
         reject(new Error('Connection closed'))
       }
       this.pendingCommands.clear()
-      if (!this.destroyed && (this.listeners.size > 0 || this.commandQueue.length > 0)) {
+      if (!this.destroyed && (this.persistent || this.listeners.size > 0 || this.commandQueue.length > 0)) {
         this.scheduleReconnect()
       }
     }
@@ -217,7 +225,7 @@ export class HaWsClient {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       this.reconnectDelay = Math.min(this.reconnectDelay * 2, 60_000)
-      if (!this.destroyed && (this.listeners.size > 0 || this.commandQueue.length > 0)) {
+      if (!this.destroyed && (this.persistent || this.listeners.size > 0 || this.commandQueue.length > 0)) {
         this.connect()
       }
     }, this.reconnectDelay)

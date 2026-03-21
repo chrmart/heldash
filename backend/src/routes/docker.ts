@@ -82,7 +82,7 @@ function parseMuxedFrame(buf: Buffer): { consumed: number; stream: 'stdout' | 's
 const containerStates = new Map<string, { name: string; state: string }>()
 
 export function initDockerPoller(): void {
-  setInterval(async () => {
+  const poll = async () => {
     try {
       const res = await dockerReq('/v1.41/containers/json?all=true')
       if (!res.statusCode || res.statusCode >= 400) { await res.body.text().catch(() => {}); return }
@@ -105,7 +105,12 @@ export function initDockerPoller(): void {
         if (!currentIds.has(id)) containerStates.delete(id)
       }
     } catch { /* docker socket unavailable */ }
-  }, 30_000)
+  }
+  // 10s startup delay so Docker socket is settled, then every 30s
+  setTimeout(() => {
+    poll().catch(() => {})
+    setInterval(() => poll().catch(() => {}), 30_000)
+  }, 10_000)
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────

@@ -238,13 +238,7 @@ export async function servicesRoutes(app: FastifyInstance) {
     db.prepare('UPDATE services SET last_status = ?, last_checked = datetime(\'now\') WHERE id = ?')
       .run(status, req.params.id)
 
-    // Record health history
-    db.prepare("INSERT INTO service_health_history (service_id, checked_at, status) VALUES (?, datetime('now'), ?)")
-      .run(service.id, status === 'online' ? 1 : 0)
-    db.prepare("DELETE FROM service_health_history WHERE service_id = ? AND checked_at < datetime('now', '-7 days')")
-      .run(service.id)
-
-    // Log status changes
+    // Log status changes (health history written by server-side scheduler only)
     if (status !== oldStatus) {
       if (status === 'offline') {
         logActivity('system', `${service.name} ist offline gegangen`, 'warning', { serviceId: service.id, url: checkUrl })
@@ -277,13 +271,7 @@ export async function servicesRoutes(app: FastifyInstance) {
         db.prepare('UPDATE services SET last_status = ?, last_checked = datetime(\'now\') WHERE id = ?')
           .run(status, s.id)
 
-        // Record health history
-        db.prepare("INSERT INTO service_health_history (service_id, checked_at, status) VALUES (?, datetime('now'), ?)")
-          .run(s.id, status === 'online' ? 1 : 0)
-        db.prepare("DELETE FROM service_health_history WHERE service_id = ? AND checked_at < datetime('now', '-7 days')")
-          .run(s.id)
-
-        // Log status changes
+        // Log status changes (health history written by server-side scheduler only)
         if (status !== oldStatus) {
           if (status === 'offline') {
             logActivity('system', `${s.name} ist offline gegangen`, 'warning', { serviceId: s.id, url: checkUrl })

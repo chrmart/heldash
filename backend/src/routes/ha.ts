@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify'
 import { nanoid } from 'nanoid'
 import { getDb } from '../db/database'
 import { isValidHttpUrl } from './_helpers'
-import { getHaWsClient, invalidateHaWsClient } from '../clients/ha-ws-manager'
+import { getHaWsClient, invalidateHaWsClient, ensureHaWsPersistent } from '../clients/ha-ws-manager'
 import type { HaWsClient } from '../clients/ha-ws-client'
 import { logActivity } from './activity'
 
@@ -135,11 +135,14 @@ export async function haRoutes(app: FastifyInstance) {
     const id = nanoid()
     const maxRow = db.prepare('SELECT MAX(position) as m FROM ha_instances').get() as { m: number | null }
     const position = (maxRow.m ?? -1) + 1
+    const cleanUrl = url.replace(/\/$/, '')
+    const cleanToken = token.trim()
     db.prepare(`
       INSERT INTO ha_instances (id, name, url, token, enabled, position)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, name.trim(), url.replace(/\/$/, ''), token.trim(), enabled ? 1 : 0, position)
+    `).run(id, name.trim(), cleanUrl, cleanToken, enabled ? 1 : 0, position)
     const row = db.prepare('SELECT * FROM ha_instances WHERE id = ?').get(id) as HaInstanceRow
+    if (enabled) ensureHaWsPersistent(id, cleanUrl, cleanToken)
     return reply.status(201).send(sanitizeInstance(row))
   })
 
@@ -161,6 +164,7 @@ export async function haRoutes(app: FastifyInstance) {
     `).run(name, url, token, enabled, row.id)
     // Invalidate WS client so it reconnects with updated credentials/URL
     invalidateHaWsClient(row.id)
+    if (enabled) ensureHaWsPersistent(row.id, url, token)
     const updated = db.prepare('SELECT * FROM ha_instances WHERE id = ?').get(row.id) as HaInstanceRow
     logActivity('ha', `HA-Instanz "${updated.name}" aktualisiert`, 'info', { instanceId: row.id })
     return sanitizeInstance(updated)

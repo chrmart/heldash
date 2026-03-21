@@ -21,7 +21,10 @@ import { backgroundsRoutes } from './routes/backgrounds'
 import { haRoutes } from './routes/ha'
 import { tmdbRoutes } from './routes/tmdb'
 import recyclarrRoutes, { initRecyclarrSchedulers } from './routes/recyclarr'
-import { activityRoutes } from './routes/activity'
+import { activityRoutes, logActivity } from './routes/activity'
+import { initHaWsClients } from './clients/ha-ws-manager'
+import { getDb } from './db/database'
+import { Agent, request as undiciRequest } from 'undici'
 
 let _appVersion = '0.0.0'
 try {
@@ -251,6 +254,57 @@ async function start() {
 
   await app.listen({ port: PORT, host: '0.0.0.0' })
   app.log.info({ port: PORT }, 'HELDASH ready')
+
+  // ── Always-on HA WebSocket connections ────────────────────────────────────────
+  initHaWsClients()
+
+  // ── Server-side service health check scheduler (every 2 minutes) ─────────────
+  const HEALTH_INTERVAL_MS = 2 * 60 * 1000
+  const healthPingAgent = new Agent({
+    headersTimeout: 5_000,
+    bodyTimeout: 5_000,
+    connect: { rejectUnauthorized: false },
+  })
+
+  const runScheduledHealthChecks = async () => {
+    const db = getDb()
+    const services = db.prepare(
+      'SELECT id, name, url, check_url, last_status FROM services WHERE check_enabled = 1'
+    ).all() as { id: string; name: string; url: string; check_url: string | null; last_status: string | null }[]
+
+    await Promise.allSettled(services.map(async (svc) => {
+      const checkUrl = svc.check_url || svc.url
+      const prevStatus = svc.last_status
+      let status: 'online' | 'offline' = 'offline'
+      try {
+        const res = await undiciRequest(checkUrl, { method: 'GET', dispatcher: healthPingAgent })
+        status = res.statusCode < 500 ? 'online' : 'offline'
+        for await (const _ of res.body) { /* drain */ }
+      } catch { status = 'offline' }
+
+      db.prepare("UPDATE services SET last_status = ?, last_checked = datetime('now') WHERE id = ?")
+        .run(status, svc.id)
+      db.prepare("INSERT INTO service_health_history (service_id, checked_at, status) VALUES (?, datetime('now'), ?)")
+        .run(svc.id, status === 'online' ? 1 : 0)
+      db.prepare("DELETE FROM service_health_history WHERE service_id = ? AND checked_at < datetime('now', '-7 days')")
+        .run(svc.id)
+
+      if (prevStatus !== null && prevStatus !== status) {
+        logActivity(
+          'system',
+          status === 'online' ? `${svc.name} ist wieder online` : `${svc.name} ist offline gegangen`,
+          status === 'online' ? 'info' : 'warning',
+          { serviceId: svc.id }
+        )
+      }
+    }))
+  }
+
+  runScheduledHealthChecks().catch(e => app.log.error({ err: e }, 'Health check startup run failed'))
+  setInterval(
+    () => runScheduledHealthChecks().catch(e => app.log.error({ err: e }, 'Health check interval failed')),
+    HEALTH_INTERVAL_MS
+  )
 
   // ── Graceful shutdown ────────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
