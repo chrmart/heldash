@@ -1004,7 +1004,14 @@ function RoomSection({ areaId, areaName, panels, stateMap, onRemove, onEdit, onR
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export function HaPage() {
+interface HaPageProps {
+  showAddInstance?: boolean
+  onAddInstanceClose?: () => void
+  showAddPanel?: boolean
+  onAddPanelClose?: () => void
+}
+
+export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAddPanelClose }: HaPageProps = {}) {
   const {
     instances, panels, stateMap, areas,
     loadInstances, loadPanels, loadStates, updateEntityState, loadAreas,
@@ -1016,6 +1023,22 @@ export function HaPage() {
   const [showInstanceForm, setShowInstanceForm] = useState(false)
   const [editInstance, setEditInstance] = useState<HaInstance | null>(null)
   const [showBrowser, setShowBrowser] = useState(false)
+
+  // Sync external add-instance trigger
+  useEffect(() => {
+    if (showAddInstance) {
+      setShowInstanceForm(true)
+      onAddInstanceClose?.()
+    }
+  }, [showAddInstance])
+
+  // Sync external add-panel trigger (open browser to add panel)
+  useEffect(() => {
+    if (showAddPanel) {
+      setShowBrowser(true)
+      onAddPanelClose?.()
+    }
+  }, [showAddPanel])
   const [showEnergyPicker, setShowEnergyPicker] = useState(false)
   const [editPanel, setEditPanel] = useState<HaPanel | null>(null)
   const [showManageModal, setShowManageModal] = useState(false)

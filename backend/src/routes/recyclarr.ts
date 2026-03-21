@@ -6,6 +6,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { Pool, Agent, request as undiciRequest } from 'undici'
 import * as cron from 'node-cron'
+import { logActivity } from './activity'
 
 const dockerPool = new Pool('http://localhost', {
   socketPath: '/var/run/docker.sock',
@@ -343,6 +344,56 @@ function getRecyclarrSettings(): { containerName: string; configPath: string } {
 
 const USER_CF_BASE = '/recyclarr/user-cfs'
 const SETTINGS_YML_PATH = '/recyclarr/settings.yml'
+
+interface SyncHistoryRow {
+  id: string
+  synced_at: string
+  success: number
+  output: string
+  changes_summary: string | null
+}
+
+function parseSyncSummary(output: string): { created?: number; updated?: number; deleted?: number } | null {
+  const summary: { created?: number; updated?: number; deleted?: number } = {}
+  const createdMatch = output.match(/(\d+)\s+(?:custom format[s]?\s+)?(?:were\s+)?created/i)
+  const updatedMatch = output.match(/(\d+)\s+(?:(?:custom format[s]?\s+|score[s]?\s+))?(?:were\s+)?updated/i)
+  const deletedMatch = output.match(/(\d+)\s+(?:custom format[s]?\s+)?(?:were\s+)?deleted/i)
+  if (createdMatch) summary.created = parseInt(createdMatch[1], 10)
+  if (updatedMatch) summary.updated = parseInt(updatedMatch[1], 10)
+  if (deletedMatch) summary.deleted = parseInt(deletedMatch[1], 10)
+  if (Object.keys(summary).length === 0) return null
+  return summary
+}
+
+function recordSyncHistory(success: boolean, output: string): void {
+  try {
+    const db = getDb()
+    const id = nanoid()
+    const summary = parseSyncSummary(output)
+    db.prepare("INSERT INTO recyclarr_sync_history (id, synced_at, success, output, changes_summary) VALUES (?, datetime('now'), ?, ?, ?)")
+      .run(id, success ? 1 : 0, output, summary ? JSON.stringify(summary) : null)
+    // Keep max 10 rows
+    db.prepare('DELETE FROM recyclarr_sync_history WHERE id NOT IN (SELECT id FROM recyclarr_sync_history ORDER BY synced_at DESC LIMIT 10)').run()
+  } catch { /* ignore */ }
+}
+
+function backupConfig(configPath: string): void {
+  try {
+    if (!fs.existsSync(configPath)) return
+    const backupPath = `${configPath}.bak.${Date.now()}`
+    fs.copyFileSync(configPath, backupPath)
+    // Keep max 5 backups
+    const dir = path.dirname(configPath)
+    const base = path.basename(configPath)
+    const backups = fs.readdirSync(dir)
+      .filter(f => f.startsWith(`${base}.bak.`))
+      .map(f => ({ name: f, mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime)
+    for (const old of backups.slice(5)) {
+      try { fs.unlinkSync(path.join(dir, old.name)) } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+}
 
 function toUserCfSlug(name: string): string {
   return 'user-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -1036,7 +1087,8 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
     }
 
     db.prepare('UPDATE recyclarr_config SET is_syncing = 1 WHERE enabled = 1').run()
-    const { containerName } = getRecyclarrSettings()
+    const { containerName, configPath } = getRecyclarrSettings()
+    backupConfig(configPath)
     try {
       const collectedLines: string[] = []
       let exitCode = await streamingDockerExec(
@@ -1062,7 +1114,7 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
               exitCode = await streamingDockerExec(
                 containerName,
                 ['recyclarr', 'sync'],
-                (stream, line) => send(line, stream),
+                (stream, line) => { send(line, stream); collectedLines.push(line) },
                 300_000
               )
             }
@@ -1074,11 +1126,21 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
 
       const success = exitCode === 0
       db.prepare("UPDATE recyclarr_config SET is_syncing = 0, last_synced_at = datetime('now'), last_sync_success = ? WHERE enabled = 1").run(success ? 1 : 0)
-      if (success) send('Global sync completed successfully', 'done')
-      else send(`Global sync failed with exit code ${exitCode}`, 'error')
+      const fullOutput = collectedLines.join('\n')
+      recordSyncHistory(success, fullOutput)
+      if (success) {
+        send('Global sync completed successfully', 'done')
+        logActivity('recyclarr', 'Sync abgeschlossen', 'info')
+      } else {
+        send(`Global sync failed with exit code ${exitCode}`, 'error')
+        logActivity('recyclarr', 'Sync fehlgeschlagen', 'warning')
+      }
     } catch (e) {
       db.prepare('UPDATE recyclarr_config SET is_syncing = 0 WHERE enabled = 1').run()
-      send(e instanceof Error ? e.message : 'Sync error', 'error')
+      const msg = e instanceof Error ? e.message : 'Sync error'
+      recordSyncHistory(false, msg)
+      logActivity('recyclarr', `Sync fehlgeschlagen: ${msg}`, 'error')
+      send(msg, 'error')
     }
     raw.end()
   })
@@ -1522,6 +1584,64 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       }
 
       return reply.send({ importable, alreadyManaged })
+    }
+  )
+
+  // GET /api/recyclarr/sync-history
+  app.get('/api/recyclarr/sync-history', { preHandler: [app.authenticate] }, async (_req, reply) => {
+    const db = getDb()
+    const rows = db.prepare('SELECT * FROM recyclarr_sync_history ORDER BY synced_at DESC LIMIT 10').all() as SyncHistoryRow[]
+    return reply.send({
+      history: rows.map(r => ({
+        id: r.id,
+        synced_at: r.synced_at,
+        success: r.success === 1,
+        output: r.output,
+        changes_summary: r.changes_summary ? JSON.parse(r.changes_summary) as { created?: number; updated?: number; deleted?: number } : null,
+      }))
+    })
+  })
+
+  // GET /api/recyclarr/backups — list backup files (admin only)
+  app.get('/api/recyclarr/backups', { preHandler: [app.requireAdmin] }, async (_req, reply) => {
+    const { configPath } = getRecyclarrSettings()
+    const dir = path.dirname(configPath)
+    const base = path.basename(configPath)
+    try {
+      const files = fs.readdirSync(dir).filter(f => f.startsWith(`${base}.bak.`))
+      const backups = files.map(f => {
+        const filePath = path.join(dir, f)
+        const stat = fs.statSync(filePath)
+        const tsStr = f.replace(`${base}.bak.`, '')
+        const ts = parseInt(tsStr, 10)
+        return {
+          filename: f,
+          timestamp: isNaN(ts) ? stat.mtime.toISOString() : new Date(ts).toISOString(),
+          size: stat.size,
+        }
+      }).sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      return reply.send({ backups })
+    } catch {
+      return reply.send({ backups: [] })
+    }
+  })
+
+  // POST /api/recyclarr/backups/:filename/restore — restore backup (admin only)
+  app.post<{ Params: { filename: string } }>(
+    '/api/recyclarr/backups/:filename/restore',
+    { preHandler: [app.requireAdmin] },
+    async (req, reply) => {
+      const { configPath } = getRecyclarrSettings()
+      const dir = path.dirname(configPath)
+      const filename = path.basename(req.params.filename) // prevent traversal
+      const backupPath = path.join(dir, filename)
+      if (!fs.existsSync(backupPath)) return reply.status(404).send({ error: 'Backup not found' })
+      try {
+        fs.copyFileSync(backupPath, configPath)
+        return reply.send({ ok: true })
+      } catch (e) {
+        return reply.status(500).send({ error: e instanceof Error ? e.message : 'Restore failed' })
+      }
     }
   )
 }

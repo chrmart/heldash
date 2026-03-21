@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { useWidgetStore } from '../store/useWidgetStore'
 import { useDockerStore } from '../store/useDockerStore'
+import { useActivityStore } from '../store/useActivityStore'
 import { ServiceCard } from '../components/ServiceCard'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
 import { AdGuardStatsView, DockerOverviewContent, HaStatsView, CustomButtonsView, StatBar, NginxPMStatsView, HaEnergyWidgetView, CalendarWidgetContent } from './WidgetsPage'
 import type { Service, DashboardItem, DashboardServiceItem, DashboardArrItem, DashboardPlaceholderItem, DashboardWidgetItem, DashboardGroup, ServerStats, AdGuardStats, NpmStats, HaEntityState, AdGuardHomeConfig, Widget, EnergyData, CalendarEntry } from '../types'
 import { normalizeUrl } from '../utils'
+import { api } from '../api'
 
 function DashboardWidgetIcon({ widget }: { widget: DashboardWidgetItem['widget'] }) {
   const { services } = useStore()
@@ -55,7 +57,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, X, Container, ChevronDown } from 'lucide-react'
+import { GripVertical, X, Container, ChevronDown, ChevronRight, Activity, Eye, EyeOff, RefreshCw } from 'lucide-react'
 
 // ── Shared edit-mode overlay (drag handle + remove button + group selector) ────
 function EditOverlay({
@@ -150,17 +152,19 @@ function EditOverlay({
 }
 
 // ── Service card ──────────────────────────────────────────────────────────────
-function DashboardServiceCard({ item, onEdit, editMode, groups }: {
+function DashboardServiceCard({ item, onEdit, editMode, groups, hiddenServiceIds }: {
   item: DashboardServiceItem
   onEdit: (s: Service) => void
   editMode: boolean
   groups?: DashboardGroup[]
+  hiddenServiceIds?: string[]
 }) {
-  const { removeItem, moveItemToGroup } = useDashboardStore()
+  const { removeItem, moveItemToGroup, showVisibilityOverlay } = useDashboardStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id, disabled: !editMode,
   })
   const [showHandle, setShowHandle] = useState(false)
+  const isHidden = hiddenServiceIds ? hiddenServiceIds.includes(item.service.id) : false
 
   return (
     <div
@@ -170,6 +174,19 @@ function DashboardServiceCard({ item, onEdit, editMode, groups }: {
       onMouseLeave={() => setShowHandle(false)}
     >
       <ServiceCard service={item.service} onEdit={onEdit} hideAdminActions={true} />
+      {showVisibilityOverlay && (
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: 'var(--radius-lg)',
+          border: `2px solid ${isHidden ? 'var(--text-muted)' : 'var(--success, #22c55e)'}`,
+          background: isHidden ? 'rgba(0,0,0,0.35)' : 'rgba(34,197,94,0.08)',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end',
+          padding: 6, pointerEvents: 'none', zIndex: 5,
+        }}>
+          <span className={isHidden ? 'badge-neutral' : 'badge-success'} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
+            {isHidden ? 'Versteckt' : 'Sichtbar'}
+          </span>
+        </div>
+      )}
       {editMode && (
         <EditOverlay
           dragProps={{ ...attributes, ...listeners }}
@@ -234,14 +251,15 @@ function DashboardArrCard({ item, editMode, groups }: {
 }
 
 // ── Widget card ───────────────────────────────────────────────────────────────
-function DashboardWidgetCard({ item, editMode, groups, colSpan = 2 }: {
+function DashboardWidgetCard({ item, editMode, groups, colSpan = 2, hiddenWidgetIds }: {
   item: DashboardWidgetItem
   editMode: boolean
   groups?: DashboardGroup[]
   colSpan?: 1 | 2
+  hiddenWidgetIds?: string[]
 }) {
   const { isAdmin } = useStore()
-  const { removeItem, moveItemToGroup } = useDashboardStore()
+  const { removeItem, moveItemToGroup, showVisibilityOverlay } = useDashboardStore()
   const { stats, setAdGuardProtection, setPiholeProtection } = useWidgetStore()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id, disabled: !editMode,
@@ -249,6 +267,7 @@ function DashboardWidgetCard({ item, editMode, groups, colSpan = 2 }: {
   const [showHandle, setShowHandle] = useState(false)
   const [toggling, setToggling] = useState(false)
   const s = stats[item.widget.id]
+  const isWidgetHidden = hiddenWidgetIds ? hiddenWidgetIds.includes(item.widget.id) : false
 
   const handleAdGuardToggle = async () => {
     if (!isAdmin || item.widget.type !== 'adguard_home' || !s) return
@@ -299,7 +318,17 @@ function DashboardWidgetCard({ item, editMode, groups, colSpan = 2 }: {
                 <StatBar label="CPU" value={ss.cpu.load >= 0 ? ss.cpu.load : null} unit="%" />
                 <StatBar label="RAM" value={ss.ram.total > 0 ? Math.round((ss.ram.used / ss.ram.total) * 100) : null} unit="%" extra={ss.ram.total > 0 ? `${(ss.ram.used / 1024).toFixed(1)} / ${(ss.ram.total / 1024).toFixed(1)} GB` : undefined} />
                 {ss.disks.map(d => (
-                  <StatBar key={d.path} label={d.name} value={d.total > 0 ? Math.round((d.used / d.total) * 100) : null} unit="%" extra={d.total > 0 ? `${(d.used / 1024).toFixed(0)} / ${(d.total / 1024).toFixed(0)} GB` : undefined} />
+                  d.error === 'not_mounted'
+                    ? <div key={d.path} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.name}</span>
+                        <span className="badge-error" style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>Not mounted</span>
+                      </div>
+                    : d.duplicate
+                      ? <div key={d.path} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.name}</span>
+                          <span className="badge-warning" style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>Duplicate</span>
+                        </div>
+                      : <StatBar key={d.path} label={d.name} value={d.total > 0 ? Math.round((d.used / d.total) * 100) : null} unit="%" extra={d.total > 0 ? `${(d.used / 1024).toFixed(0)} / ${(d.total / 1024).toFixed(0)} GB` : undefined} />
                 ))}
               </div>
             )
@@ -324,6 +353,19 @@ function DashboardWidgetCard({ item, editMode, groups, colSpan = 2 }: {
             : <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>Loading calendar…</div>
         ) : null}
       </div>
+      {showVisibilityOverlay && (
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: 'var(--radius-xl)',
+          border: `2px solid ${isWidgetHidden ? 'var(--text-muted)' : 'var(--success, #22c55e)'}`,
+          background: isWidgetHidden ? 'rgba(0,0,0,0.35)' : 'rgba(34,197,94,0.08)',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end',
+          padding: 6, pointerEvents: 'none', zIndex: 5,
+        }}>
+          <span className={isWidgetHidden ? 'badge-neutral' : 'badge-success'} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
+            {isWidgetHidden ? 'Versteckt' : 'Sichtbar'}
+          </span>
+        </div>
+      )}
       {editMode && (
         <EditOverlay
           dragProps={{ ...attributes, ...listeners }}
@@ -409,7 +451,9 @@ function renderDashboardItem(
   editMode: boolean,
   onEdit: (s: Service) => void,
   groups?: DashboardGroup[],
-  widgetColSpan?: 1 | 2
+  widgetColSpan?: 1 | 2,
+  hiddenServiceIds?: string[],
+  hiddenWidgetIds?: string[]
 ) {
   if (item.type === 'service') {
     return (
@@ -419,6 +463,7 @@ function renderDashboardItem(
         onEdit={onEdit}
         editMode={editMode}
         groups={groups}
+        hiddenServiceIds={hiddenServiceIds}
       />
     )
   }
@@ -440,6 +485,7 @@ function renderDashboardItem(
         editMode={editMode}
         groups={groups}
         colSpan={widgetColSpan}
+        hiddenWidgetIds={hiddenWidgetIds}
       />
     )
   }
@@ -465,10 +511,12 @@ function setGroupCollapsed(id: string, val: boolean): void {
 }
 
 // ── Sortable Group ─────────────────────────────────────────────────────────────
-function SortableGroup({ group, editMode, onEdit }: {
+function SortableGroup({ group, editMode, onEdit, hiddenServiceIds, hiddenWidgetIds }: {
   group: DashboardGroup
   editMode: boolean
   onEdit: (s: Service) => void
+  hiddenServiceIds?: string[]
+  hiddenWidgetIds?: string[]
 }) {
   const { updateGroup, deleteGroup, reorderGroupItems, groups: allGroups } = useDashboardStore()
   const innerCols = Math.max(1, Math.round(8 * group.col_span / 12))
@@ -610,6 +658,7 @@ function SortableGroup({ group, editMode, onEdit }: {
                         onEdit={onEdit}
                         editMode={editMode}
                         groups={allGroups}
+                        hiddenServiceIds={hiddenServiceIds}
                       />
                     )
                   }
@@ -630,6 +679,7 @@ function SortableGroup({ group, editMode, onEdit }: {
                         item={item as DashboardWidgetItem}
                         editMode={editMode}
                         groups={allGroups}
+                        hiddenWidgetIds={hiddenWidgetIds}
                       />
                     )
                   }
@@ -660,11 +710,16 @@ interface Props {
 }
 
 export function Dashboard({ onEdit }: Props) {
-  const { isAdmin } = useStore()
+  const { isAdmin, isAuthenticated } = useStore()
   const { instances, loadInstances, loadAllStats } = useArrStore()
-  const { items, groups, editMode, guestMode, loading, reorder, reorderGroups, createGroup } = useDashboardStore()
+  const { items, groups, editMode, guestMode, loading, reorder, reorderGroups, createGroup, showVisibilityOverlay, setShowVisibilityOverlay } = useDashboardStore()
   const { loadStats, startPollingAll, stopPollingAll } = useWidgetStore()
   const { loadContainers } = useDockerStore()
+  const { entries: activityEntries, loading: activityLoading, loadEntries: loadActivityEntries } = useActivityStore()
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [activityCategory, setActivityCategory] = useState('all')
+  const [guestVisibility, setGuestVisibility] = useState<{ services: string[]; widgets: string[] }>({ services: [], widgets: [] })
+  const activityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -702,6 +757,27 @@ export function Dashboard({ onEdit }: Props) {
     startPollingAll(allPollable.map(i => ({ id: i.widget.id, type: i.widget.type })))
     return () => stopPollingAll()
   }, [widgetItemIds])
+
+  // Activity feed auto-refresh
+  useEffect(() => {
+    if (!isAuthenticated) return
+    if (activityOpen) {
+      loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
+      activityIntervalRef.current = setInterval(() => {
+        loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
+      }, 30_000)
+    }
+    return () => {
+      if (activityIntervalRef.current) clearInterval(activityIntervalRef.current)
+    }
+  }, [activityOpen, activityCategory, isAuthenticated])
+
+  // Load guest visibility data when overlay toggled
+  useEffect(() => {
+    if (showVisibilityOverlay && isAdmin) {
+      api.admin.guestVisibility().then(v => setGuestVisibility(v)).catch(() => {})
+    }
+  }, [showVisibilityOverlay, isAdmin])
 
   const isPlaceholder = (type: string) =>
     type === 'placeholder' || type === 'placeholder_app' || type === 'placeholder_widget' || type === 'placeholder_row'
@@ -759,14 +835,41 @@ export function Dashboard({ onEdit }: Props) {
             No grid-auto-flow: dense — array order determines visual position.
             Widgets use gridColumn: span 2 + gridRow: span 2 (set in DashboardWidgetCard). */}
         <div className="services-grid">
-          {items.map(item => renderDashboardItem(item, editMode, onEdit, groups))}
+          {items.map(item => renderDashboardItem(item, editMode, onEdit, groups, undefined, guestVisibility.services, guestVisibility.widgets))}
         </div>
       </SortableContext>
     </DndContext>
   )
 
+  // Relative time helper
+  const relTime = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime()
+    if (diff < 60_000) return 'gerade eben'
+    if (diff < 3_600_000) return `vor ${Math.floor(diff / 60_000)} min`
+    if (diff < 86_400_000) return `vor ${Math.floor(diff / 3_600_000)} h`
+    return `vor ${Math.floor(diff / 86_400_000)} d`
+  }
+
+  const ACTIVITY_CATEGORIES = ['all', 'media', 'docker', 'recyclarr', 'ha', 'system']
+  const categoryLabel: Record<string, string> = { all: 'Alle', media: 'Media', docker: 'Docker', recyclarr: 'Recyclarr', ha: 'HA', system: 'System' }
+  const categoryIcon: Record<string, string> = { media: '🎬', docker: '🐳', recyclarr: '♻️', ha: '🏠', system: '⚙️', all: '📋' }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Visibility overlay toggle (admin + guest mode) */}
+      {isAdmin && guestMode && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            className={`btn ${showVisibilityOverlay ? 'btn-primary' : 'btn-ghost'} topbar-mobile-hide`}
+            onClick={() => setShowVisibilityOverlay(!showVisibilityOverlay)}
+            style={{ gap: 6, fontSize: 12 }}
+          >
+            {showVisibilityOverlay ? <EyeOff size={14} /> : <Eye size={14} />}
+            Sichtbarkeit anzeigen
+          </button>
+        </div>
+      )}
+
       {/* Add Group button (edit mode only) — at top */}
       {editMode && (
         <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -787,7 +890,7 @@ export function Dashboard({ onEdit }: Props) {
           <SortableContext items={groups.map(g => g.id)} strategy={rectSortingStrategy}>
             <div className="dashboard-groups">
               {groups.map(group => (
-                <SortableGroup key={group.id} group={group} editMode={editMode} onEdit={onEdit} />
+                <SortableGroup key={group.id} group={group} editMode={editMode} onEdit={onEdit} hiddenServiceIds={guestVisibility.services} hiddenWidgetIds={guestVisibility.widgets} />
               ))}
               {/* Ungrouped items fill remaining flex space in the same row */}
               {ungroupedSection && (
@@ -800,6 +903,96 @@ export function Dashboard({ onEdit }: Props) {
         </DndContext>
       ) : (
         ungroupedSection
+      )}
+
+      {/* Activity Feed — only for authenticated users, never guests */}
+      {isAuthenticated && !guestMode && (
+        <div className="glass" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
+          {/* Header */}
+          <button
+            onClick={() => {
+              const next = !activityOpen
+              setActivityOpen(next)
+              if (next && activityEntries.length === 0) {
+                loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
+              }
+            }}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-primary)',
+            }}
+          >
+            <Activity size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, flex: 1, textAlign: 'left' }}>
+              Aktivitäten
+            </span>
+            {activityLoading && <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />}
+            <ChevronDown
+              size={14}
+              style={{
+                color: 'var(--text-muted)',
+                transform: activityOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform var(--transition-base)',
+              }}
+            />
+          </button>
+
+          {activityOpen && (
+            <div style={{ borderTop: '1px solid var(--glass-border)', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Category filter pills */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {ACTIVITY_CATEGORIES.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setActivityCategory(cat)}
+                    className={activityCategory === cat ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+                    style={{ fontSize: 11, padding: '3px 10px', gap: 4 }}
+                  >
+                    <span>{categoryIcon[cat]}</span>
+                    {categoryLabel[cat]}
+                  </button>
+                ))}
+                <button
+                  onClick={() => loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})}
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 11, padding: '3px 8px', marginLeft: 'auto' }}
+                  title="Aktualisieren"
+                >
+                  <RefreshCw size={11} />
+                </button>
+              </div>
+
+              {/* Timeline */}
+              {activityEntries.length === 0 && !activityLoading ? (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
+                  Keine Aktivitäten
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {activityEntries.slice(0, 20).map(entry => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        display: 'flex', alignItems: 'baseline', gap: 10,
+                        padding: '6px 8px', borderRadius: 'var(--radius-sm)',
+                        background: entry.severity === 'error' ? 'rgba(var(--red-rgb,220,38,38),0.08)'
+                          : entry.severity === 'warning' ? 'rgba(var(--yellow-rgb,234,179,8),0.08)'
+                          : 'transparent',
+                      }}
+                    >
+                      <span style={{ fontSize: 13, flexShrink: 0 }}>{categoryIcon[entry.category] ?? '📋'}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, lineHeight: 1.4 }}>{entry.message}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        {relTime(entry.created_at)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

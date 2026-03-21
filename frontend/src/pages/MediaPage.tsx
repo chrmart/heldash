@@ -2325,6 +2325,7 @@ function RecyclarrTab() {
     syncSchedule: globalSyncSchedule,
     loadConfigs, saveConfig, saveSchedule, sync, adoptCfs, resetConfig,
     arrData, arrDataLoading, loadArrData, checkScoreChanges, acceptScoreChanges,
+    syncHistory, backups, loadSyncHistory, loadBackups, restoreBackup,
   } = useRecyclarrStore()
 
   // ── Service tab state ──
@@ -2366,6 +2367,16 @@ function RecyclarrTab() {
   const [trashCfsCollapsed, setTrashCfsCollapsed] = useState(false)
   const [userCfsCollapsed, setUserCfsCollapsed] = useState(false)
   const [advancedCollapsed, setAdvancedCollapsed] = useState(true)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [backupsOpen, setBackupsOpen] = useState(false)
+  const [restoringBackup, setRestoringBackup] = useState('')
+  const [restoreSuccess, setRestoreSuccess] = useState('')
+
+  // ── Profile comparison ──
+  const [showProfileComparison, setShowProfileComparison] = useState(false)
+
+  // ── Score heatmap ──
+  const [heatmapView, setHeatmapView] = useState(false)
 
   // ── User CFs from filesystem ──
   const [userCfsFromFs, setUserCfsFromFs] = useState<import('../types/recyclarr').UserCfFile[]>([])
@@ -2717,6 +2728,99 @@ function RecyclarrTab() {
               {syncing && <span style={{ color: 'var(--text-muted)', display: 'block' }}>…</span>}
             </pre>
           )}
+
+          {/* Sync history collapsible */}
+          {isAdmin && (
+            <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 8 }}>
+              <button
+                onClick={() => {
+                  const next = !historyOpen
+                  setHistoryOpen(next)
+                  if (next && syncHistory.length === 0) loadSyncHistory().catch(() => {})
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, padding: '4px 0', width: '100%' }}
+              >
+                <ChevronRight size={12} style={{ transform: historyOpen ? 'rotate(90deg)' : 'none', transition: 'transform var(--transition-base)' }} />
+                Verlauf anzeigen
+              </button>
+              {historyOpen && (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {syncHistory.length === 0
+                    ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Kein Verlauf vorhanden</div>
+                    : syncHistory.map(h => (
+                        <div key={h.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'rgba(0,0,0,0.15)' }}>
+                          <span className={h.success ? 'badge-success' : 'badge-error'} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
+                            {h.success ? 'OK' : 'Fehler'}
+                          </span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                            {new Date(h.synced_at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
+                          </span>
+                          {h.changes_summary && (
+                            <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1 }}>
+                              {h.changes_summary.created > 0 && `+${h.changes_summary.created} `}
+                              {h.changes_summary.updated > 0 && `~${h.changes_summary.updated} `}
+                              {h.changes_summary.deleted > 0 && `-${h.changes_summary.deleted}`}
+                            </span>
+                          )}
+                        </div>
+                      ))
+                  }
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Backups collapsible (admin only) */}
+          {isAdmin && (
+            <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 8 }}>
+              <button
+                onClick={() => {
+                  const next = !backupsOpen
+                  setBackupsOpen(next)
+                  if (next && backups.length === 0) loadBackups().catch(() => {})
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, padding: '4px 0', width: '100%' }}
+              >
+                <ChevronRight size={12} style={{ transform: backupsOpen ? 'rotate(90deg)' : 'none', transition: 'transform var(--transition-base)' }} />
+                Backups
+              </button>
+              {backupsOpen && (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {backups.length === 0
+                    ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Keine Backups vorhanden</div>
+                    : backups.map(b => (
+                        <div key={b.filename} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'rgba(0,0,0,0.15)' }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1, fontFamily: 'var(--font-mono)' }}>{b.filename}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(b.size / 1024).toFixed(1)} KB</span>
+                          {restoreSuccess === b.filename
+                            ? <span className="badge-success" style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>Wiederhergestellt</span>
+                            : (
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                disabled={restoringBackup === b.filename}
+                                onClick={async () => {
+                                  setRestoringBackup(b.filename)
+                                  setRestoreSuccess('')
+                                  try {
+                                    await restoreBackup(b.filename)
+                                    setRestoreSuccess(b.filename)
+                                  } catch { /* ignore */ } finally {
+                                    setRestoringBackup('')
+                                  }
+                                }}
+                                style={{ fontSize: 11, padding: '2px 8px' }}
+                              >
+                                {restoringBackup === b.filename ? '…' : 'Wiederherstellen'}
+                              </button>
+                            )
+                          }
+                        </div>
+                      ))
+                  }
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -2809,7 +2913,7 @@ function RecyclarrTab() {
           ) : (
             <>
               {/* Profile buttons or dropdown */}
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                 {configuredProfiles.length <= 4 ? (
                   configuredProfiles.map(pc => (
                     <button key={pc.trash_id} onClick={() => setSelectedProfileId(pc.trash_id)}
@@ -2825,6 +2929,17 @@ function RecyclarrTab() {
                       <option key={pc.trash_id} value={pc.trash_id}>{pc.name}</option>
                     ))}
                   </select>
+                )}
+                {configuredProfiles.length > 1 && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setShowProfileComparison(true)}
+                    style={{ fontSize: 11, marginLeft: 'auto', gap: 4 }}
+                    title="Profile vergleichen"
+                  >
+                    <LayoutGrid size={11} />
+                    Vergleichen
+                  </button>
                 )}
               </div>
 
@@ -2864,16 +2979,29 @@ function RecyclarrTab() {
 
                   {/* TRaSH Custom Formats section */}
                   <div>
-                    <button onClick={() => setTrashCfsCollapsed(v => !v)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', padding: '0 0 8px 0', width: '100%', textAlign: 'left' }}>
-                      {trashCfsCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      TRaSH Custom Formats
-                      {currentArrData && (
-                        <span className="badge-neutral" style={{ fontSize: 10 }}>
-                          {(currentArrData.profiles.find(p => p.name === activeProfileConfig.name)?.formatItems ?? []).length}
-                        </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 8 }}>
+                      <button onClick={() => setTrashCfsCollapsed(v => !v)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', padding: 0, flex: 1, textAlign: 'left' }}>
+                        {trashCfsCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                        TRaSH Custom Formats
+                        {currentArrData && (
+                          <span className="badge-neutral" style={{ fontSize: 10 }}>
+                            {(currentArrData.profiles.find(p => p.name === activeProfileConfig.name)?.formatItems ?? []).length}
+                          </span>
+                        )}
+                      </button>
+                      {!trashCfsCollapsed && (
+                        <button
+                          className={heatmapView ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+                          onClick={() => setHeatmapView(v => !v)}
+                          style={{ fontSize: 10, padding: '2px 8px', gap: 4, flexShrink: 0 }}
+                          title="Heatmap-Ansicht"
+                        >
+                          <LayoutGrid size={10} />
+                          Heatmap
+                        </button>
                       )}
-                    </button>
+                    </div>
                     {!trashCfsCollapsed && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {currentArrDataLoading ? (
@@ -2891,6 +3019,52 @@ function RecyclarrTab() {
                           if (formatItems.length === 0) return (
                             <span className="badge-neutral" style={{ fontSize: 11, alignSelf: 'flex-start' }}>Keine CFs in diesem Profil</span>
                           )
+                          if (heatmapView) {
+                            // ── Heatmap view ──
+                            const scores = formatItems.map(item => {
+                              const override = getOverride(String(item.format), selectedProfileId)
+                              return override !== null ? override : item.score
+                            })
+                            const maxAbs = Math.max(1, ...scores.map(Math.abs))
+                            return (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                {formatItems.map(item => {
+                                  const cfTid = String(item.format)
+                                  const override = getOverride(cfTid, selectedProfileId)
+                                  const effective = override !== null ? override : item.score
+                                  const intensity = Math.abs(effective) / maxAbs
+                                  const hue = effective >= 0 ? '142' : '0'  // green for positive, red for negative
+                                  const bg = effective === 0
+                                    ? 'rgba(128,128,128,0.15)'
+                                    : `hsla(${hue}, 70%, 50%, ${0.1 + intensity * 0.5})`
+                                  const border = override !== null && override !== item.score
+                                    ? '1px solid rgba(var(--accent-rgb), 0.5)'
+                                    : '1px solid transparent'
+                                  return (
+                                    <div
+                                      key={item.format}
+                                      title={`${item.name}: ${effective}${override !== null && override !== item.score ? ` (Guide: ${item.score})` : ''}`}
+                                      style={{
+                                        background: bg, border, borderRadius: 'var(--radius-sm)',
+                                        padding: '4px 8px', fontSize: 10, cursor: 'default',
+                                        color: 'var(--text-primary)',
+                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                                        minWidth: 60, maxWidth: 120,
+                                      }}
+                                    >
+                                      <span style={{ fontSize: 10, fontWeight: 600, color: effective > 0 ? '#4ade80' : effective < 0 ? '#f87171' : 'var(--text-muted)', lineHeight: 1 }}>
+                                        {effective > 0 ? '+' : ''}{effective}
+                                      </span>
+                                      <span style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>
+                                        {item.name}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )
+                          }
+
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px 100px', gap: 8, padding: '4px 8px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>
@@ -4445,6 +4619,81 @@ function ImportModal({
           </div>
         )}
       </div>
+
+      {/* ── Profile Comparison Modal ── */}
+      {showProfileComparison && currentArrData && configuredProfiles.length > 1 && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => setShowProfileComparison(false)}>
+          <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, maxWidth: 900, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 16 }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, margin: 0, flex: 1 }}>Profil-Vergleich</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowProfileComparison(false)} style={{ width: 28, height: 28, padding: 0 }}>
+                <X size={14} />
+              </button>
+            </div>
+            <div style={{ overflow: 'auto', flex: 1 }}>
+              {(() => {
+                // Collect all CF names across profiles
+                const allCfNames = new Set<string>()
+                configuredProfiles.forEach(pc => {
+                  const arrProfile = currentArrData.profiles.find(p => p.name === pc.name)
+                  arrProfile?.formatItems.forEach(fi => allCfNames.add(fi.name))
+                })
+                const cfList = Array.from(allCfNames).sort()
+                if (cfList.length === 0) return (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: 24 }}>
+                    Noch kein Sync — Daten werden nach dem ersten Sync angezeigt
+                  </div>
+                )
+                return (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '6px 8px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--glass-border)', position: 'sticky', top: 0, background: 'var(--bg-elevated)' }}>
+                          Custom Format
+                        </th>
+                        {configuredProfiles.map(pc => (
+                          <th key={pc.trash_id} style={{ textAlign: 'right', padding: '6px 8px', fontSize: 11, color: 'var(--accent)', fontWeight: 600, borderBottom: '1px solid var(--glass-border)', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: 'var(--bg-elevated)' }}>
+                            {pc.name}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cfList.map(cfName => {
+                        const scores = configuredProfiles.map(pc => {
+                          const arrProfile = currentArrData.profiles.find(p => p.name === pc.name)
+                          const fi = arrProfile?.formatItems.find(f => f.name === cfName)
+                          if (!fi) return null
+                          const override = getOverride(String(fi.format), pc.trash_id)
+                          return override !== null ? override : fi.score
+                        })
+                        const allSame = scores.every(s => s === scores[0])
+                        return (
+                          <tr key={cfName} style={{ borderBottom: '1px solid rgba(var(--glass-border-rgb,255,255,255),0.05)' }}>
+                            <td style={{ padding: '5px 8px', color: 'var(--text-secondary)' }}>{cfName}</td>
+                            {scores.map((score, i) => (
+                              <td key={i} style={{ padding: '5px 8px', textAlign: 'right',
+                                color: score === null ? 'var(--text-muted)'
+                                  : !allSame ? (score > 0 ? '#4ade80' : score < 0 ? '#f87171' : 'var(--text-muted)')
+                                  : 'var(--text-secondary)',
+                                fontWeight: !allSame ? 600 : 400,
+                              }}>
+                                {score === null ? '—' : score > 0 ? `+${score}` : score}
+                              </td>
+                            ))}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

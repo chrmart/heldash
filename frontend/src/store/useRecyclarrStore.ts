@@ -12,6 +12,8 @@ import type {
   ArrQualityProfile,
   ArrCustomFormat,
   ScoreChange,
+  SyncHistoryEntry,
+  BackupEntry,
 } from '../types/recyclarr'
 
 interface ArrData {
@@ -36,6 +38,8 @@ interface RecyclarrState {
   // arrData keyed by instanceId
   arrData: Record<string, ArrData>
   arrDataLoading: Record<string, boolean>
+  syncHistory: SyncHistoryEntry[]
+  backups: BackupEntry[]
 
   loadProfiles: (service: 'radarr' | 'sonarr', forceRefresh?: boolean) => Promise<void>
   loadCfs: (service: 'radarr' | 'sonarr', forceRefresh?: boolean) => Promise<void>
@@ -43,6 +47,9 @@ interface RecyclarrState {
   saveSettings: (settings: Partial<RecyclarrSettings>) => Promise<void>
   loadConfigs: () => Promise<void>
   saveSchedule: (syncSchedule: string) => Promise<void>
+  loadSyncHistory: () => Promise<void>
+  loadBackups: () => Promise<void>
+  restoreBackup: (filename: string) => Promise<void>
   saveConfig: (instanceId: string, data: {
     enabled: boolean
     selectedProfiles: string[]
@@ -79,6 +86,8 @@ export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
   loading: false,
   arrData: {},
   arrDataLoading: {},
+  syncHistory: [],
+  backups: [],
 
   loadProfiles: async (service, forceRefresh = false) => {
     const data = await api.recyclarr.profiles(service, forceRefresh)
@@ -212,5 +221,20 @@ export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
 
   clearCache: async (service) => {
     await api.recyclarr.clearCache(service)
+  },
+
+  loadSyncHistory: async () => {
+    const data = await api.recyclarr.syncHistory()
+    set({ syncHistory: data.history })
+  },
+
+  loadBackups: async () => {
+    const data = await api.recyclarr.backups()
+    set({ backups: data.backups })
+  },
+
+  restoreBackup: async (filename: string) => {
+    await api.recyclarr.restoreBackup(filename)
+    await get().loadBackups()
   },
 }))

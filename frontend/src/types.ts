@@ -198,7 +198,7 @@ export interface Widget {
 export interface ServerStats {
   cpu: { load: number }
   ram: { total: number; used: number; free: number }
-  disks: { path: string; name: string; total: number; used: number; free: number }[]
+  disks: { path: string; name: string; total: number; used: number; free: number; error?: 'not_mounted'; duplicate?: boolean; duplicateOf?: string }[]
 }
 
 export interface AdGuardStats {

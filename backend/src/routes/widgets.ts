@@ -123,21 +123,74 @@ async function getRam(): Promise<{ total: number; used: number; free: number }> 
 }
 
 interface DiskConfig { path: string; name: string }
-interface DiskStats extends DiskConfig { total: number; used: number; free: number }
+interface DiskStats extends DiskConfig {
+  total: number
+  used: number
+  free: number
+  error?: 'not_mounted'
+  duplicate?: boolean
+  duplicateOf?: string
+}
+
+async function getDeviceForPath(mountPath: string): Promise<string | null> {
+  try {
+    const mounts = await fsp.readFile('/proc/mounts', 'utf8')
+    let bestMatch = ''
+    let bestDevice = ''
+    for (const line of mounts.split('\n')) {
+      const parts = line.split(' ')
+      if (parts.length < 2) continue
+      const device = parts[0]!
+      const mp = parts[1]!
+      if (mountPath.startsWith(mp) && mp.length > bestMatch.length) {
+        bestMatch = mp
+        bestDevice = device
+      }
+    }
+    return bestDevice || null
+  } catch {
+    return null
+  }
+}
 
 async function getDiskStats(disks: DiskConfig[]): Promise<DiskStats[]> {
-  return Promise.all(disks.map(async disk => {
+  // First pass: get stats and devices
+  const results = await Promise.all(disks.map(async disk => {
     try {
       const stat = await fsp.statfs(disk.path)
       const blockSize = stat.bsize
       const total = Math.round((stat.blocks * blockSize) / (1024 * 1024))
       const free = Math.round((stat.bavail * blockSize) / (1024 * 1024))
       const used = total - free
-      return { path: disk.path, name: disk.name, total, used, free }
+      const device = await getDeviceForPath(disk.path)
+      return { path: disk.path, name: disk.name, total, used, free, device, error: undefined as 'not_mounted' | undefined }
     } catch {
-      return { path: disk.path, name: disk.name, total: 0, used: 0, free: 0 }
+      return { path: disk.path, name: disk.name, total: 0, used: 0, free: 0, device: null, error: 'not_mounted' as const }
     }
   }))
+
+  // Second pass: detect duplicates
+  const deviceMap = new Map<string, string>() // device -> first disk name
+  for (const r of results) {
+    if (r.device && !r.error) {
+      if (!deviceMap.has(r.device)) {
+        deviceMap.set(r.device, r.name)
+      }
+    }
+  }
+
+  return results.map(r => {
+    const base: DiskStats = { path: r.path, name: r.name, total: r.total, used: r.used, free: r.free }
+    if (r.error) base.error = r.error
+    if (r.device && !r.error) {
+      const firstOwner = deviceMap.get(r.device)
+      if (firstOwner && firstOwner !== r.name) {
+        base.duplicate = true
+        base.duplicateOf = firstOwner
+      }
+    }
+    return base
+  })
 }
 
 // ── AdGuard Home helpers ───────────────────────────────────────────────────────

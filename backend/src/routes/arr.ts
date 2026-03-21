@@ -8,6 +8,7 @@ import { RadarrClient } from '../arr/radarr'
 import { SonarrClient } from '../arr/sonarr'
 import { ProwlarrClient } from '../arr/prowlarr'
 import { SabnzbdClient } from '../arr/sabnzbd'
+import { logActivity } from './activity'
 import { SeerrClient } from '../arr/seerr'
 import type { SeerrDiscoverResponse } from '../arr/seerr'
 
@@ -279,6 +280,7 @@ export async function arrRoutes(app: FastifyInstance) {
       `).run(id, type, name.trim(), url.trim().replace(/\/$/, ''), api_key.trim(), enabled ? 1 : 0, position)
 
       const row = db.prepare('SELECT * FROM arr_instances WHERE id = ?').get(id) as ArrInstanceRow
+      logActivity('media', `${type}-Instanz "${name.trim()}" hinzugefügt`, 'info', { instanceId: id })
       return reply.status(201).send(sanitize(row))
     }
   )
@@ -317,11 +319,13 @@ export async function arrRoutes(app: FastifyInstance) {
     '/api/arr/instances/:id',
     { preHandler: [app.requireAdmin] },
     async (req, reply) => {
-      if (!db.prepare('SELECT id FROM arr_instances WHERE id = ?').get(req.params.id)) {
+      const existingInst = db.prepare('SELECT id, name, type FROM arr_instances WHERE id = ?').get(req.params.id) as { id: string; name: string; type: string } | undefined
+      if (!existingInst) {
         return reply.status(404).send({ error: 'Not found' })
       }
       db.prepare('DELETE FROM group_arr_visibility WHERE instance_id = ?').run(req.params.id)
       db.prepare('DELETE FROM arr_instances WHERE id = ?').run(req.params.id)
+      logActivity('media', `${existingInst.type}-Instanz "${existingInst.name}" gelöscht`, 'warning', { instanceId: req.params.id })
       return reply.status(204).send()
     }
   )

@@ -16,8 +16,10 @@ import { SetupPage } from './pages/SetupPage'
 import { ServiceModal } from './components/ServiceModal'
 import { LoginModal } from './components/LoginModal'
 import { ToastProvider } from './components/Toast'
+import { OnboardingWizard } from './components/OnboardingWizard'
 import type { Service } from './types'
 import { calcAutoTheme } from './utils'
+import { api } from './api'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -54,10 +56,29 @@ function App() {
   const [checking, setChecking] = useState(false)
   const [showAddInstance, setShowAddInstance] = useState(false)
   const [showAddWidget, setShowAddWidget] = useState(false)
+  const [showAddHaInstance, setShowAddHaInstance] = useState(false)
+  const [showAddHaPanel, setShowAddHaPanel] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
     checkAuth().then(() => Promise.all([loadAll(), loadDashboard(), loadMyBackground()]))
   }, [])
+
+  // Load onboarding state after auth is ready
+  useEffect(() => {
+    if (!authReady || !isAdmin) return
+    api.settings.get().then(s => {
+      const completed = (s as Record<string, unknown>).onboarding_completed as string | undefined
+      const skippedAt = (s as Record<string, unknown>).onboarding_skipped_at as string | null | undefined
+      if (completed === '1') return
+      if (skippedAt && skippedAt !== 'null') {
+        const skippedDate = new Date(skippedAt)
+        const daysSince = (Date.now() - skippedDate.getTime()) / (1000 * 60 * 60 * 24)
+        if (daysSince < 7) return
+      }
+      setShowOnboarding(true)
+    }).catch(() => {})
+  }, [authReady, isAdmin])
 
   // Apply theme from settings
   useEffect(() => {
@@ -172,11 +193,13 @@ function App() {
             onCheckAll={handleCheckAll}
             checking={checking}
             onLogin={() => setShowLogin(true)}
+            onAddHaInstance={() => setShowAddHaInstance(true)}
+            onAddHaPanel={() => setShowAddHaPanel(true)}
           />
           <div className="content-area">
             <div className="content-inner">
               {page === 'dashboard' && <Dashboard onEdit={handleEditService} />}
-              {page === 'settings' && <SettingsPage />}
+              {page === 'settings' && <SettingsPage onStartOnboarding={isAdmin ? () => setShowOnboarding(true) : undefined} />}
               {page === 'services' && <ServicesPage onEdit={handleEditService} />}
               {page === 'media' && (
                 <MediaPage
@@ -192,7 +215,14 @@ function App() {
                 />
               )}
               {page === 'docker' && <DockerPage />}
-              {page === 'home_assistant' && <HaPage />}
+              {page === 'home_assistant' && (
+                <HaPage
+                  showAddInstance={showAddHaInstance}
+                  onAddInstanceClose={() => setShowAddHaInstance(false)}
+                  showAddPanel={showAddHaPanel}
+                  onAddPanelClose={() => setShowAddHaPanel(false)}
+                />
+              )}
               {page === 'about' && <AboutPage />}
             </div>
           </div>
@@ -208,6 +238,14 @@ function App() {
 
       {showLogin && (
         <LoginModal onClose={() => setShowLogin(false)} />
+      )}
+
+      {showOnboarding && isAdmin && (
+        <OnboardingWizard
+          onClose={() => setShowOnboarding(false)}
+          onAddService={() => { setShowOnboarding(false); setShowModal(true) }}
+          onAddInstance={() => { setShowOnboarding(false); setShowAddInstance(true); setPage('media') }}
+        />
       )}
     </>
     </ToastProvider>

@@ -125,3 +125,17 @@ export interface ScoreChange {
   oldScore: number
   newScore: number
 }
+
+export interface SyncHistoryEntry {
+  id: string
+  synced_at: string
+  success: boolean
+  output: string
+  changes_summary: { created?: number; updated?: number; deleted?: number } | null
+}
+
+export interface BackupEntry {
+  filename: string
+  timestamp: string
+  size: number
+}

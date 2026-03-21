@@ -16,6 +16,8 @@ interface Props {
   onCheckAll: () => void
   checking: boolean
   onLogin: () => void
+  onAddHaInstance?: () => void
+  onAddHaPanel?: () => void
 }
 
 const ACCENTS: { value: ThemeAccent; label: string; color: string }[] = [
@@ -24,7 +26,7 @@ const ACCENTS: { value: ThemeAccent; label: string; color: string }[] = [
   { value: 'magenta', label: 'Magenta', color: '#e879f9' },
 ]
 
-export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheckAll, checking, onLogin }: Props) {
+export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheckAll, checking, onLogin, onAddHaInstance, onAddHaPanel }: Props) {
   const { settings, setThemeMode, setThemeAccent, isAuthenticated, isAdmin, authUser, logout, loadAll } = useStore()
   const { loadDashboard, editMode, setEditMode, addPlaceholder, guestMode, setGuestMode } = useDashboardStore()
   const { widgets, stats, loadWidgets, loadStats, startPolling, stopPolling } = useWidgetStore()
@@ -368,6 +370,22 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
             <Plus size={16} />
             Add App
           </button>
+        )}
+        {isAdmin && page === 'home_assistant' && (
+          <>
+            {onAddHaInstance && (
+              <button className="btn btn-ghost topbar-mobile-hide" onClick={onAddHaInstance} style={{ gap: 6 }}>
+                <Plus size={16} />
+                HA Instance
+              </button>
+            )}
+            {onAddHaPanel && (
+              <button className="btn btn-primary topbar-mobile-hide" onClick={onAddHaPanel} style={{ gap: 6 }}>
+                <Plus size={16} />
+                Panel
+              </button>
+            )}
+          </>
         )}
 
         {isAuthenticated ? (

@@ -6,6 +6,7 @@ import { request, Agent } from 'undici'
 import pLimit from 'p-limit'
 import fs from 'fs'
 import path from 'path'
+import { logActivity } from './activity'
 
 const DATA_DIR = process.env.DATA_DIR ?? '/data'
 
@@ -237,6 +238,21 @@ export async function servicesRoutes(app: FastifyInstance) {
     db.prepare('UPDATE services SET last_status = ?, last_checked = datetime(\'now\') WHERE id = ?')
       .run(status, req.params.id)
 
+    // Record health history
+    db.prepare("INSERT INTO service_health_history (service_id, checked_at, status) VALUES (?, datetime('now'), ?)")
+      .run(service.id, status === 'online' ? 1 : 0)
+    db.prepare("DELETE FROM service_health_history WHERE service_id = ? AND checked_at < datetime('now', '-7 days')")
+      .run(service.id)
+
+    // Log status changes
+    if (status !== oldStatus) {
+      if (status === 'offline') {
+        logActivity('system', `${service.name} ist offline gegangen`, 'warning', { serviceId: service.id, url: checkUrl })
+      } else if (status === 'online') {
+        logActivity('system', `${service.name} ist wieder online`, 'info', { serviceId: service.id })
+      }
+    }
+
     return { id: service.id, status, checked_at: new Date().toISOString() }
   })
 
@@ -260,6 +276,22 @@ export async function servicesRoutes(app: FastifyInstance) {
 
         db.prepare('UPDATE services SET last_status = ?, last_checked = datetime(\'now\') WHERE id = ?')
           .run(status, s.id)
+
+        // Record health history
+        db.prepare("INSERT INTO service_health_history (service_id, checked_at, status) VALUES (?, datetime('now'), ?)")
+          .run(s.id, status === 'online' ? 1 : 0)
+        db.prepare("DELETE FROM service_health_history WHERE service_id = ? AND checked_at < datetime('now', '-7 days')")
+          .run(s.id)
+
+        // Log status changes
+        if (status !== oldStatus) {
+          if (status === 'offline') {
+            logActivity('system', `${s.name} ist offline gegangen`, 'warning', { serviceId: s.id, url: checkUrl })
+          } else if (status === 'online') {
+            logActivity('system', `${s.name} ist wieder online`, 'info', { serviceId: s.id })
+          }
+        }
+
         return { id: s.id, status }
       }))
     )
@@ -421,6 +453,39 @@ export async function servicesRoutes(app: FastifyInstance) {
         total: importedServices.length,
         errors: errors.length > 0 ? errors : undefined,
       }
+    }
+  )
+
+  // GET /api/services/:id/health-history — last 7 days, grouped by hour
+  app.get<{ Params: { id: string } }>(
+    '/api/services/:id/health-history',
+    async (req, reply) => {
+      const serviceId = req.params.id
+      const service = db.prepare('SELECT id FROM services WHERE id = ?').get(serviceId) as { id: string } | undefined
+      if (!service) return reply.status(404).send({ error: 'Not found' })
+
+      interface HealthRow { hour: string; online_count: number; total_count: number }
+      const rows = db.prepare(`
+        SELECT strftime('%Y-%m-%dT%H:00:00', checked_at) as hour,
+          SUM(status) as online_count,
+          COUNT(*) as total_count
+        FROM service_health_history
+        WHERE service_id = ?
+          AND checked_at >= datetime('now', '-7 days')
+        GROUP BY hour
+        ORDER BY hour ASC
+      `).all(serviceId) as HealthRow[]
+
+      const history = rows.map(r => ({
+        hour: r.hour,
+        uptime: r.total_count > 0 ? Math.round((r.online_count / r.total_count) * 100) : 0,
+      }))
+
+      const totalOnline = rows.reduce((s, r) => s + r.online_count, 0)
+      const totalChecks = rows.reduce((s, r) => s + r.total_count, 0)
+      const uptimePercent7d = totalChecks > 0 ? Math.round((totalOnline / totalChecks) * 1000) / 10 : null
+
+      return { history, uptimePercent7d }
     }
   )
 }

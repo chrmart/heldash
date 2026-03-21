@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import type { Service } from '../types'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
-import { Pencil, Trash2, Plus, GripVertical, Download, Upload, LayoutDashboard, Shield, ShieldOff } from 'lucide-react'
+import { Pencil, Trash2, Plus, GripVertical, Download, Upload, LayoutDashboard, Shield, ShieldOff, BarChart2 } from 'lucide-react'
 import { api } from '../api'
 import {
   DndContext,
@@ -24,6 +24,67 @@ interface Props {
   onEdit: (service: Service) => void
 }
 
+interface HealthHistoryData {
+  history: { hour: string; uptime: number }[]
+  uptimePercent7d: number | null
+}
+
+function UptimeBar({ serviceId }: { serviceId: string }) {
+  const [data, setData] = useState<HealthHistoryData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.services_extra.healthHistory(serviceId)
+      .then(d => { setData(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [serviceId])
+
+  if (loading) return <div style={{ height: 24, display: 'flex', alignItems: 'center' }}><div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /></div>
+  if (!data || data.history.length === 0) return (
+    <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingTop: 4 }}>Keine Verlaufsdaten</div>
+  )
+
+  // Show last 24 hours
+  const now = new Date()
+  const blocks: { hour: string; uptime: number | null }[] = []
+  for (let i = 23; i >= 0; i--) {
+    const d = new Date(now)
+    d.setMinutes(0, 0, 0)
+    d.setHours(d.getHours() - i)
+    const isoHour = d.toISOString().slice(0, 13) + ':00:00'
+    const entry = data.history.find(h => h.hour.slice(0, 13) === isoHour.slice(0, 13))
+    blocks.push({ hour: d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }), uptime: entry ? entry.uptime : null })
+  }
+
+  return (
+    <div style={{ paddingTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        {blocks.map((b, i) => {
+          const bg = b.uptime === null
+            ? 'var(--glass-border)'
+            : b.uptime >= 90 ? 'var(--status-online)'
+            : b.uptime >= 50 ? '#f59e0b'
+            : 'var(--status-offline)'
+          return (
+            <div
+              key={i}
+              title={`${b.hour} — ${b.uptime !== null ? b.uptime + '% uptime' : 'keine Daten'}`}
+              style={{ flex: 1, height: 8, borderRadius: 2, background: bg, cursor: 'default', transition: 'opacity 150ms', opacity: 0.85 }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.85' }}
+            />
+          )
+        })}
+      </div>
+      {data.uptimePercent7d !== null && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          7-Tage Uptime: <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{data.uptimePercent7d}%</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Sortable group header component
 function SortableGroupSection({
   section,
@@ -31,16 +92,19 @@ function SortableGroupSection({
   editMode,
   isDragging,
   isAdmin,
+  isAuthenticated,
 }: {
   section: { label: string; icon: string | null; services: Service[]; id?: string }
   onEdit: (service: Service) => void
   editMode: boolean
   isDragging: boolean
   isAdmin: boolean
+  isAuthenticated: boolean
 }) {
   const { addService, removeItem, isOnDashboard } = useDashboardStore()
   const { updateService, deleteService } = useStore()
   const { items: dashboardItems } = useDashboardStore()
+  const [uptimeOpen, setUptimeOpen] = useState<Set<string>>(() => new Set())
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: section.id || section.label,
     disabled: !editMode,
@@ -97,11 +161,12 @@ function SortableGroupSection({
         <table className="data-table" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '24%' }} />
-            <col style={{ width: isAdmin ? '30%' : '35%' }} />
+            <col style={{ width: isAdmin ? '27%' : '32%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '10%' }} />
             <col style={{ width: '10%' }} />
-            {isAdmin && <col style={{ width: '14%' }} />}
+            {isAuthenticated && <col style={{ width: '5%' }} />}
+            {isAdmin && <col style={{ width: '12%' }} />}
           </colgroup>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
@@ -110,15 +175,16 @@ function SortableGroupSection({
               <th style={thStyle}>Status</th>
               <th className="col-interval" style={thStyle}>Check</th>
               <th style={thStyle}>Dashboard</th>
+              {isAuthenticated && <th style={thStyle}></th>}
               {isAdmin && <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {sortedServices.map((s, i) => (
+              <React.Fragment key={s.id}>
               <tr
-                key={s.id}
                 style={{
-                  borderBottom: i < sortedServices.length - 1 ? '1px solid var(--glass-border)' : 'none',
+                  borderBottom: i < sortedServices.length - 1 && !uptimeOpen.has(s.id) ? '1px solid var(--glass-border)' : 'none',
                   transition: 'background var(--transition-fast)',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--glass-bg)')}
@@ -242,6 +308,23 @@ function SortableGroupSection({
                     {isOnDashboard('service', s.id) ? 'Yes' : 'No'}
                   </button>
                 </td>
+                {isAuthenticated && (
+                  <td style={{ ...tdStyle, textAlign: 'center' }}>
+                    <button
+                      className="btn btn-ghost btn-icon btn-sm"
+                      title="Uptime-Verlauf anzeigen"
+                      onClick={() => setUptimeOpen(prev => {
+                        const next = new Set(prev)
+                        if (next.has(s.id)) next.delete(s.id)
+                        else next.add(s.id)
+                        return next
+                      })}
+                      style={{ padding: '4px', width: 24, height: 24, color: uptimeOpen.has(s.id) ? 'var(--accent)' : 'var(--text-muted)' }}
+                    >
+                      <BarChart2 size={12} />
+                    </button>
+                  </td>
+                )}
                 {isAdmin && (
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
@@ -266,6 +349,14 @@ function SortableGroupSection({
                   </td>
                 )}
               </tr>
+              {isAuthenticated && uptimeOpen.has(s.id) && (
+                <tr style={{ borderBottom: i < sortedServices.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
+                  <td colSpan={isAdmin ? 7 : 6} style={{ padding: '0 12px 8px 12px' }}>
+                    <UptimeBar serviceId={s.id} />
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -275,7 +366,7 @@ function SortableGroupSection({
 }
 
 export function ServicesPage({ onEdit }: Props) {
-  const { services, groups, isAdmin } = useStore()
+  const { services, groups, isAdmin, isAuthenticated } = useStore()
   const [editMode, setEditMode] = useState(false)
   const [groupOrder, setGroupOrder] = useState<string[]>([])
 
@@ -458,6 +549,7 @@ export function ServicesPage({ onEdit }: Props) {
               editMode={editMode}
               isDragging={false}
               isAdmin={isAdmin}
+              isAuthenticated={isAuthenticated}
             />
           ))}
         </SortableContext>

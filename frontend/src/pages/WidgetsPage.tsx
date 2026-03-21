@@ -1091,7 +1091,17 @@ function WidgetCard({
                   <StatBar label="CPU" value={ss.cpu.load >= 0 ? ss.cpu.load : null} unit="%" />
                   <StatBar label="RAM" value={ss.ram.total > 0 ? Math.round((ss.ram.used / ss.ram.total) * 100) : null} unit="%" extra={ss.ram.total > 0 ? `${(ss.ram.used / 1024).toFixed(1)} / ${(ss.ram.total / 1024).toFixed(1)} GB` : undefined} />
                   {ss.disks.map(d => (
-                    <StatBar key={d.path} label={d.name} value={d.total > 0 ? Math.round((d.used / d.total) * 100) : null} unit="%" extra={d.total > 0 ? `${(d.used / 1024).toFixed(0)} / ${(d.total / 1024).toFixed(0)} GB` : undefined} />
+                    d.error === 'not_mounted'
+                      ? <div key={d.path} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.name}</span>
+                          <span className="badge-error" style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>Not mounted</span>
+                        </div>
+                      : d.duplicate
+                        ? <div key={d.path} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.name}</span>
+                            <span className="badge-warning" style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>Duplicate of {d.duplicateOf}</span>
+                          </div>
+                        : <StatBar key={d.path} label={d.name} value={d.total > 0 ? Math.round((d.used / d.total) * 100) : null} unit="%" extra={d.total > 0 ? `${(d.used / 1024).toFixed(0)} / ${(d.total / 1024).toFixed(0)} GB` : undefined} />
                   ))}
                 </>
               )

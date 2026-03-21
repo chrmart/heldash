@@ -4,6 +4,7 @@ import { getDb } from '../db/database'
 import { isValidHttpUrl } from './_helpers'
 import { getHaWsClient, invalidateHaWsClient } from '../clients/ha-ws-manager'
 import type { HaWsClient } from '../clients/ha-ws-client'
+import { logActivity } from './activity'
 
 // ── DB row types ──────────────────────────────────────────────────────────────
 
@@ -161,6 +162,7 @@ export async function haRoutes(app: FastifyInstance) {
     // Invalidate WS client so it reconnects with updated credentials/URL
     invalidateHaWsClient(row.id)
     const updated = db.prepare('SELECT * FROM ha_instances WHERE id = ?').get(row.id) as HaInstanceRow
+    logActivity('ha', `HA-Instanz "${updated.name}" aktualisiert`, 'info', { instanceId: row.id })
     return sanitizeInstance(updated)
   })
 
@@ -168,11 +170,12 @@ export async function haRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>('/api/ha/instances/:id', {
     preHandler: [app.requireAdmin],
   }, async (req, reply) => {
-    const row = db.prepare('SELECT id FROM ha_instances WHERE id = ?').get(req.params.id)
+    const row = db.prepare('SELECT id, name FROM ha_instances WHERE id = ?').get(req.params.id) as { id: string; name: string } | undefined
     if (!row) return reply.status(404).send({ error: 'Not found' })
     db.prepare('DELETE FROM ha_panels WHERE instance_id = ?').run(req.params.id)
     db.prepare('DELETE FROM ha_instances WHERE id = ?').run(req.params.id)
     invalidateHaWsClient(req.params.id)
+    logActivity('ha', `HA-Instanz "${row.name}" gelöscht`, 'warning', { instanceId: req.params.id })
     return reply.status(204).send()
   })
 

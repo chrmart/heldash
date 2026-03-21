@@ -318,7 +318,7 @@ function ToggleGroup<T extends string>({
 }
 
 // ── Main Settings page ────────────────────────────────────────────────────────
-export function SettingsPage() {
+export function SettingsPage({ onStartOnboarding }: { onStartOnboarding?: () => void }) {
   const {
     settings, updateSettings, groups, createGroup, deleteGroup,
     services,
@@ -641,6 +641,19 @@ export function SettingsPage() {
               </>
             )}
           </section>
+
+          {/* Onboarding */}
+          {isAdmin && onStartOnboarding && (
+            <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
+              <h3 style={{ marginBottom: 8, fontSize: 15, fontWeight: 600 }}>Setup Wizard</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+                Re-launch the setup wizard to review initial configuration steps.
+              </p>
+              <button className="btn btn-ghost" onClick={onStartOnboarding} style={{ gap: 6, fontSize: 13 }}>
+                Einrichtungsassistent starten
+              </button>
+            </section>
+          )}
         </div>
       )}
 

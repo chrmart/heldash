@@ -21,6 +21,7 @@ import { backgroundsRoutes } from './routes/backgrounds'
 import { haRoutes } from './routes/ha'
 import { tmdbRoutes } from './routes/tmdb'
 import recyclarrRoutes, { initRecyclarrSchedulers } from './routes/recyclarr'
+import { activityRoutes } from './routes/activity'
 
 let _appVersion = '0.0.0'
 try {
@@ -220,6 +221,7 @@ async function start() {
   await app.register(haRoutes)
   await app.register(tmdbRoutes)
   await app.register(recyclarrRoutes)
+  await app.register(activityRoutes)
 
   // ── Recyclarr scheduled sync ─────────────────────────────────────────────────
   initRecyclarrSchedulers(app.log)

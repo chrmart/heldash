@@ -1,4 +1,5 @@
 import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull, HaArea, EnergyData, CalendarEntry } from './types'
+import type { SyncHistoryEntry, BackupEntry } from './types/recyclarr'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse, RadarrMovie, SonarrSeries, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile } from './types/arr'
 import type { TmdbPage, TmdbGenre, TmdbProvider, TmdbTvDetail, TmdbDiscoverFilters } from './types/tmdb'
 import type { SeerrTvDetail, SeerrMovieDetail } from './types/seerr'
@@ -355,6 +356,24 @@ export const api = {
       req<{ running: boolean; name: string }>(`/recyclarr/container-status?name=${encodeURIComponent(containerName)}`),
     importableCfs: (instanceId: string) =>
       req<{ importable: import('./types/arr').ArrCustomFormat[]; alreadyManaged: { cf: import('./types/arr').ArrCustomFormat; hasChanges: boolean }[] }>(`/recyclarr/importable-cfs/${instanceId}`),
+    syncHistory: () => req<{ history: SyncHistoryEntry[] }>('/recyclarr/sync-history'),
+    backups: () => req<{ backups: BackupEntry[] }>('/recyclarr/backups'),
+    restoreBackup: (filename: string) => req<{ ok: boolean }>(`/recyclarr/backups/${encodeURIComponent(filename)}/restore`, { method: 'POST', body: JSON.stringify({}) }),
+  },
+
+  activity: {
+    list: (category?: string) => {
+      const url = category && category !== 'all' ? `/activity?category=${encodeURIComponent(category)}` : '/activity'
+      return req<{ entries: { id: string; created_at: string; category: string; message: string; severity: string; meta: string | null }[] }>(url)
+    },
+  },
+
+  admin: {
+    guestVisibility: () => req<{ services: string[]; widgets: string[] }>('/admin/guest-visibility'),
+  },
+
+  services_extra: {
+    healthHistory: (id: string) => req<{ history: { hour: string; uptime: number }[]; uptimePercent7d: number | null }>(`/services/${id}/health-history`),
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),

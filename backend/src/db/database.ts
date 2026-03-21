@@ -98,6 +98,10 @@ function runMigrations(db: Database.Database): number {
   // Ensure tmdb_api_key default exists
   db.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES ('tmdb_api_key', '\"\"', datetime('now'))").run()
 
+  // Onboarding wizard state
+  db.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES ('onboarding_completed', '\"0\"', datetime('now'))").run()
+  db.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES ('onboarding_skipped_at', 'null', datetime('now'))").run()
+
   // Admin group always has Docker access
   db.exec("UPDATE user_groups SET docker_access = 1 WHERE id = 'grp_admin'")
 
@@ -284,6 +288,33 @@ function applySchema(db: Database.Database) {
       score_overrides TEXT NOT NULL DEFAULT '[]',
       user_cf_names   TEXT NOT NULL DEFAULT '[]',
       updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Recyclarr sync history
+    CREATE TABLE IF NOT EXISTS recyclarr_sync_history (
+      id             TEXT PRIMARY KEY,
+      synced_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      success        INTEGER NOT NULL,
+      output         TEXT NOT NULL,
+      changes_summary TEXT
+    );
+
+    -- Service health history for uptime tracking
+    CREATE TABLE IF NOT EXISTS service_health_history (
+      service_id  TEXT NOT NULL,
+      checked_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      status      INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_health_service_time ON service_health_history(service_id, checked_at);
+
+    -- Activity log
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id         TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      category   TEXT NOT NULL,
+      message    TEXT NOT NULL,
+      severity   TEXT NOT NULL DEFAULT 'info',
+      meta       TEXT
     );
 
     -- Insert default settings if not exist

@@ -8,10 +8,12 @@ interface DashboardState {
   editMode: boolean
   guestMode: boolean
   loading: boolean
+  showVisibilityOverlay: boolean
 
   loadDashboard: () => Promise<void>
   setEditMode: (v: boolean) => void
   setGuestMode: (v: boolean) => Promise<void>
+  setShowVisibilityOverlay: (v: boolean) => void
 
   addService: (refId: string) => Promise<void>
   addArrInstance: (refId: string) => Promise<void>
@@ -38,6 +40,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   editMode: false,
   guestMode: false,
   loading: false,
+  showVisibilityOverlay: false,
 
   loadDashboard: async () => {
     set({ loading: true })
@@ -50,6 +53,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   setEditMode: (v) => set({ editMode: v }),
+  setShowVisibilityOverlay: (v) => set({ showVisibilityOverlay: v }),
 
   setGuestMode: async (v) => {
     set({ guestMode: v, editMode: false })
