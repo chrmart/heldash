@@ -49,6 +49,7 @@ interface ArrState {
   createCustomFormat: (instanceId: string, data: { name: string; trash_id?: string; includeCustomFormatWhenRenaming?: boolean; specifications: ArrCFSpecification[] }) => Promise<ArrCustomFormat>
   updateCustomFormat: (instanceId: string, cfId: number, data: { name: string; trash_id?: string; includeCustomFormatWhenRenaming?: boolean; specifications: ArrCFSpecification[] }) => Promise<void>
   deleteCustomFormat: (instanceId: string, cfId: number, trashId?: string) => Promise<void>
+  deleteUserCf: (service: 'radarr' | 'sonarr', trashId: string) => Promise<void>
   updateProfileScores: (instanceId: string, profileId: number, scores: { formatId: number; score: number }[]) => Promise<void>
   loadCfSchema: (instanceId: string) => Promise<void>
   loadUserCfFiles: (service: 'radarr' | 'sonarr') => Promise<void>
@@ -229,6 +230,10 @@ export const useArrStore = create<ArrState>((set, get) => ({
 
   deleteCustomFormat: async (instanceId, cfId, trashId) => {
     await api.arr.customFormats.delete(instanceId, cfId, trashId)
+  },
+
+  deleteUserCf: async (service, trashId) => {
+    await api.recyclarr.deleteUserCf(service, trashId)
   },
 
   loadCfSchema: async (instanceId) => {

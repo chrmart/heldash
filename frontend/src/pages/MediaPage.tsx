@@ -3672,6 +3672,7 @@ function renderSpecField(
 
 function UserCfRow({
   cf,
+  service,
   inUse,
   notInArr,
   isAdmin,
@@ -3683,8 +3684,10 @@ function UserCfRow({
   onDeleteCancel,
   onExport,
   onCopy,
+  onCreateInArr,
 }: {
   cf: UserCfFile
+  service: 'radarr' | 'sonarr'
   inUse: boolean
   notInArr: boolean
   isAdmin: boolean
@@ -3696,8 +3699,27 @@ function UserCfRow({
   onDeleteCancel: () => void
   onExport?: () => void
   onCopy?: () => void
+  onCreateInArr?: () => Promise<void>
 }) {
   const [hovered, setHovered] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  async function handleCreateInArr() {
+    if (!onCreateInArr) return
+    setCreating(true)
+    setCreateError(null)
+    try {
+      await onCreateInArr()
+    } catch (e: unknown) {
+      setCreateError((e as Error).message ?? 'Fehler beim Erstellen')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const serviceLabel = service.charAt(0).toUpperCase() + service.slice(1)
+
   return (
     <div
       className="glass"
@@ -3708,7 +3730,15 @@ function UserCfRow({
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ fontWeight: 600, fontSize: 13, fontFamily: 'var(--font-sans)', flex: 1 }}>{cf.name}</span>
         <span className="badge-neutral" style={{ fontSize: 11 }}>{cf.specifications.length} Conditions</span>
-        {notInArr && <span className="badge-neutral" style={{ fontSize: 11 }}>Nicht in Arr</span>}
+        {notInArr && (
+          <span
+            className="badge-warning"
+            style={{ fontSize: 11, cursor: 'default' }}
+            title={`JSON-Datei vorhanden aber CF nicht in ${serviceLabel} gefunden. Importieren oder löschen.`}
+          >
+            Nur lokal
+          </span>
+        )}
         {isAdmin && (
           <div style={{ display: 'flex', gap: 4, opacity: hovered ? 1 : 0, transition: 'opacity var(--transition-fast)' }}>
             {onExport && (
@@ -3719,6 +3749,16 @@ function UserCfRow({
             {onCopy && (
               <button onClick={onCopy} title="Kopieren" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
                 <Copy size={12} />
+              </button>
+            )}
+            {notInArr && onCreateInArr && (
+              <button
+                onClick={handleCreateInArr}
+                disabled={creating}
+                title={`In ${serviceLabel} erstellen`}
+                style={{ background: 'none', border: 'none', cursor: creating ? 'not-allowed' : 'pointer', color: 'var(--text-muted)', padding: 4 }}
+              >
+                <Plus size={12} />
               </button>
             )}
             <button
@@ -3734,19 +3774,28 @@ function UserCfRow({
           </div>
         )}
       </div>
+      {createError && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="badge-error" style={{ fontSize: 11 }}>{createError}</span>
+        </div>
+      )}
       {confirmingDelete && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {inUse ? (
             <span className="badge-error" style={{ fontSize: 11 }}>In Recyclarr aktiv — zuerst im Recyclarr-Tab entfernen</span>
           ) : (
             <>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Wirklich löschen?</span>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {notInArr
+                  ? `Nur JSON-Datei löschen — CF existiert nicht in ${serviceLabel}`
+                  : 'Wirklich löschen?'}
+              </span>
               <button
                 onClick={onDeleteConfirm}
                 className="btn btn-sm"
                 style={{ fontSize: 11, padding: '2px 8px', background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}
-              >Ja</button>
-              <button onClick={onDeleteCancel} className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}>Nein</button>
+              >{notInArr ? 'Löschen' : 'Ja'}</button>
+              <button onClick={onDeleteCancel} className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}>{notInArr ? 'Abbrechen' : 'Nein'}</button>
             </>
           )}
           {deleteError && !inUse && <span className="badge-error" style={{ fontSize: 11 }}>{deleteError}</span>}
@@ -4407,7 +4456,7 @@ function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void })
   const {
     instances, customFormats, cfSchemas, userCfFiles,
     loadCustomFormats, loadCfSchema, loadUserCfFiles,
-    createCustomFormat, updateCustomFormat, deleteCustomFormat,
+    createCustomFormat, updateCustomFormat, deleteCustomFormat, deleteUserCf,
   } = useArrStore()
 
   const serviceTypes = useMemo(() => {
@@ -4459,10 +4508,23 @@ function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void })
   async function handleDelete(trashId: string, arrCf: ArrCustomFormat | null) {
     setDeleteError(null)
     setDeleteInUse(false)
-    if (!activeInstance || !arrCf) {
-      setDeleteError('CF nicht in Arr gefunden — direkt im Recyclarr-Tab verwalten')
+    if (!arrCf) {
+      // JSON-only CF — delete file via recyclarr endpoint
+      try {
+        await deleteUserCf(service, trashId)
+        setConfirmDeleteTrashId(null)
+        await loadUserCfFiles(service)
+      } catch (e: unknown) {
+        const msg = (e as Error).message ?? ''
+        if (msg.includes('aktiv in Recyclarr')) {
+          setDeleteInUse(true)
+        } else {
+          setDeleteError(msg)
+        }
+      }
       return
     }
+    if (!activeInstance) return
     try {
       await deleteCustomFormat(activeInstance.id, arrCf.id, trashId)
       setConfirmDeleteTrashId(null)
@@ -4475,6 +4537,17 @@ function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void })
         setDeleteError(msg)
       }
     }
+  }
+
+  async function handleCreateInArr(file: UserCfFile) {
+    if (!activeInstance) return
+    await createCustomFormat(activeInstance.id, {
+      name: file.name,
+      trash_id: file.trash_id,
+      includeCustomFormatWhenRenaming: file.includeCustomFormatWhenRenaming,
+      specifications: file.specifications as unknown as ArrCFSpecification[],
+    })
+    await Promise.all([loadCustomFormats(activeInstance.id), loadUserCfFiles(service)])
   }
 
   if (serviceTypes.length === 0) {
@@ -4578,6 +4651,7 @@ function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void })
               <UserCfRow
                 key={file.trash_id}
                 cf={file}
+                service={service}
                 inUse={confirmDeleteTrashId === file.trash_id && deleteInUse}
                 notInArr={arrCf === null}
                 isAdmin={isAdmin}
@@ -4594,6 +4668,7 @@ function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void })
                   specifications: file.specifications,
                 })}
                 onCopy={() => { setCopyCf(file); setActionSuccess(null) }}
+                onCreateInArr={arrCf === null ? () => handleCreateInArr(file) : undefined}
               />
             ))}
           </div>

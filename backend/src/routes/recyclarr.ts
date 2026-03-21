@@ -1259,20 +1259,18 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       if (service !== 'radarr' && service !== 'sonarr') return reply.status(400).send({ error: 'service must be radarr or sonarr' })
       const { trashId } = req.params
       const filePath = path.join(USER_CF_BASE, service, `${trashId}.json`)
-      if (!fs.existsSync(filePath)) return reply.status(404).send({ error: 'CF not found' })
-      fs.unlinkSync(filePath)
-      writeSettingsYml()
-      // Remove references from recyclarr_config in DB
+      if (!fs.existsSync(filePath)) return reply.status(404).send({ error: 'CF file not found' })
+      // Block deletion if CF is active in any Recyclarr profile
       const db = getDb()
-      const rows = db.prepare('SELECT id, user_cf_names FROM recyclarr_config').all() as { id: string; user_cf_names: string }[]
-      for (const row of rows) {
+      const configRows = db.prepare('SELECT user_cf_names FROM recyclarr_config').all() as { user_cf_names: string }[]
+      for (const row of configRows) {
         const names = safeJson<UserCf[]>(row.user_cf_names, [])
-        const updated = names.filter(ucf => ucf.trash_id !== trashId && ucf.name !== trashId)
-        if (updated.length !== names.length) {
-          db.prepare("UPDATE recyclarr_config SET user_cf_names = ?, updated_at = datetime('now') WHERE id = ?")
-            .run(JSON.stringify(updated), row.id)
+        if (names.some(ucf => ucf.trash_id === trashId)) {
+          return reply.status(409).send({ error: 'CF aktiv in Recyclarr-Profil — dort zuerst entfernen' })
         }
       }
+      fs.unlinkSync(filePath)
+      writeSettingsYml()
       // Regenerate YAML
       try {
         const allRows = db.prepare('SELECT * FROM recyclarr_config WHERE enabled = 1').all() as RecyclarrConfigRow[]
@@ -1281,7 +1279,7 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       } catch (e) {
         app.log.warn({ err: e }, 'Failed to write recyclarr YAML after user CF delete')
       }
-      return reply.send({ ok: true })
+      return reply.status(204).send()
     }
   )
 
