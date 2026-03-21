@@ -1470,13 +1470,13 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       const service = inst.type as 'radarr' | 'sonarr'
       const { containerName } = getRecyclarrSettings()
 
-      // Step 1: Fetch CFs managed by Recyclarr (uses existing cached getCustomFormats)
+      // Step 1: Fetch CFs managed by Recyclarr — always force-fresh for profile display
       let recyclarrCfs: RecyclarrCf[] = []
       let warning = false
       let warningMessage: string | undefined
 
       try {
-        const result = await getCustomFormats(service, containerName)
+        const result = await getCustomFormats(service, containerName, true)
         recyclarrCfs = result.cfs
         if (result.warning) warning = true
       } catch (e) {
@@ -1484,6 +1484,9 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
         warning = true
         warningMessage = 'CF-Gruppen konnten nicht geladen werden'
       }
+
+      // Clear group cache so group memberships are also freshly fetched
+      cfGroupsCache.delete(service)
       // TRaSH guide CFs (trash_id does not start with "user-")
       const recyclarrCfNameSet = new Set(recyclarrCfs.filter(c => !c.trash_id.startsWith('user-')).map(c => c.name.toLowerCase()))
       // User-created CFs (trash_id starts with "user-") — shown in profile but with different badge
@@ -1528,13 +1531,17 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       const cfs: CfEntry[] = []
       const notInProfile: NotInProfileEntry[] = []
 
-      // All profile CFs are shown; managedByRecyclarr distinguishes TRaSH guide CFs, isUserCf distinguishes user-created CFs
+      // Only show managed (TRaSH) and user-created CFs in main list; unmanaged CFs go to notInProfile
       for (const item of formatItems) {
         const managedByRecyclarr = recyclarrCfNameSet.has(item.name.toLowerCase())
         const isUserCf = userCfNameSet.has(item.name.toLowerCase())
-        cfs.push({ arrId: item.format, name: item.name, currentScore: item.score, groups: [], inMultipleGroups: false, managedByRecyclarr, isUserCf })
+        if (managedByRecyclarr || isUserCf) {
+          cfs.push({ arrId: item.format, name: item.name, currentScore: item.score, groups: [], inMultipleGroups: false, managedByRecyclarr, isUserCf })
+        } else {
+          notInProfile.push({ arrId: item.format, name: item.name, currentScore: item.score })
+        }
       }
-      // notInProfile: Recyclarr-managed CFs that are NOT yet in this quality profile
+      // Also add Recyclarr-managed CFs that are NOT yet in this quality profile
       const profileItemNames = new Set(formatItems.map(i => i.name.toLowerCase()))
       for (const rcf of recyclarrCfs) {
         if (!profileItemNames.has(rcf.name.toLowerCase())) {
@@ -1614,10 +1621,15 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
         cf.inMultipleGroups = cf.groups.length > 1
       }
       app.log.info({
+        recyclarrCfCount: recyclarrCfs.length,
+        recyclarrCfNameSetSize: recyclarrCfNameSet.size,
+        userCfCount: userCfNameSet.size,
+        formatItemsCount: formatItems.length,
+        groupsParsed: parsedGroups.length,
         cfsWithGroups: cfs.filter(c => c.groups.length > 0).length,
         totalCfs: cfs.length,
-        groupCount: parsedGroups.length
-      }, 'CF group assignment result')
+        notInProfileCount: notInProfile.length,
+      }, 'profile-cfs result summary')
 
       const responseGroups = parsedGroups.map(g => ({
         name: g.name,
