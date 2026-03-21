@@ -1,4 +1,5 @@
 import { WebSocket } from 'undici'
+import { logActivity } from '../routes/activity'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,10 @@ export interface HaEntityState {
 }
 
 type StateListener = (entityId: string, newState: HaEntityState) => void
+
+// Domains to log (never: sensor, binary_sensor, sun, weather, zone, person, device_tracker)
+const LOGGABLE_DOMAINS = new Set(['light', 'switch', 'input_boolean', 'climate', 'cover', 'media_player', 'automation', 'scene'])
+const RATE_LIMIT_MS = 60_000
 
 interface PendingCommand {
   resolve: (v: unknown) => void
@@ -34,10 +39,12 @@ export class HaWsClient {
   private isAuthed = false
   private pendingCommands = new Map<number, PendingCommand>()
   private commandQueue: { id: number; msg: string }[] = []
+  private activityRateLimit = new Map<string, number>()
 
   constructor(
     private readonly url: string,
     private readonly token: string,
+    private readonly instanceId: string = '',
   ) {}
 
   /** Register a listener. Returns an unsubscribe function. */
@@ -178,12 +185,31 @@ export class HaWsClient {
         if (!data) break
         const entityId = data.entity_id as string | undefined
         const newState = data.new_state as HaEntityState | null | undefined
+        const oldState = data.old_state as HaEntityState | null | undefined
         if (entityId && newState) {
           for (const fn of this.listeners) fn(entityId, newState)
+          this.maybeLogHaActivity(entityId, newState, oldState ?? null)
         }
         break
       }
     }
+  }
+
+  private maybeLogHaActivity(entityId: string, newState: HaEntityState, oldState: HaEntityState | null): void {
+    const domain = entityId.split('.')[0]
+    if (!LOGGABLE_DOMAINS.has(domain)) return
+    if (!oldState) return
+    if (oldState.state === newState.state) return
+
+    // Rate limit: max 1 entry per entity per 60s
+    const now = Date.now()
+    const lastLogged = this.activityRateLimit.get(entityId) ?? 0
+    if (now - lastLogged < RATE_LIMIT_MS) return
+    this.activityRateLimit.set(entityId, now)
+
+    const friendly = (newState.attributes.friendly_name as string | undefined) ?? entityId
+    const message = `${friendly} — ${oldState.state} → ${newState.state}`
+    logActivity('ha', message, 'info', { instanceId: this.instanceId, entityId, domain })
   }
 
   private scheduleReconnect(): void {

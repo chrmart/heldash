@@ -57,7 +57,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, X, Container, ChevronDown, ChevronRight, Activity, Eye, EyeOff, RefreshCw } from 'lucide-react'
+import { GripVertical, X, Container, ChevronDown, ChevronRight, Activity, Eye, EyeOff, RefreshCw, Home, Film, Box } from 'lucide-react'
 
 // ── Shared edit-mode overlay (drag handle + remove button + group selector) ────
 function EditOverlay({
@@ -852,7 +852,14 @@ export function Dashboard({ onEdit }: Props) {
 
   const ACTIVITY_CATEGORIES = ['all', 'media', 'docker', 'recyclarr', 'ha', 'system']
   const categoryLabel: Record<string, string> = { all: 'Alle', media: 'Media', docker: 'Docker', recyclarr: 'Recyclarr', ha: 'HA', system: 'System' }
-  const categoryIcon: Record<string, string> = { media: '🎬', docker: '🐳', recyclarr: '♻️', ha: '🏠', system: '⚙️', all: '📋' }
+  const categoryIconNode: Record<string, React.ReactNode> = {
+    media: <Film size={12} />,
+    docker: <Container size={12} />,
+    recyclarr: <RefreshCw size={12} />,
+    ha: <Home size={12} />,
+    system: <Activity size={12} />,
+    all: <Box size={12} />,
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -949,7 +956,7 @@ export function Dashboard({ onEdit }: Props) {
                     className={activityCategory === cat ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
                     style={{ fontSize: 11, padding: '3px 10px', gap: 4 }}
                   >
-                    <span>{categoryIcon[cat]}</span>
+                    <span style={{ display: 'flex', alignItems: 'center' }}>{categoryIconNode[cat]}</span>
                     {categoryLabel[cat]}
                   </button>
                 ))}
@@ -965,8 +972,9 @@ export function Dashboard({ onEdit }: Props) {
 
               {/* Timeline */}
               {activityEntries.length === 0 && !activityLoading ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
-                  Keine Aktivitäten
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0', lineHeight: 1.6 }}>
+                  Noch keine Aktivitäten aufgezeichnet —<br />
+                  Aktivitäten erscheinen nach dem ersten Sync, Docker-Event oder HA-Aktion
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -974,15 +982,27 @@ export function Dashboard({ onEdit }: Props) {
                     <div
                       key={entry.id}
                       style={{
-                        display: 'flex', alignItems: 'baseline', gap: 10,
+                        display: 'flex', alignItems: 'center', gap: 10,
                         padding: '6px 8px', borderRadius: 'var(--radius-sm)',
                         background: entry.severity === 'error' ? 'rgba(var(--red-rgb,220,38,38),0.08)'
                           : entry.severity === 'warning' ? 'rgba(var(--yellow-rgb,234,179,8),0.08)'
                           : 'transparent',
                       }}
                     >
-                      <span style={{ fontSize: 13, flexShrink: 0 }}>{categoryIcon[entry.category] ?? '📋'}</span>
-                      <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, lineHeight: 1.4 }}>{entry.message}</span>
+                      <span style={{
+                        display: 'flex', alignItems: 'center', flexShrink: 0,
+                        color: entry.severity === 'error' ? 'var(--status-offline)'
+                          : entry.severity === 'warning' ? 'var(--status-warning)'
+                          : 'var(--text-muted)',
+                      }}>
+                        {categoryIconNode[entry.category] ?? <Box size={12} />}
+                      </span>
+                      <span style={{
+                        fontSize: 12, flex: 1, lineHeight: 1.4,
+                        color: entry.severity === 'error' ? 'var(--status-offline)'
+                          : entry.severity === 'warning' ? 'var(--status-warning)'
+                          : 'var(--text-secondary)',
+                      }}>{entry.message}</span>
                       <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
                         {relTime(entry.created_at)}
                       </span>

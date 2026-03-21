@@ -16,7 +16,7 @@ import { usersRoutes } from './routes/users'
 import { arrRoutes } from './routes/arr'
 import { dashboardRoutes } from './routes/dashboard'
 import { widgetsRoutes } from './routes/widgets'
-import { dockerRoutes } from './routes/docker'
+import { dockerRoutes, initDockerPoller } from './routes/docker'
 import { backgroundsRoutes } from './routes/backgrounds'
 import { haRoutes } from './routes/ha'
 import { tmdbRoutes } from './routes/tmdb'
@@ -225,6 +225,11 @@ async function start() {
 
   // ── Recyclarr scheduled sync ─────────────────────────────────────────────────
   initRecyclarrSchedulers(app.log)
+
+  // ── Docker container state poller (logs transitions to activity feed) ─────────
+  if (dockerSocketPresent) {
+    initDockerPoller()
+  }
 
   // ── Global error handler — catches unhandled throws in route handlers ─────────
   app.setErrorHandler((error, request, reply) => {

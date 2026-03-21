@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify'
 import { Pool } from 'undici'
 import type { Dispatcher } from 'undici'
 import { getDb } from '../db/database'
+import { logActivity } from './activity'
 
 // ── Docker Engine API helper ──────────────────────────────────────────────────
 // Pool with multiple connections so batch stats requests run concurrently
@@ -74,6 +75,37 @@ function parseMuxedFrame(buf: Buffer): { consumed: number; stream: 'stdout' | 's
   const payload = buf.subarray(8, 8 + size)
   const stream = streamByte === 2 ? 'stderr' : 'stdout'
   return { consumed: 8 + size, stream, payload }
+}
+
+// ── Docker container state polling ────────────────────────────────────────────
+// Tracks container state transitions and logs to activity feed.
+const containerStates = new Map<string, { name: string; state: string }>()
+
+export function initDockerPoller(): void {
+  setInterval(async () => {
+    try {
+      const res = await dockerReq('/v1.41/containers/json?all=true')
+      if (!res.statusCode || res.statusCode >= 400) { await res.body.text().catch(() => {}); return }
+      const containers = await res.body.json() as DockerContainerJson[]
+      for (const c of containers) {
+        const name = (c.Names[0] ?? c.Id).replace(/^\//, '')
+        const prev = containerStates.get(c.Id)
+        if (prev && prev.state !== c.State) {
+          if (c.State === 'running') {
+            logActivity('docker', `Container '${name}' gestartet`, 'info', { containerId: c.Id })
+          } else if (c.State === 'exited' || c.State === 'dead') {
+            logActivity('docker', `Container '${name}' gestoppt`, 'warning', { containerId: c.Id })
+          }
+        }
+        containerStates.set(c.Id, { name, state: c.State })
+      }
+      // Remove containers no longer present
+      const currentIds = new Set(containers.map(c => c.Id))
+      for (const [id] of containerStates) {
+        if (!currentIds.has(id)) containerStates.delete(id)
+      }
+    } catch { /* docker socket unavailable */ }
+  }, 30_000)
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────

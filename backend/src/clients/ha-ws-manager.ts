@@ -7,7 +7,7 @@ const pool = new Map<string, HaWsClient>()
 export function getHaWsClient(instanceId: string, url: string, token: string): HaWsClient {
   let client = pool.get(instanceId)
   if (!client) {
-    client = new HaWsClient(url, token)
+    client = new HaWsClient(url, token, instanceId)
     pool.set(instanceId, client)
   }
   return client

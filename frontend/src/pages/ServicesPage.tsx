@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import type { Service } from '../types'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
-import { Pencil, Trash2, Plus, GripVertical, Download, Upload, LayoutDashboard, Shield, ShieldOff, BarChart2 } from 'lucide-react'
+import { Pencil, Trash2, GripVertical, Download, Upload, LayoutDashboard, Shield, ShieldOff, BarChart2, RefreshCw, List } from 'lucide-react'
 import { api } from '../api'
 import {
   DndContext,
@@ -365,8 +365,236 @@ function SortableGroupSection({
   )
 }
 
+// ── Uptime Overview Tab ───────────────────────────────────────────────────────
+
+interface UptimeServiceData {
+  serviceId: string
+  serviceName: string
+  serviceIcon: string | null
+  serviceIconUrl: string | null
+  lastStatus: string | null
+  history: { hour: string; uptime: number }[]
+  uptimePercent7d: number | null
+}
+
+function uptimeColor(pct: number | null): string {
+  if (pct === null) return 'var(--text-muted)'
+  if (pct >= 99) return 'var(--status-online)'
+  if (pct >= 95) return 'var(--status-warning)'
+  return 'var(--status-offline)'
+}
+
+function UptimeOverview({ services }: { services: Service[] }) {
+  const [data, setData] = useState<UptimeServiceData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [sort, setSort] = useState<'name' | 'uptime-desc' | 'uptime-asc'>('name')
+
+  const serviceIds = services.map(s => s.id).join(',')
+
+  const load = async () => {
+    setLoading(true)
+    const results = await Promise.all(
+      services.map(async s => {
+        try {
+          const d = await api.services_extra.healthHistory(s.id)
+          return {
+            serviceId: s.id, serviceName: s.name,
+            serviceIcon: s.icon ?? null, serviceIconUrl: s.icon_url ?? null,
+            lastStatus: s.last_status ?? null,
+            history: d.history, uptimePercent7d: d.uptimePercent7d,
+          }
+        } catch {
+          return {
+            serviceId: s.id, serviceName: s.name,
+            serviceIcon: s.icon ?? null, serviceIconUrl: s.icon_url ?? null,
+            lastStatus: s.last_status ?? null,
+            history: [], uptimePercent7d: null,
+          }
+        }
+      })
+    )
+    setData(results)
+    setLastUpdated(new Date())
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [serviceIds]) // eslint-disable-line
+
+  const sorted = [...data].sort((a, b) => {
+    if (sort === 'name') return a.serviceName.localeCompare(b.serviceName)
+    const pa = a.uptimePercent7d ?? -1
+    const pb = b.uptimePercent7d ?? -1
+    return sort === 'uptime-desc' ? pb - pa : pa - pb
+  })
+
+  const online = data.filter(d => d.lastStatus === 'online').length
+  const offline = data.filter(d => d.lastStatus === 'offline').length
+  const avgUptime = (() => {
+    const vals = data.map(d => d.uptimePercent7d).filter((v): v is number => v !== null)
+    if (vals.length === 0) return null
+    return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10
+  })()
+
+  // Build 24h blocks for a service
+  const build24hBlocks = (history: { hour: string; uptime: number }[]) => {
+    const now = new Date()
+    const blocks: { label: string; uptime: number | null }[] = []
+    for (let i = 23; i >= 0; i--) {
+      const d = new Date(now)
+      d.setMinutes(0, 0, 0)
+      d.setHours(d.getHours() - i)
+      const isoHour = d.toISOString().slice(0, 13)
+      const entry = history.find(h => h.hour.slice(0, 13) === isoHour)
+      blocks.push({
+        label: d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+        uptime: entry ? entry.uptime : null,
+      })
+    }
+    return blocks
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 16, fontFamily: 'var(--font-display)', fontWeight: 600 }}>Uptime Übersicht</span>
+        {lastUpdated && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            Aktualisiert: {lastUpdated.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        )}
+        <button
+          onClick={load}
+          className="btn btn-ghost btn-sm"
+          disabled={loading}
+          style={{ marginLeft: 4, padding: '3px 8px' }}
+          title="Aktualisieren"
+        >
+          <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+        </button>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sortierung:</label>
+          <select
+            value={sort}
+            onChange={e => setSort(e.target.value as typeof sort)}
+            style={{
+              fontSize: 12, padding: '3px 8px', borderRadius: 'var(--radius-sm)',
+              background: 'var(--bg-elevated)', border: '1px solid var(--glass-border)',
+              color: 'var(--text-primary)', cursor: 'pointer', colorScheme: 'dark',
+            } as React.CSSProperties}
+          >
+            <option value="name">Name A→Z</option>
+            <option value="uptime-desc">Uptime ↓</option>
+            <option value="uptime-asc">Uptime ↑</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Summary bar */}
+      <div className="glass" style={{ borderRadius: 'var(--radius-md)', padding: '10px 16px', display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
+        <span style={{ color: 'var(--text-secondary)' }}>
+          <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Gesamt:</span>
+          <strong>{data.length}</strong>
+        </span>
+        <span>
+          <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Online:</span>
+          <strong style={{ color: 'var(--status-online)' }}>{online}</strong>
+        </span>
+        <span>
+          <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Offline:</span>
+          <strong style={{ color: offline > 0 ? 'var(--status-offline)' : 'var(--text-secondary)' }}>{offline}</strong>
+        </span>
+        <span>
+          <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Ø Uptime 7 Tage:</span>
+          <strong style={{ color: uptimeColor(avgUptime) }}>{avgUptime !== null ? `${avgUptime}%` : '—'}</strong>
+        </span>
+      </div>
+
+      {/* Service cards */}
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[...Array(Math.min(services.length, 5))].map((_, i) => (
+            <div key={i} className="glass" style={{ borderRadius: 'var(--radius-md)', padding: '12px 16px', height: 52, opacity: 0.5, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {sorted.map(svc => {
+            const blocks = build24hBlocks(svc.history)
+            const hasData = svc.history.length > 0
+            return (
+              <div
+                key={svc.serviceId}
+                className="glass"
+                style={{ borderRadius: 'var(--radius-md)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 16 }}
+              >
+                {/* Left: icon + name + status */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 200, flex: '0 0 200px' }}>
+                  <span style={{ flexShrink: 0 }}>
+                    {svc.serviceIconUrl ? (
+                      <img src={svc.serviceIconUrl} alt="" style={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 3 }} />
+                    ) : svc.serviceIcon ? (
+                      <span style={{ fontSize: 18, lineHeight: 1 }}>{svc.serviceIcon}</span>
+                    ) : null}
+                  </span>
+                  <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {svc.serviceName}
+                  </span>
+                  <span
+                    className={`service-status ${svc.lastStatus ?? 'unknown'}`}
+                    style={{ flexShrink: 0 }}
+                  />
+                </div>
+
+                {/* Center: 24h bar */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {!hasData ? (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Keine Daten</div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      {blocks.map((b, i) => {
+                        const bg = b.uptime === null
+                          ? 'var(--glass-border)'
+                          : b.uptime >= 90 ? 'var(--status-online)'
+                          : b.uptime >= 50 ? 'var(--status-warning)'
+                          : 'var(--status-offline)'
+                        return (
+                          <div
+                            key={i}
+                            title={`${b.label} — ${b.uptime !== null ? b.uptime + '% uptime' : 'keine Daten'}`}
+                            style={{ flex: 1, height: 20, borderRadius: 2, background: bg, cursor: 'default', opacity: 0.85, transition: 'opacity 150ms' }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.85' }}
+                          />
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: 7d uptime % */}
+                <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 60 }}>
+                  {svc.uptimePercent7d !== null ? (
+                    <span style={{ fontWeight: 700, fontSize: 14, color: uptimeColor(svc.uptimePercent7d) }}>
+                      {svc.uptimePercent7d}%
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ServicesPage({ onEdit }: Props) {
   const { services, groups, isAdmin, isAuthenticated } = useStore()
+  const [activeTab, setActiveTab] = useState<'list' | 'uptime'>('list')
   const [editMode, setEditMode] = useState(false)
   const [groupOrder, setGroupOrder] = useState<string[]>([])
 
@@ -501,59 +729,102 @@ export function ServicesPage({ onEdit }: Props) {
           {notification.message}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: 0 }}>
         <button
-          onClick={() => setEditMode(!editMode)}
-          className="btn btn-primary btn-sm"
+          onClick={() => setActiveTab('list')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', fontSize: 13, fontWeight: 500,
+            background: 'none', border: 'none', cursor: 'pointer',
+            borderBottom: activeTab === 'list' ? '2px solid var(--accent)' : '2px solid transparent',
+            color: activeTab === 'list' ? 'var(--accent)' : 'var(--text-muted)',
+            marginBottom: -1,
+            transition: 'color var(--transition-fast)',
+          }}
         >
-          {editMode ? 'Done' : 'Edit Groups'}
+          <List size={13} />
+          Apps
         </button>
-        {isAdmin && (
-          <>
+        {isAuthenticated && (
+          <button
+            onClick={() => setActiveTab('uptime')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', fontSize: 13, fontWeight: 500,
+              background: 'none', border: 'none', cursor: 'pointer',
+              borderBottom: activeTab === 'uptime' ? '2px solid var(--accent)' : '2px solid transparent',
+              color: activeTab === 'uptime' ? 'var(--accent)' : 'var(--text-muted)',
+              marginBottom: -1,
+              transition: 'color var(--transition-fast)',
+            }}
+          >
+            <BarChart2 size={13} />
+            Uptime
+          </button>
+        )}
+        {/* Toolbar items for list tab */}
+        {activeTab === 'list' && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
             <button
-              onClick={handleExport}
-              disabled={exporting}
-              className="btn btn-ghost btn-sm"
-              title="Export all services as JSON"
+              onClick={() => setEditMode(!editMode)}
+              className="btn btn-primary btn-sm"
             >
-              <Download size={14} />
-              Export
+              {editMode ? 'Done' : 'Edit Groups'}
             </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={importing}
-              className="btn btn-ghost btn-sm"
-              title="Import services from JSON file"
-            >
-              <Upload size={14} />
-              Import
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              onChange={handleImport}
-              style={{ display: 'none' }}
-            />
-          </>
+            {isAdmin && (
+              <>
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className="btn btn-ghost btn-sm"
+                  title="Export all services as JSON"
+                >
+                  <Download size={14} />
+                  Export
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={importing}
+                  className="btn btn-ghost btn-sm"
+                  title="Import services from JSON file"
+                >
+                  <Upload size={14} />
+                  Import
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleImport}
+                  style={{ display: 'none' }}
+                />
+              </>
+            )}
+          </div>
         )}
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={groupOrder} strategy={verticalListSortingStrategy}>
-          {sections.map((section, idx) => (
-            <SortableGroupSection
-              key={section.id}
-              section={section}
-              onEdit={onEdit}
-              editMode={editMode}
-              isDragging={false}
-              isAdmin={isAdmin}
-              isAuthenticated={isAuthenticated}
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
+      {activeTab === 'uptime' && isAuthenticated ? (
+        <UptimeOverview services={services} />
+      ) : (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={groupOrder} strategy={verticalListSortingStrategy}>
+            {sections.map((section) => (
+              <SortableGroupSection
+                key={section.id}
+                section={section}
+                onEdit={onEdit}
+                editMode={editMode}
+                isDragging={false}
+                isAdmin={isAdmin}
+                isAuthenticated={isAuthenticated}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+      )}
     </div>
   )
 }
