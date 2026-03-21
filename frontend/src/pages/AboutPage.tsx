@@ -160,10 +160,12 @@ function TabOverview({ version }: { version: string | null }) {
     { icon: '🐳', title: 'Docker', desc: 'Container verwalten, Logs, Start/Stop' },
     { icon: '🎬', title: 'Media', desc: 'Radarr, Sonarr, Prowlarr, SABnzbd' },
     { icon: '🔎', title: 'Discover', desc: 'TMDB-Suche, Seerr-Requests' },
-    { icon: '📋', title: 'Recyclarr', desc: 'TRaSH Guides Sync via GUI' },
-    { icon: '⚙️', title: 'CF-Manager', desc: 'Eigene Custom Formats erstellen & verwalten' },
-    { icon: '🏠', title: 'Home Assistant', desc: 'Entities, Panels, Energy' },
+    { icon: '📋', title: 'Recyclarr', desc: 'TRaSH Guides Sync, CF Groups, Vergleich' },
+    { icon: '⚙️', title: 'CF-Manager', desc: 'CFs erstellen, importieren, kopieren' },
+    { icon: '🏠', title: 'Home Assistant', desc: 'Entities, Panels, Energy, Areas' },
     { icon: '🧩', title: 'Widgets', desc: 'Systemstatus, AdGuard, Nginx PM' },
+    { icon: '📈', title: 'Uptime', desc: 'Service-Verlauf, 24h Graph, Übersicht' },
+    { icon: '📋', title: 'Aktivitäten', desc: 'HA Events, Docker, Sync-Verlauf' },
     { icon: '🎨', title: 'Design', desc: 'Anpassbares Erscheinungsbild' },
   ]
 
@@ -207,6 +209,15 @@ function TabOverview({ version }: { version: string | null }) {
             style={{ textDecoration: 'none', cursor: 'pointer' }}
           >
             GitHub: Kreuzbube88/heldash
+          </a>
+          <a
+            href="https://github.com/Kreuzbube88/heldash/blob/main/CONTRIBUTING.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="badge badge-neutral"
+            style={{ textDecoration: 'none', cursor: 'pointer' }}
+          >
+            i18n / Weitere Sprachen: siehe CONTRIBUTING.md
           </a>
         </div>
       </DocSection>
@@ -487,6 +498,63 @@ services:
         </div>
       </DocSection>
 
+      <DocSection title="TRaSH Custom Format Groups">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          CFs werden automatisch nach Gruppen gefiltert und gruppiert:
+        </p>
+        <ul style={{ margin: '0 0 16px', paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>Nur Gruppen die zum konfigurierten Profil passen werden angezeigt</li>
+          <li>Jede Gruppe ist ein-/ausklappbar</li>
+          <li>Gruppen-Header zeigt: Name, CF-Anzahl, aktive Overrides, Sync-Toggle</li>
+          <li>"Reset Group": alle Overrides dieser Gruppe zurücksetzen</li>
+          <li>Suche filtert über alle Gruppen und klappt Treffer automatisch auf</li>
+        </ul>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span className="badge badge-neutral">CFs die keiner Gruppe angehören erscheinen unter "Nicht gruppiert"</span>
+          <span className="badge badge-neutral">CFs die in Radarr/Sonarr sind aber nicht zum Profil gehören erscheinen unter "Nicht im Profil" (schreibgeschützt)</span>
+        </div>
+      </DocSection>
+
+      <DocSection title="Profil-Vergleich">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          Nur verfügbar wenn 2+ Profile für eine Instanz konfiguriert sind.
+          "Profile vergleichen" Button → Vollbild-Overlay
+        </p>
+        <ul style={{ margin: '0 0 16px', paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>Alle Profile nebeneinander</li>
+          <li>Gleiche Scores: grau (kein Unterschied)</li>
+          <li>Unterschiedliche Scores: farblich hervorgehoben</li>
+          <li>Toggle "Nur Unterschiede anzeigen" (Standard: an)</li>
+          <li>Schreibgeschützt — Bearbeitung im normalen Tab</li>
+        </ul>
+      </DocSection>
+
+      <DocSection title="Score-Heatmap">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          Toggle [Tabelle / Heatmap] pro Profil. Heatmap zeigt CFs als farbige Kacheln:
+        </p>
+        <ul style={{ margin: '0 0 16px', paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li><span style={{ color: '#22c55e', fontWeight: 600 }}>Grün</span> = hoher positiver Score</li>
+          <li><span style={{ color: '#ef4444', fontWeight: 600 }}>Rot</span> = hoher negativer Score</li>
+          <li><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Grau</span> = 0</li>
+          <li>Hover: vollständiger Name, Gruppe, Guide-Score vs. Override</li>
+          <li>Klick: Score-Override direkt bearbeiten</li>
+        </ul>
+      </DocSection>
+
+      <DocSection title="Sync-Verlauf & Backups">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          Sync läuft im Hintergrund — kein Stream während des Syncs.
+          Nach Abschluss: kompakte Zusammenfassung ("3 CFs erstellt, 12 Scores aktualisiert").
+        </p>
+        <ul style={{ margin: '0 0 16px', paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>"Verlauf anzeigen": letzte 10 Syncs mit Timestamp, Ergebnis, Details auf Anfrage</li>
+          <li>Automatisches Backup vor jedem Sync</li>
+          <li>Max 5 Backups werden behalten</li>
+          <li>Wiederherstellung per Klick unter "Backups" im Recyclarr-Tab</li>
+        </ul>
+      </DocSection>
+
     </>
   )
 }
@@ -583,6 +651,46 @@ function TabCFManager() {
           <li>In <strong>Recyclarr → Instanz → Advanced Settings</strong> des Profils: CF-Namen zur Ausnahmen-Liste hinzufügen</li>
           <li>Recyclarr überschreibt diesen Score beim Sync nicht mehr</li>
         </ol>
+      </DocSection>
+
+      <DocSection title="Import, Export & Kopieren">
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Import aus Radarr/Sonarr</p>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 8px' }}>
+          "Importieren" Button → zeigt alle CFs die nicht von TRaSH verwaltet werden.
+          Auswahl per Checkbox — nur ausgewählte werden übernommen.
+          Bereits verwaltete CFs mit Unterschieden: "Lokal abweichend" Badge + Option zu sync.
+        </p>
+        <div style={{ marginBottom: 16 }}>
+          <span className="badge badge-warning">TRaSH-verwaltete CFs werden automatisch gefiltert und nicht angeboten</span>
+        </div>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Export</p>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 16px' }}>
+          Pro CF-Zeile: Download-Icon → exportiert CF als JSON.
+          Format kompatibel mit Radarr/Sonarr Export und TRaSH Guides.
+        </p>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>CF kopieren</p>
+        <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>Pro CF-Zeile: Kopier-Icon → öffnet Kopier-Dialog</li>
+          <li>Ziel: gleiche Instanz ODER andere Instanz (Radarr → Sonarr möglich)</li>
+          <li>Neuer Name vorausgefüllt: "{'{Name}'} (Kopie)"</li>
+          <li>CF wird direkt in Ziel-Instanz erstellt + JSON-Datei angelegt</li>
+        </ul>
+      </DocSection>
+
+      <DocSection title="Condition-Vorlagen">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          Beim "+ Condition hinzufügen" → Auswahl: "Aus Vorlage" oder "Leer beginnen".
+          Vorlagen gruppiert nach Typ:
+        </p>
+        <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>Release-Titel: Deutsch, x265, Netflix, Amazon, Disney+, Remux, IMAX, HDR, Atmos...</li>
+          <li>Sprache: Deutsch, Englisch, Französisch, Japanisch, Multi</li>
+          <li>Quelle: BluRay, WEB-DL, WEBRip, HDTV, DVD</li>
+          <li>Auflösung: 480p, 720p, 1080p, 2160p</li>
+          <li>Dateigröße: Klein (&lt;2GB), Mittel (2–10GB), Groß (&gt;30GB)</li>
+          <li>Qualitäts-Modifier, Indexer-Flag, Edition: IMAX, Director's Cut, Extended</li>
+          <li>Alle Felder nach Auswahl bearbeitbar</li>
+        </ul>
       </DocSection>
     </>
   )
@@ -684,6 +792,23 @@ function TabHA() {
           Entities für Topbar/Sidebar-Anzeige auswählen.
         </p>
       </DocSection>
+
+      <DocSection title="Aktivitäten-Feed">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          HA-Events werden automatisch im Dashboard-Aktivitäten-Feed erfasst.
+        </p>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Erfasste Domains</p>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          light, switch, climate, cover, media_player, automation, scene, input_boolean
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          <span className="badge badge-neutral">Sensoren (sensor.*, binary_sensor.*) werden nicht erfasst — zu viele Updates</span>
+          <span className="badge badge-neutral">Rate-Limit: max 1 Eintrag pro Entity pro 60 Sekunden</span>
+        </div>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
+          Anzeige: Dashboard → Aktivitäten-Feed → Filter "HA"
+        </p>
+      </DocSection>
     </>
   )
 }
@@ -695,8 +820,9 @@ function TabWidgets() {
       icon: '🖥️',
       title: 'Server Status',
       desc: 'CPU, RAM, Festplatten-Auslastung (Linux-Host)',
-      setup: 'Keine — zeigt automatisch Host-Ressourcen',
-      badge: null,
+      setup: 'Pfade im Widget-Editor konfigurieren (Name + Pfad). Jede Festplatte als Volume einbinden: -v /mnt/cache:/mnt/cache:ro',
+      badge: 'neutral' as const,
+      badgeText: 'Nicht erreichbare Pfade werden mit Warnung markiert. Mögliche Duplikate (gleicher Mount) werden erkannt.',
     },
     {
       icon: '🛡️',
@@ -756,7 +882,7 @@ function TabWidgets() {
                 <span style={{ fontWeight: 600 }}>Einrichtung:</span> {w.setup}
               </div>
               {w.badge && (
-                <span className={`badge badge-${w.badge}`} style={{ fontSize: 11 }}>⚠️ {w.badgeText}</span>
+                <span className={`badge badge-${w.badge}`} style={{ fontSize: 11 }}>{w.badge === 'warning' ? '⚠️ ' : ''}{w.badgeText}</span>
               )}
             </div>
           ))}

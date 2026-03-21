@@ -35,9 +35,12 @@ Personal homelab dashboard: service tiles, DnD layout, Media (Radarr/Sonarr/Prow
 - Media proxy: `api_key` stripped by `sanitize()`; `rejectUnauthorized:false` for self-signed certs.
 - SABnzbd: `/api?mode=X&apikey=KEY&output=json`; `SabnzbdClient` does NOT extend `ArrBaseClient`.
 - HA WS bridge: `HaWsClient` per instanceId in `HaWsManager`; SSE fans events; backoff 5s→60s; invalidated on PATCH/DELETE.
-- Recyclarr: generates recyclarr.yml from DB; writes user CF JSON files to {RECYCLARR_CONFIG_DIR}/user-cfs/{service}/; manages settings.yml resource_providers; syncs via docker exec; SSE stream; score change detection vs last_known_scores.
+- Recyclarr: generates recyclarr.yml (v8 syntax) from DB; writes user CF JSON files to {RECYCLARR_CONFIG_DIR}/user-cfs/{service}/; manages settings.yml resource_providers; syncs via docker exec (SSE stream hidden from user, shown on request via sync history); score change detection vs last_known_scores; CF groups fetched via `recyclarr list custom-format-groups` (cached 5min); sync history stored (max 10); config backup before every sync (max 5 .bak files).
 - CF Manager: user-created CFs only; creates/updates/deletes in Arr AND JSON files; schema from GET /api/v3/customformat/schema (memory-cached 1h per instance); trash_id = "user-{slug}", generated once on create, never changes.
 - HA Areas: panels grouped by area_id; areas via WS config/area_registry/list; entity area auto-detected via config/entity_registry/get.
+- Activity Log: `activity_log` table (max 100 rows); logs HA state changes (light/switch/climate/cover/media_player/automation — rate-limited 1/entity/60s, never sensor/*), Docker container state transitions, service health transitions, Recyclarr sync results. Never logs api_key/token/password. Authenticated users only.
+- Service Health History: `service_health_history` table; persists every health check result; auto-cleanup > 7 days; aggregated by hour for uptime graph display.
+- Onboarding: one-time wizard on first admin login; skippable; re-openable from Settings.
 - `sanitize()` strips `api_key`, `password_hash`, `token`, widget passwords — never expose in API responses.
 
 ## Coding Rules
@@ -124,6 +127,10 @@ All colors via CSS variables. Theme switch: `data-theme` + `data-accent` on `<ht
 - **CF schema cache**: /api/arr/:id/custom-format-schema cached in memory 1h. Restart clears cache.
 - **string | null class field**: cast on assignment (`this.token = data.token as string`) when returning from method typed `Promise<string>`.
 - **FST_ERR_CTP_EMPTY_JSON_BODY**: custom content-type parser in server.ts accepts empty bodies; frontend sends `body: JSON.stringify({})`.
+- **Activity log rate limit**: max 1 entry per HA entity per 60s — prevents sensor flooding.
+- **Recyclarr CF groups cache**: docker exec output cached 5min per instanceId in memory.
+- **Sync history**: stored in `recyclarr_sync_history` (max 10 rows) — SSE output not shown during sync, available via "Verlauf anzeigen" after completion.
+- **Health history cleanup**: DELETE on insert for entries > 7 days old for that service_id.
 
 ## Deploy
 

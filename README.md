@@ -73,21 +73,26 @@ Home Assistant und mehr — alles in einer Oberfläche.
 - ➕ Load more Pagination
 
 **Recyclarr**
-- 🔄 Recyclarr v8 GUI — recyclarr.yml automatisch generiert (v8 Syntax)
-- ⚙️ Wizard für Ersteinrichtung, Verwaltung danach im Recyclarr-Tab
-- 🎚️ Score-Overrides pro CF pro Profil (Guide-Score als Referenz)
+- 🔄 Recyclarr v8 GUI — recyclarr.yml automatisch generiert
+- ⚙️ Wizard für Ersteinrichtung, danach Verwaltung im Recyclarr-Tab
+- 📊 TRaSH CFs nach Custom Format Groups gruppiert und gefiltert (nur Profil-relevante)
+- 🎚️ Score-Overrides pro CF pro Profil + Heatmap-Ansicht
+- 📊 Profil-Vergleich bei mehreren Profilen (Unterschiede hervorgehoben)
 - 👤 Eigene CFs aus CF-Manager pro Profil aktivieren mit eigenem Score
-- 🛡️ reset_unmatched_scores + except + except_patterns (Regex-Unterstützung)
+- 🛡️ reset_unmatched_scores + except + except_patterns (Regex)
 - ⏰ Sync-Zeitplan: manuell, täglich, wöchentlich oder Cron
 - 🔍 Score-Change Detection bei manuellen Änderungen in Radarr/Sonarr
+- 📜 Sync-Verlauf der letzten 10 Syncs mit Output auf Anfrage
+- 💾 Automatisches Config-Backup vor jedem Sync (max 5 Backups)
 
 **CF-Manager**
-- 📝 Custom Formats direkt in Radarr/Sonarr verwalten — Live-Daten
-- ➕ CFs erstellen mit Conditions (Release-Titel, Sprache, Quelle, etc.)
-- ✏️ Bestehende CFs bearbeiten und löschen
-- 🎚️ Scores direkt im Qualitätsprofil setzen — mehrere Profile pro Instanz
-- 🔒 Recyclarr-geschützte CFs werden markiert
-- ⚠️ Schutz vor parallelem Recyclarr-Sync
+- 📝 Eigene Custom Formats in Radarr/Sonarr erstellen, bearbeiten, löschen
+- ➕ Vollständiger Conditions-Editor (Schema direkt aus Arr-API geladen)
+- 📥 Import aus Radarr/Sonarr — erkennt automatisch welche CFs nicht von TRaSH kommen
+- 📤 Export einzelner CFs als JSON (kompatibel mit TRaSH Guides Format)
+- 📋 Vorlagen für alle Condition-Typen (Release-Titel, Sprache, Quelle, Auflösung, etc.)
+- 🔀 CF kopieren — innerhalb gleicher Instanz oder cross-service (Radarr ↔ Sonarr)
+- 🔒 Schutz vor Löschen aktiver Recyclarr-CFs
 
 **Docker**
 - 🐳 Live-Container-Liste mit CPU/RAM, State-Badges, Uptime
@@ -124,6 +129,16 @@ Home Assistant und mehr — alles in einer Oberfläche.
 - 📅 Kalender-Widget — kombinierte Radarr/Sonarr Upcoming-Releases
 - 📊 Pinbar in Topbar für Schnellübersicht
 - 🔄 Live-Polling — alle Widgets aktualisieren automatisch
+
+**Apps & Services**
+- 📈 Service Uptime-Graph — 24h Verlauf pro Service (auf Anfrage)
+- 📊 Uptime-Übersicht — dedizierter Tab mit allen Services, Sortierung, 7-Tage-Prozent
+
+**Dashboard & UX**
+- 📋 Aktivitäten-Feed — HA Events, Docker Status, Recyclarr Syncs, Service-Ausfälle
+- ➕ Quick-Actions in Topbar — kontextsensitiver Add-Button pro Seite
+- 🎓 Onboarding-Wizard — geführte Ersteinrichtung beim ersten Start
+- 👁️ Gast-Sichtbarkeits-Overlay — Admin sieht direkt welche Elemente für Gäste sichtbar sind
 
 **Auth & Zugriff**
 - 🔑 Lokale Nutzer-Authentifizierung — Admin-Setup beim ersten Start
@@ -238,8 +253,13 @@ Vollständige Dokumentation direkt im Dashboard unter **About**.
         domain-aware Karten, Dimmer, Klima, Media Player, Cover, Sensoren
 - [x] HA Energie-Dashboard + Widget
 - [x] HA Räume/Areas — Panels nach HA-Bereichen gruppieren
-- [x] CF-Manager — Custom Formats in Radarr/Sonarr erstellen und verwalten
-- [x] Recyclarr v8 GUI — Wizard, Score-Management, YAML-Generierung
+- [x] CF-Manager — Import/Export, Vorlagen, Cross-Service Copy
+- [x] Recyclarr — CF Groups, Profil-Vergleich, Score-Heatmap, Sync-Verlauf, Config-Backup
+- [x] Service Uptime-History + Uptime-Übersicht Tab
+- [x] Aktivitäten-Feed (HA, Docker, Recyclarr, System)
+- [x] Quick-Actions Topbar
+- [x] Onboarding-Wizard
+- [x] Gast-Sichtbarkeits-Overlay
 - [x] Import/Export Services
 - [x] About-Seite als integriertes Doku-Center
 
