@@ -679,6 +679,41 @@ function rowToConfig(row: RecyclarrConfigRow): RecyclarrConfig {
 }
 
 const scheduledTasks: Map<string, cron.ScheduledTask> = new Map()
+const GLOBAL_TASK_KEY = '__global__'
+
+export function scheduleGlobalRecyclarrSync(schedule: string, logger: SimpleLogger): void {
+  const existing = scheduledTasks.get(GLOBAL_TASK_KEY)
+  if (existing) { existing.stop(); scheduledTasks.delete(GLOBAL_TASK_KEY) }
+  if (!schedule || schedule === 'manual') return
+  if (!cron.validate(schedule)) {
+    logger.warn({ schedule }, 'Invalid global cron schedule for recyclarr sync')
+    return
+  }
+  const task = cron.schedule(schedule, async () => {
+    logger.info({}, 'Running global scheduled recyclarr sync')
+    try {
+      const db = getDb()
+      const rows = db.prepare('SELECT * FROM recyclarr_config WHERE enabled = 1').all() as RecyclarrConfigRow[]
+      if (rows.length === 0) return
+      const inUse = db.prepare('SELECT 1 FROM recyclarr_config WHERE is_syncing = 1').get()
+      if (inUse) { logger.warn({}, 'Global recyclarr sync already running, skipping'); return }
+      db.prepare('UPDATE recyclarr_config SET is_syncing = 1 WHERE enabled = 1').run()
+      const { containerName } = getRecyclarrSettings()
+      try {
+        const { exitCode } = await dockerExecInContainer(containerName, ['recyclarr', 'sync'], 300_000)
+        const success = exitCode === 0 ? 1 : 0
+        db.prepare("UPDATE recyclarr_config SET is_syncing = 0, last_synced_at = datetime('now'), last_sync_success = ? WHERE enabled = 1").run(success)
+      } catch (e) {
+        db.prepare("UPDATE recyclarr_config SET is_syncing = 0, last_synced_at = datetime('now'), last_sync_success = 0 WHERE enabled = 1").run()
+        logger.error({ err: e }, 'Global scheduled recyclarr sync failed')
+      }
+    } catch (e) {
+      logger.error({ err: e }, 'Global scheduled recyclarr sync error')
+    }
+  })
+  scheduledTasks.set(GLOBAL_TASK_KEY, task)
+  logger.info({ schedule }, 'Scheduled global recyclarr sync')
+}
 
 export function scheduleRecyclarrSync(instanceId: string, schedule: string, logger: SimpleLogger): void {
   const existing = scheduledTasks.get(instanceId)
@@ -717,11 +752,9 @@ export function scheduleRecyclarrSync(instanceId: string, schedule: string, logg
 export function initRecyclarrSchedulers(logger: SimpleLogger): void {
   try {
     const db = getDb()
-    const rows = db.prepare('SELECT * FROM recyclarr_config WHERE enabled = 1').all() as RecyclarrConfigRow[]
-    for (const row of rows) {
-      if (row.sync_schedule && row.sync_schedule !== 'manual') {
-        scheduleRecyclarrSync(row.instance_id, row.sync_schedule, logger)
-      }
+    const globalRow = db.prepare("SELECT value FROM settings WHERE key = 'recyclarr_sync_schedule'").get() as { value: string } | undefined
+    if (globalRow?.value && globalRow.value !== 'manual') {
+      scheduleGlobalRecyclarrSync(globalRow.value, logger)
     }
   } catch (e) {
     logger.warn({ err: e }, 'Could not init recyclarr schedulers')
@@ -784,6 +817,9 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       ORDER BY ai.name
     `).all() as (RecyclarrConfigRow & { instance_name: string; instance_type: string })[]
 
+    const globalScheduleRow = db.prepare("SELECT value FROM settings WHERE key = 'recyclarr_sync_schedule'").get() as { value: string } | undefined
+    const syncSchedule = globalScheduleRow?.value ?? 'manual'
+
     const configs = rows.map(row => ({
       instanceId: row.instance_id,
       instanceName: row.instance_name,
@@ -803,8 +839,30 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       qualityDefType: row.quality_def_type ?? (row.instance_type === 'radarr' ? 'movie' : 'series'),
       lastKnownScores: safeJson<LastKnownScores>(row.last_known_scores ?? '', {}),
     }))
-    return reply.send({ configs })
+    return reply.send({ configs, syncSchedule })
   })
+
+  // PATCH /api/recyclarr/schedule
+  app.patch<{ Body: { syncSchedule: string } }>(
+    '/api/recyclarr/schedule',
+    { onRequest: [app.requireAdmin] },
+    async (req, reply) => {
+      const { syncSchedule } = req.body
+      if (!syncSchedule) return reply.status(400).send({ error: 'syncSchedule required' })
+      if (syncSchedule !== 'manual' && !cron.validate(syncSchedule)) {
+        return reply.status(400).send({ error: 'Ungültiger Cron-Ausdruck' })
+      }
+      const db = getDb()
+      const existing = db.prepare("SELECT key FROM settings WHERE key = 'recyclarr_sync_schedule'").get()
+      if (existing) {
+        db.prepare("UPDATE settings SET value = ?, updated_at = datetime('now') WHERE key = 'recyclarr_sync_schedule'").run(syncSchedule)
+      } else {
+        db.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('recyclarr_sync_schedule', ?, datetime('now'))").run(syncSchedule)
+      }
+      scheduleGlobalRecyclarrSync(syncSchedule, app.log)
+      return reply.send({ ok: true, syncSchedule })
+    }
+  )
 
   // POST /api/recyclarr/configs/:instanceId
   app.post<{ Params: { instanceId: string }; Body: SaveConfigBody }>(

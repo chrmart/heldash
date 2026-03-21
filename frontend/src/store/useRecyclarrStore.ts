@@ -28,6 +28,7 @@ interface RecyclarrState {
   cfsWarning: boolean
   settings: RecyclarrSettings | null
   configs: RecyclarrInstanceConfig[]
+  syncSchedule: string
   syncLines: RecyclarrSyncLine[]
   syncDone: boolean
   syncing: boolean
@@ -41,6 +42,7 @@ interface RecyclarrState {
   loadSettings: () => Promise<void>
   saveSettings: (settings: Partial<RecyclarrSettings>) => Promise<void>
   loadConfigs: () => Promise<void>
+  saveSchedule: (syncSchedule: string) => Promise<void>
   saveConfig: (instanceId: string, data: {
     enabled: boolean
     selectedProfiles: string[]
@@ -70,6 +72,7 @@ export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
   cfsWarning: false,
   settings: null,
   configs: [],
+  syncSchedule: 'manual',
   syncLines: [],
   syncDone: false,
   syncing: false,
@@ -115,10 +118,15 @@ export const useRecyclarrStore = create<RecyclarrState>((set, get) => ({
     set({ loading: true })
     try {
       const data = await api.recyclarr.configs()
-      set({ configs: data.configs })
+      set({ configs: data.configs, syncSchedule: data.syncSchedule ?? 'manual' })
     } finally {
       set({ loading: false })
     }
+  },
+
+  saveSchedule: async (syncSchedule: string) => {
+    await api.recyclarr.saveSchedule(syncSchedule)
+    set({ syncSchedule })
   },
 
   saveConfig: async (instanceId, data) => {

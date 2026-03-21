@@ -80,6 +80,7 @@ export interface RecyclarrInstanceConfig {
 
 export interface RecyclarrConfigsResponse {
   configs: RecyclarrInstanceConfig[]
+  syncSchedule?: string
 }
 
 export interface RecyclarrSyncLine {

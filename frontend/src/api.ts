@@ -338,6 +338,8 @@ export const api = {
       req<{ cf: import('./types/recyclarr').UserCfFile }>(`/recyclarr/user-cfs/${service}/${trashId}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteUserCf: (service: 'radarr' | 'sonarr', trashId: string) =>
       req<{ ok: boolean }>(`/recyclarr/user-cfs/${service}/${trashId}`, { method: 'DELETE', body: JSON.stringify({}) }),
+    saveSchedule: (syncSchedule: string) =>
+      req<{ ok: boolean; syncSchedule: string }>('/recyclarr/schedule', { method: 'PATCH', body: JSON.stringify({ syncSchedule }) }),
     adopt: () => req<{ ok: boolean; output: string }>('/recyclarr/adopt', { method: 'POST', body: JSON.stringify({}) }),
     arrData: (instanceId: string) =>
       req<{ profiles: import('./types/recyclarr').ArrQualityProfile[]; customFormats: import('./types/recyclarr').ArrCustomFormat[]; error?: string }>(`/recyclarr/arr-data/${instanceId}`),

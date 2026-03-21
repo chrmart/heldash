@@ -2281,6 +2281,31 @@ function buildCronExpression(mode: ScheduleMode, time: string, weekday: string, 
   return `${mNum} ${hNum} * * ${weekday}`
 }
 
+function isValidCron(expr: string): boolean {
+  if (!expr || expr === 'manual') return true
+  const parts = expr.trim().split(/\s+/)
+  if (parts.length !== 5) return false
+  const ranges = [[0,59],[0,23],[1,31],[1,12],[0,7]]
+  return parts.every((p, i) => {
+    if (p === '*') return true
+    const n = parseInt(p, 10)
+    return !isNaN(n) && n >= (ranges[i]?.[0] ?? 0) && n <= (ranges[i]?.[1] ?? 0)
+  })
+}
+
+function describeCron(expr: string): string {
+  if (!expr || expr === 'manual') return ''
+  const parts = expr.trim().split(/\s+/)
+  if (parts.length !== 5) return ''
+  const [m, h, dom, , dow] = parts
+  if (!m || !h) return ''
+  const time = `${String(parseInt(h, 10)).padStart(2, '0')}:${String(parseInt(m, 10)).padStart(2, '0')} Uhr`
+  const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+  if (dom === '*' && dow === '*') return `Jeden Tag um ${time}`
+  if (dom === '*' && /^[0-7]$/.test(dow ?? '')) return `Jeden ${days[parseInt(dow!, 10)] ?? dow} um ${time}`
+  return expr
+}
+
 function formatRelativeTime(isoStr: string | null): string {
   if (!isoStr) return ''
   const ms = Date.now() - new Date(isoStr).getTime()
@@ -2297,7 +2322,8 @@ function RecyclarrTab() {
   const { instances } = useArrStore()
   const {
     configs, syncLines, syncDone, syncing, loading,
-    loadConfigs, saveConfig, sync, adoptCfs, resetConfig,
+    syncSchedule: globalSyncSchedule,
+    loadConfigs, saveConfig, saveSchedule, sync, adoptCfs, resetConfig,
     arrData, arrDataLoading, loadArrData, checkScoreChanges, acceptScoreChanges,
   } = useRecyclarrStore()
 
@@ -2354,11 +2380,20 @@ function RecyclarrTab() {
   const [localDeleteOldCfs, setLocalDeleteOldCfs] = useState(false)
   const [localQualityDefType, setLocalQualityDefType] = useState('movie')
 
-  // ── Schedule ──
+  // ── Per-instance schedule (used in handleSave) ──
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('manual')
   const [scheduleTime, setScheduleTime] = useState('04:00')
   const [scheduleWeekday, setScheduleWeekday] = useState('1')
   const [scheduleCustom, setScheduleCustom] = useState('')
+
+  // ── Global schedule (Zeitplan tab) ──
+  const [globalScheduleMode, setGlobalScheduleMode] = useState<ScheduleMode>('manual')
+  const [globalScheduleTime, setGlobalScheduleTime] = useState('04:00')
+  const [globalScheduleWeekday, setGlobalScheduleWeekday] = useState('1')
+  const [globalScheduleCustom, setGlobalScheduleCustom] = useState('')
+  const [scheduleSaving, setScheduleSaving] = useState(false)
+  const [scheduleSaveSuccess, setScheduleSaveSuccess] = useState(false)
+  const [scheduleSaveError, setScheduleSaveError] = useState('')
 
   // ── Save state ──
   const [saving, setSaving] = useState(false)
@@ -2426,6 +2461,14 @@ function RecyclarrTab() {
 
   // ── Effects ──
   useEffect(() => { loadConfigs().catch(() => {}) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const parsed = parseCronExpression(globalSyncSchedule)
+    setGlobalScheduleMode(parsed.mode)
+    setGlobalScheduleTime(parsed.time)
+    setGlobalScheduleWeekday(parsed.weekday)
+    setGlobalScheduleCustom(parsed.custom)
+  }, [globalSyncSchedule])
 
   useEffect(() => { localStorage.setItem('recyclarr_tab', activeServiceTab) }, [activeServiceTab])
 
@@ -2517,7 +2560,27 @@ function RecyclarrTab() {
     }
   }
 
-  if (radarrSonarrInstances.length === 0) {
+  const handleScheduleSave = async () => {
+    setScheduleSaving(true)
+    setScheduleSaveError('')
+    setScheduleSaveSuccess(false)
+    try {
+      const expr = buildCronExpression(globalScheduleMode, globalScheduleTime, globalScheduleWeekday, globalScheduleCustom)
+      if (expr !== 'manual' && !isValidCron(expr)) {
+        setScheduleSaveError('Ungültiger Cron-Ausdruck')
+        return
+      }
+      await saveSchedule(expr)
+      setScheduleSaveSuccess(true)
+      setTimeout(() => setScheduleSaveSuccess(false), 3000)
+    } catch (e) {
+      setScheduleSaveError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
+    } finally {
+      setScheduleSaving(false)
+    }
+  }
+
+  if (radarrSonarrInstances.length === 0 && activeServiceTab !== 'zeitplan') {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Keine Radarr- oder Sonarr-Instanzen konfiguriert.</p>
@@ -3094,61 +3157,102 @@ function RecyclarrTab() {
       )}
 
       {/* ── Zeitplan tab ── */}
-      {activeServiceTab === 'zeitplan' && currentInstance && isAdmin && (
+      {activeServiceTab === 'zeitplan' && isAdmin && (
         <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <h4 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Automatischer Sync</h4>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h4 className="section-header" style={{ margin: 0 }}>Automatischer Sync</h4>
+            <span className="badge-neutral" style={{ fontSize: 10 }}>Gilt für alle konfigurierten Instanzen gleichzeitig</span>
+          </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {(['manual', 'daily', 'weekly', 'custom'] as const).map(mode => (
               <label key={mode} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, cursor: 'pointer' }}>
-                <input type="radio" name="scheduleMode" checked={scheduleMode === mode} onChange={() => setScheduleMode(mode)} />
-                {mode === 'manual' && 'Manuell (kein automatischer Sync)'}
+                <input type="radio" name="globalScheduleMode" checked={globalScheduleMode === mode} onChange={() => setGlobalScheduleMode(mode)} />
+                {mode === 'manual' && (
+                  <span>
+                    <strong>Manuell</strong>
+                    <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>Kein automatischer Sync — nur über &apos;Global Sync&apos; Button</span>
+                  </span>
+                )}
                 {mode === 'daily' && (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    Täglich um:
-                    <input type="time" className="form-input" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} style={{ width: 110 }} />
+                    <strong>Täglich</strong> um
+                    <input type="time" className="form-input" value={globalScheduleTime} onChange={e => setGlobalScheduleTime(e.target.value)} style={{ width: 110 }} />
+                    Uhr
                   </span>
                 )}
                 {mode === 'weekly' && (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    Wöchentlich:
-                    <select className="form-input" value={scheduleWeekday} onChange={e => setScheduleWeekday(e.target.value)} style={{ maxWidth: 120 }}>
+                    <strong>Wöchentlich</strong> jeden
+                    <select className="form-input" value={globalScheduleWeekday} onChange={e => setGlobalScheduleWeekday(e.target.value)} style={{ maxWidth: 100 }}>
                       {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d, i) => <option key={i} value={String(i + 1)}>{d}</option>)}
                     </select>
                     um
-                    <input type="time" className="form-input" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} style={{ width: 110 }} />
+                    <input type="time" className="form-input" value={globalScheduleTime} onChange={e => setGlobalScheduleTime(e.target.value)} style={{ width: 110 }} />
+                    Uhr
                   </span>
                 )}
                 {mode === 'custom' && (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    Benutzerdefiniert:
-                    <input className="form-input" value={scheduleCustom} onChange={e => setScheduleCustom(e.target.value)} placeholder="0 4 * * *" style={{ width: 150 }} />
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <strong>Benutzerdefiniert</strong>
+                      <input
+                        className="form-input"
+                        value={globalScheduleCustom}
+                        onChange={e => setGlobalScheduleCustom(e.target.value)}
+                        placeholder="0 4 * * *"
+                        style={{ width: 150, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                      />
+                      {globalScheduleMode === 'custom' && globalScheduleCustom && (
+                        isValidCron(globalScheduleCustom)
+                          ? <span className="badge-success" style={{ fontSize: 10 }}>Gültiger Ausdruck</span>
+                          : <span className="badge-error" style={{ fontSize: 10 }}>Ungültiger Ausdruck</span>
+                      )}
+                    </span>
+                    {globalScheduleMode === 'custom' && globalScheduleCustom && isValidCron(globalScheduleCustom) && (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 0 }}>{describeCron(globalScheduleCustom)}</span>
+                    )}
                   </span>
                 )}
               </label>
             ))}
           </div>
 
-          <span className="badge-warning" style={{ fontSize: 10, alignSelf: 'flex-start' }}>
-            CRON_SCHEDULE im Recyclarr-Container muss deaktiviert sein. Empfehlung: CRON_SCHEDULE=0 0 1 1 0
-          </span>
-
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving} style={{ fontSize: 12, gap: 4 }}>
-              {saving ? <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <Check size={12} />}
-              {saving ? 'Speichern…' : 'Zeitplan speichern'}
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleScheduleSave}
+              disabled={scheduleSaving || (globalScheduleMode === 'custom' && !isValidCron(globalScheduleCustom))}
+              style={{ fontSize: 12, gap: 4 }}
+            >
+              {scheduleSaving ? <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <Check size={12} />}
+              {scheduleSaving ? 'Speichern…' : 'Zeitplan speichern'}
             </button>
-            {saveSuccess && <span className="badge-success" style={{ fontSize: 10 }}>Gespeichert</span>}
-            {saveError && <span style={{ fontSize: 11, color: '#f87171' }}>{saveError}</span>}
+            {scheduleSaveSuccess && <span className="badge-success" style={{ fontSize: 10 }}>Gespeichert</span>}
+            {scheduleSaveError && <span style={{ fontSize: 11, color: '#f87171' }}>{scheduleSaveError}</span>}
           </div>
 
-          {currentConfig?.lastSyncedAt && (
-            <div>
-              {currentConfig.lastSyncSuccess
-                ? <span className="badge-success" style={{ fontSize: 11 }}>Letzter Sync: {formatRelativeTime(currentConfig.lastSyncedAt)}</span>
-                : <span className="badge-error" style={{ fontSize: 11 }}>Fehlgeschlagen: {formatRelativeTime(currentConfig.lastSyncedAt)}</span>}
-            </div>
-          )}
+          <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+
+          {configs.some(c => c.lastSyncedAt) && (() => {
+            const latest = configs.reduce<typeof configs[number] | null>((acc, c) => {
+              if (!c.lastSyncedAt) return acc
+              if (!acc?.lastSyncedAt) return c
+              return new Date(c.lastSyncedAt) > new Date(acc.lastSyncedAt) ? c : acc
+            }, null)
+            if (!latest?.lastSyncedAt) return null
+            return (
+              <div>
+                {latest.lastSyncSuccess
+                  ? <span className="badge-success" style={{ fontSize: 11 }}>Letzter Sync: {formatRelativeTime(latest.lastSyncedAt)}</span>
+                  : <span className="badge-error" style={{ fontSize: 11 }}>Fehlgeschlagen: {formatRelativeTime(latest.lastSyncedAt)}</span>}
+              </div>
+            )
+          })()}
+
+          <span className="badge-warning" style={{ fontSize: 10, alignSelf: 'flex-start' }}>
+            CRON_SCHEDULE im Recyclarr-Container deaktivieren: CRON_SCHEDULE=0 0 1 1 0
+          </span>
         </div>
       )}
 
