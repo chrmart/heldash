@@ -2370,33 +2370,6 @@ function RecyclarrTab() {
   const [advancedCollapsed, setAdvancedCollapsed] = useState(true)
   const [historyOpen, setHistoryOpen] = useState(false)
 
-  // ── Per-group collapse (TRaSH CFs) ──
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-  useEffect(() => {
-    if (!instanceId || !selectedProfileId) { setCollapsedGroups(new Set()); return }
-    try {
-      const stored = localStorage.getItem(LS_RECYCLARR_GROUPS_COLLAPSED)
-      const map = stored ? (JSON.parse(stored) as Record<string, string[]>) : {}
-      setCollapsedGroups(new Set(map[`${instanceId}:${selectedProfileId}`] ?? []))
-    } catch { setCollapsedGroups(new Set()) }
-  }, [instanceId, selectedProfileId])
-
-  const toggleGroup = (groupName: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(groupName)) next.delete(groupName)
-      else next.add(groupName)
-      if (instanceId && selectedProfileId) {
-        try {
-          const stored = localStorage.getItem(LS_RECYCLARR_GROUPS_COLLAPSED)
-          const map: Record<string, string[]> = stored ? JSON.parse(stored) : {}
-          map[`${instanceId}:${selectedProfileId}`] = Array.from(next)
-          localStorage.setItem(LS_RECYCLARR_GROUPS_COLLAPSED, JSON.stringify(map))
-        } catch {}
-      }
-      return next
-    })
-  }
   const [backupsOpen, setBackupsOpen] = useState(false)
   const [restoringBackup, setRestoringBackup] = useState('')
   const [restoreSuccess, setRestoreSuccess] = useState('')
@@ -2494,6 +2467,34 @@ function RecyclarrTab() {
   }, [currentConfig, localProfilesConfig, localScoreOverrides, localUserCfs, localEnabled, localPreferredRatio, localDeleteOldCfs, localQualityDefType])
 
   const syncExitCode = syncDone ? (syncLines.some(l => l.type === 'error') ? 1 : 0) : null
+
+  // ── Per-group collapse (TRaSH CFs) — must be after instanceId is derived ──
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (!instanceId || !selectedProfileId) { setCollapsedGroups(new Set()); return }
+    try {
+      const stored = localStorage.getItem(LS_RECYCLARR_GROUPS_COLLAPSED)
+      const map = stored ? (JSON.parse(stored) as Record<string, string[]>) : {}
+      setCollapsedGroups(new Set(map[`${instanceId}:${selectedProfileId}`] ?? []))
+    } catch { setCollapsedGroups(new Set()) }
+  }, [instanceId, selectedProfileId])
+
+  const toggleGroup = (groupName: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(groupName)) next.delete(groupName)
+      else next.add(groupName)
+      if (instanceId && selectedProfileId) {
+        try {
+          const stored = localStorage.getItem(LS_RECYCLARR_GROUPS_COLLAPSED)
+          const map: Record<string, string[]> = stored ? JSON.parse(stored) : {}
+          map[`${instanceId}:${selectedProfileId}`] = Array.from(next)
+          localStorage.setItem(LS_RECYCLARR_GROUPS_COLLAPSED, JSON.stringify(map))
+        } catch {}
+      }
+      return next
+    })
+  }
 
   // ── Helper functions ──
   function getOverride(cfTrashId: string, profileTrashId: string): number | null {

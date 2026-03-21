@@ -121,14 +121,19 @@ export function initDockerPoller(): void {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       if (!msg.includes('ENOENT') && !msg.includes('ECONNREFUSED')) {
-        console.error('[Docker Poller]', msg)
+        console.error('[Docker Poller] Poll error:', msg)
       }
     }
   }
   // 10s startup delay so Docker socket is settled, then every 15s
   setTimeout(() => {
-    poll().catch(() => {})
-    setInterval(() => poll().catch(() => {}), 15_000)
+    console.log('[Docker Poller] First poll starting')
+    poll()
+      .then(() => console.log('[Docker Poller] First poll complete'))
+      .catch(e => console.error('[Docker Poller] First poll failed:', e))
+    setInterval(() => {
+      poll().catch(e => console.error('[Docker Poller] Poll failed:', e))
+    }, 15_000)
   }, 10_000)
 }
 

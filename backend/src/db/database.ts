@@ -85,6 +85,19 @@ function runMigrations(db: Database.Database): number {
     }
   }
 
+  // Drop legacy TRaSH tables from old implementation (safe if already absent)
+  const legacyTables = [
+    'trash_guides_cache', 'trash_guides_file_index', 'trash_format_instances',
+    'trash_instance_configs', 'trash_custom_formats', 'trash_deprecated_formats',
+    'trash_pending_previews', 'trash_sync_checkpoints', 'trash_sync_log',
+    'trash_profile_configs', 'trash_user_overrides', 'trash_instance_naming_configs',
+    'trash_instance_quality_size_configs', 'trash_cache', 'trash_instance_config',
+    'trash_format_overrides',
+  ]
+  for (const table of legacyTables) {
+    try { db.exec(`DROP TABLE IF EXISTS ${table}`) } catch { /* ignore */ }
+  }
+
   // Ensure default system user groups exist
   db.prepare(`
     INSERT OR IGNORE INTO user_groups (id, name, description, is_system)

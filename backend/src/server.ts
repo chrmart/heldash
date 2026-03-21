@@ -42,6 +42,18 @@ const SECRET_KEY = process.env.SECRET_KEY || 'heldash-dev-secret-change-in-produ
 const DOCKER_SOCKET = '/var/run/docker.sock'
 
 async function start() {
+  // Remove decoy /data/heldash.db if it exists but is essentially empty (< 1KB)
+  const decoyPath = path.join(DATA_DIR, 'heldash.db')
+  if (fs.existsSync(decoyPath)) {
+    try {
+      const stat = fs.statSync(decoyPath)
+      if (stat.size < 1024) {
+        fs.unlinkSync(decoyPath)
+        console.log('[DB] Removed empty decoy heldash.db from DATA_DIR root')
+      }
+    } catch { /* ignore */ }
+  }
+
   const migrationsApplied = initDb(DATA_DIR)
 
   const app = Fastify({
