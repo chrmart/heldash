@@ -3693,8 +3693,6 @@ function CfEditModal({
             )}
             {specs.map((spec, idx) => {
               const schemaEntry = schema.find(s => s.implementation === spec.implementation)
-              const sameTypeCount = specs.filter(s => s.implementation === spec.implementation).length
-              const canRequired = sameTypeCount >= 2
               return (
                 <div key={idx} className="glass" style={{ borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: 8 }}>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -3731,10 +3729,9 @@ function CfEditModal({
                       Nicht erfüllt
                     </label>
                     <label
-                      title={canRequired ? undefined : 'Nur wenn mehrere Conditions desselben Typs vorhanden'}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: canRequired ? 'pointer' : 'default', userSelect: 'none', opacity: canRequired ? 1 : 0.5 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', userSelect: 'none' }}
                     >
-                      <input type="checkbox" checked={spec.required} disabled={!canRequired} onChange={e => updateSpec(idx, s => ({ ...s, required: e.target.checked }))} />
+                      <input type="checkbox" checked={spec.required} onChange={e => updateSpec(idx, s => ({ ...s, required: e.target.checked }))} />
                       Pflichtbedingung
                     </label>
                   </div>
@@ -3755,6 +3752,9 @@ function CfEditModal({
                 Verschiedene Typen: UND — Gleicher Typ mehrfach: ODER (außer Pflicht)
               </div>
             )}
+            <div className="badge-neutral" style={{ fontSize: 11, display: 'inline-block', marginTop: 4 }}>
+              Pflichtbedingung: CF greift nur wenn diese Condition erfüllt ist, unabhängig von anderen Conditions desselben Typs
+            </div>
           </div>
 
           {/* JSON Import */}
