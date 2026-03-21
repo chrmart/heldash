@@ -10,9 +10,9 @@ import type { DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, Compass, Database, AlertTriangle, Sliders, Plus, ChevronDown, ChevronRight, Clock, Shield } from 'lucide-react'
+import { Pencil, Trash2, Check, X, RefreshCw, GripVertical, LayoutGrid, CalendarDays, Search, Compass, Database, AlertTriangle, Sliders, Plus, ChevronDown, ChevronRight, Clock, Shield, Download, Copy, Upload, BookOpen } from 'lucide-react'
 import type { ArrInstance, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrStats, ArrCFSpecification, ArrCustomFormat, ArrCFSchema, ArrCFSchemaField, RadarrMovie, SonarrSeries } from '../types/arr'
-import type { UserCfFile } from '../types/recyclarr'
+import type { UserCfFile, UserCfSpecification } from '../types/recyclarr'
 import type { TmdbResult, TmdbFilters, TmdbDiscoverFilters } from '../types/tmdb'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
 // ── Tab type ──────────────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ type MediaTab = 'instances' | 'library' | 'calendar' | 'indexers' | 'discover' |
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
-function TabBar({ active, onChange }: { active: MediaTab; onChange: (t: MediaTab) => void }) {
+function TabBar({ active, onChange, cfBadge }: { active: MediaTab; onChange: (t: MediaTab) => void; cfBadge?: string }) {
   const tabs: { id: MediaTab; label: string; icon: React.ReactNode }[] = [
     { id: 'instances',  label: 'Instances',  icon: <LayoutGrid size={13} /> },
     { id: 'library',    label: 'Library',    icon: <Database size={13} /> },
@@ -29,7 +29,7 @@ function TabBar({ active, onChange }: { active: MediaTab; onChange: (t: MediaTab
     { id: 'indexers',   label: 'Indexers',   icon: <Search size={13} /> },
     { id: 'discover' as MediaTab, label: 'Discover', icon: <Compass size={13} /> },
     { id: 'recyclarr' as MediaTab, label: 'Recyclarr', icon: <Sliders size={13} /> },
-    { id: 'cf-manager' as MediaTab, label: 'CF-Manager', icon: <Shield size={13} /> },
+    { id: 'cf-manager' as MediaTab, label: cfBadge ? `CF-Manager (${cfBadge})` : 'CF-Manager', icon: <Shield size={13} /> },
   ]
   return (
     <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: '6px 8px', display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -3414,6 +3414,216 @@ function toUserSlug(name: string): string {
   return 'user-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
+function downloadJson(filename: string, data: unknown): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function normalizeArrSpec(spec: {
+  name: string; implementation: string; implementationName?: string
+  negate: boolean; required: boolean; fields: unknown
+}): ArrCFSpecification {
+  const rawFields = spec.fields
+  const fields: { name: string; value: unknown }[] = Array.isArray(rawFields)
+    ? rawFields as { name: string; value: unknown }[]
+    : Object.entries(rawFields as Record<string, unknown>).map(([name, value]) => ({ name, value }))
+  return {
+    name: spec.name,
+    implementation: spec.implementation,
+    implementationName: spec.implementationName ?? spec.implementation,
+    negate: spec.negate,
+    required: spec.required,
+    fields,
+  }
+}
+
+// ── Condition Templates ────────────────────────────────────────────────────────
+
+interface ConditionTemplate {
+  label: string
+  implementation: string
+  fields: Array<{ name: string; value: unknown }>
+  nameHint?: string
+}
+
+interface ConditionTemplateGroup {
+  group: string
+  templates: ConditionTemplate[]
+}
+
+const CONDITION_TEMPLATES: ConditionTemplateGroup[] = [
+  {
+    group: 'Release Title (Regex)',
+    templates: [
+      { label: 'Deutsch/German', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(German|Deutsch|GERMAN)\\b' }] },
+      { label: 'x265/HEVC', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(x265|HEVC|H\\.265)\\b' }] },
+      { label: 'x264/AVC', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(x264|H\\.264|AVC)\\b' }] },
+      { label: 'Netflix', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(NF|Netflix)\\b' }] },
+      { label: 'Amazon', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(AMZN|Amazon)\\b' }] },
+      { label: 'Disney+', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(DSNP|Disney)\\b' }] },
+      { label: 'Apple TV+', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(ATVP|AppleTV)\\b' }] },
+      { label: 'HBO Max', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(HMAX|HBO)\\b' }] },
+      { label: 'Remux', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(Remux|REMUX)\\b' }] },
+      { label: 'PROPER/REPACK', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(PROPER|REPACK)\\b' }] },
+      { label: 'IMAX', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(IMAX)\\b' }] },
+      { label: 'HDR', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(HDR|HDR10|HDR10Plus|DV)\\b' }] },
+      { label: 'Dolby Vision', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(DV|DoVi|Dolby.?Vision)\\b' }] },
+      { label: 'Atmos', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(Atmos|ATMOS)\\b' }] },
+      { label: 'TrueHD', implementation: 'ReleaseTitleSpecification', fields: [{ name: 'value', value: '\\b(TrueHD|TRUEHD)\\b' }] },
+    ],
+  },
+  {
+    group: 'Language',
+    templates: [
+      { label: 'Deutsch', implementation: 'LanguageSpecification', fields: [{ name: 'value', value: 4 }] },
+      { label: 'Englisch', implementation: 'LanguageSpecification', fields: [{ name: 'value', value: 1 }] },
+      { label: 'Französisch', implementation: 'LanguageSpecification', fields: [{ name: 'value', value: 2 }] },
+      { label: 'Japanisch', implementation: 'LanguageSpecification', fields: [{ name: 'value', value: 8 }] },
+      { label: 'Multi', implementation: 'LanguageSpecification', fields: [{ name: 'value', value: -2 }] },
+    ],
+  },
+  {
+    group: 'Source',
+    templates: [
+      { label: 'BluRay', implementation: 'SourceSpecification', fields: [{ name: 'value', value: 9 }] },
+      { label: 'WEB-DL', implementation: 'SourceSpecification', fields: [{ name: 'value', value: 7 }] },
+      { label: 'WEBRip', implementation: 'SourceSpecification', fields: [{ name: 'value', value: 8 }] },
+      { label: 'HDTV', implementation: 'SourceSpecification', fields: [{ name: 'value', value: 4 }] },
+      { label: 'DVD', implementation: 'SourceSpecification', fields: [{ name: 'value', value: 2 }] },
+    ],
+  },
+  {
+    group: 'Resolution',
+    templates: [
+      { label: '480p', implementation: 'ResolutionSpecification', fields: [{ name: 'value', value: 480 }] },
+      { label: '720p', implementation: 'ResolutionSpecification', fields: [{ name: 'value', value: 720 }] },
+      { label: '1080p', implementation: 'ResolutionSpecification', fields: [{ name: 'value', value: 1080 }] },
+      { label: '2160p', implementation: 'ResolutionSpecification', fields: [{ name: 'value', value: 2160 }] },
+    ],
+  },
+  {
+    group: 'Quality Modifier',
+    templates: [
+      { label: 'Remux', implementation: 'QualityModifierSpecification', fields: [{ name: 'value', value: 5 }] },
+      { label: 'RAWHD', implementation: 'QualityModifierSpecification', fields: [{ name: 'value', value: 1 }] },
+      { label: 'Telecine', implementation: 'QualityModifierSpecification', fields: [{ name: 'value', value: 2 }] },
+      { label: 'Telesync', implementation: 'QualityModifierSpecification', fields: [{ name: 'value', value: 3 }] },
+    ],
+  },
+  {
+    group: 'Size',
+    templates: [
+      { label: 'Klein (< 2 GB)', implementation: 'SizeSpecification', fields: [{ name: 'min', value: 0 }, { name: 'max', value: 2 }] },
+      { label: 'Mittel (2–10 GB)', implementation: 'SizeSpecification', fields: [{ name: 'min', value: 2 }, { name: 'max', value: 10 }] },
+      { label: 'Groß (10–30 GB)', implementation: 'SizeSpecification', fields: [{ name: 'min', value: 10 }, { name: 'max', value: 30 }] },
+      { label: 'Sehr groß (> 30 GB)', implementation: 'SizeSpecification', fields: [{ name: 'min', value: 30 }, { name: 'max', value: 9999 }] },
+    ],
+  },
+  {
+    group: 'Release Group',
+    templates: [
+      { label: 'Eigene Gruppe', nameHint: 'Release Group', implementation: 'ReleaseGroupSpecification', fields: [{ name: 'value', value: '' }] },
+    ],
+  },
+  {
+    group: 'Indexer Flag',
+    templates: [
+      { label: 'Freeleech', implementation: 'IndexerFlagSpecification', fields: [{ name: 'value', value: 1 }] },
+      { label: 'Scene', implementation: 'IndexerFlagSpecification', fields: [{ name: 'value', value: 4 }] },
+    ],
+  },
+  {
+    group: 'Edition',
+    templates: [
+      { label: 'IMAX', implementation: 'EditionSpecification', fields: [{ name: 'value', value: 'IMAX' }] },
+      { label: "Director's Cut", implementation: 'EditionSpecification', fields: [{ name: 'value', value: 'Director' }] },
+      { label: 'Extended', implementation: 'EditionSpecification', fields: [{ name: 'value', value: 'Extended' }] },
+      { label: 'Theatrical', implementation: 'EditionSpecification', fields: [{ name: 'value', value: 'Theatrical' }] },
+    ],
+  },
+]
+
+// ── Template Picker Modal ──────────────────────────────────────────────────────
+
+function TemplatePickerModal({
+  schema,
+  onSelect,
+  onClose,
+}: {
+  schema: ArrCFSchema[]
+  onSelect: (spec: DraftSpec) => void
+  onClose: () => void
+}) {
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set([CONDITION_TEMPLATES[0]?.group ?? '']))
+
+  function toggleGroup(group: string) {
+    setOpenGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(group)) next.delete(group)
+      else next.add(group)
+      return next
+    })
+  }
+
+  function selectTemplate(t: ConditionTemplate) {
+    const schemaEntry = schema.find(s => s.implementation === t.implementation)
+    onSelect({
+      implementation: t.implementation,
+      implementationName: schemaEntry?.implementationName ?? t.implementation,
+      name: t.nameHint ?? t.label,
+      negate: false,
+      required: false,
+      fields: t.fields,
+    })
+    onClose()
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 210, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '40px 16px' }}>
+      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, width: '100%', maxWidth: 480 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>Condition-Vorlage auswählen</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+            <X size={16} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {CONDITION_TEMPLATES.map(grp => (
+            <div key={grp.group}>
+              <button
+                onClick={() => toggleGroup(grp.group)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, padding: '5px 2px', fontFamily: 'var(--font-sans)' }}
+              >
+                {openGroups.has(grp.group) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                {grp.group}
+              </button>
+              {openGroups.has(grp.group) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 18, marginBottom: 4 }}>
+                  {grp.templates.map(t => (
+                    <button
+                      key={t.label}
+                      onClick={() => selectTemplate(t)}
+                      className="btn btn-ghost"
+                      style={{ fontSize: 12, textAlign: 'left', justifyContent: 'flex-start', padding: '5px 10px' }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function renderSpecField(
   fieldDef: ArrCFSchemaField,
   value: unknown,
@@ -3471,6 +3681,8 @@ function UserCfRow({
   onDeleteRequest,
   onDeleteConfirm,
   onDeleteCancel,
+  onExport,
+  onCopy,
 }: {
   cf: UserCfFile
   inUse: boolean
@@ -3482,6 +3694,8 @@ function UserCfRow({
   onDeleteRequest: () => void
   onDeleteConfirm: () => void
   onDeleteCancel: () => void
+  onExport?: () => void
+  onCopy?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   return (
@@ -3497,6 +3711,16 @@ function UserCfRow({
         {notInArr && <span className="badge-neutral" style={{ fontSize: 11 }}>Nicht in Arr</span>}
         {isAdmin && (
           <div style={{ display: 'flex', gap: 4, opacity: hovered ? 1 : 0, transition: 'opacity var(--transition-fast)' }}>
+            {onExport && (
+              <button onClick={onExport} title="Exportieren" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+                <Download size={12} />
+              </button>
+            )}
+            {onCopy && (
+              <button onClick={onCopy} title="Kopieren" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+                <Copy size={12} />
+              </button>
+            )}
             <button
               onClick={onEdit}
               disabled={notInArr}
@@ -3570,6 +3794,8 @@ function CfEditModal({
   const [jsonImportOpen, setJsonImportOpen] = useState(false)
   const [jsonText, setJsonText] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
+  const [showAddMenu, setShowAddMenu] = useState(false)
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
 
   const isEdit = initial !== null
   const frozenTrashId = initialTrashId
@@ -3681,6 +3907,7 @@ function CfEditModal({
   }
 
   return (
+    <>
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '40px 16px' }}>
       <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, width: '100%', maxWidth: 600 }}>
         <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, fontFamily: 'var(--font-sans)' }}>
@@ -3736,13 +3963,38 @@ function CfEditModal({
                 <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>Conditions</span>
                 <span className="badge-neutral" style={{ fontSize: 11 }}>{specs.length}</span>
               </div>
-              <button
-                onClick={() => setSpecs(prev => [...prev, initDraftSpec(schema)])}
-                className="btn btn-ghost"
-                style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
-              >
-                <Plus size={11} /> Condition hinzufügen
-              </button>
+              {!showAddMenu ? (
+                <button
+                  onClick={() => setShowAddMenu(true)}
+                  className="btn btn-ghost"
+                  style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+                >
+                  <Plus size={11} /> Condition hinzufügen
+                </button>
+              ) : (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    onClick={() => { setShowTemplatePicker(true); setShowAddMenu(false) }}
+                    className="btn btn-ghost"
+                    style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <BookOpen size={11} /> Aus Vorlage
+                  </button>
+                  <button
+                    onClick={() => { setSpecs(prev => [...prev, initDraftSpec(schema)]); setShowAddMenu(false) }}
+                    className="btn btn-ghost"
+                    style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <Plus size={11} /> Leer beginnen
+                  </button>
+                  <button
+                    onClick={() => setShowAddMenu(false)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
             </div>
             {specs.length === 0 && (
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>Keine Conditions definiert</p>
@@ -3853,6 +4105,298 @@ function CfEditModal({
         </div>
       </div>
     </div>
+    {showTemplatePicker && (
+      <TemplatePickerModal
+        schema={schema}
+        onSelect={spec => setSpecs(prev => [...prev, spec])}
+        onClose={() => setShowTemplatePicker(false)}
+      />
+    )}
+    </>
+  )
+}
+
+// ── Copy CF Modal ──────────────────────────────────────────────────────────────
+
+function CopyCfModal({
+  cf,
+  instances,
+  currentService,
+  onClose,
+  onCopied,
+}: {
+  cf: UserCfFile
+  instances: ArrInstance[]
+  currentService: 'radarr' | 'sonarr'
+  onClose: () => void
+  onCopied: (targetService: 'radarr' | 'sonarr', msg: string) => void
+}) {
+  const otherService: 'radarr' | 'sonarr' = currentService === 'radarr' ? 'sonarr' : 'radarr'
+  const hasOtherService = instances.some(i => i.enabled && i.type === otherService)
+
+  const [destService, setDestService] = useState<'radarr' | 'sonarr'>(currentService)
+  const [newName, setNewName] = useState(`${cf.name} (Kopie)`)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const { createCustomFormat, loadCustomFormats, loadUserCfFiles, customFormats } = useArrStore()
+  const targetInstance = useMemo(
+    () => instances.find(i => i.enabled && i.type === destService) ?? null,
+    [instances, destService]
+  )
+  const existingNames = targetInstance ? (customFormats[targetInstance.id] ?? []).map(c => c.name) : []
+  const isDuplicate = newName.trim() !== '' && existingNames.some(n => n.toLowerCase() === newName.trim().toLowerCase())
+
+  async function handleCopy() {
+    if (!newName.trim()) { setError('Name ist erforderlich'); return }
+    if (!targetInstance) { setError('Keine Ziel-Instanz gefunden'); return }
+    if (isDuplicate) { setError('Ein CF mit diesem Namen existiert bereits'); return }
+    const newTrashId = toUserSlug(newName.trim())
+    const specs = cf.specifications.map(s => normalizeArrSpec(s as unknown as {
+      name: string; implementation: string; implementationName?: string
+      negate: boolean; required: boolean; fields: unknown
+    }))
+    setSaving(true)
+    setError(null)
+    try {
+      await createCustomFormat(targetInstance.id, {
+        name: newName.trim(),
+        trash_id: newTrashId,
+        includeCustomFormatWhenRenaming: cf.includeCustomFormatWhenRenaming,
+        specifications: specs,
+      })
+      await Promise.all([loadCustomFormats(targetInstance.id), loadUserCfFiles(destService)])
+      const msg = destService !== currentService
+        ? `Kopiert nach ${destService} — wechsle zum ${destService}-Tab um ihn zu sehen`
+        : `"${newName.trim()}" wurde kopiert`
+      onCopied(destService, msg)
+    } catch (e: unknown) {
+      setError((e as Error).message)
+      setSaving(false)
+    }
+  }
+
+  const capService = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 16px' }}>
+      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, width: '100%', maxWidth: 440 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, fontFamily: 'var(--font-sans)' }}>
+          '{cf.name}' kopieren
+        </h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label className="form-label">Kopieren nach:</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, userSelect: 'none' }}>
+                <input type="radio" name="destService" checked={destService === currentService}
+                  onChange={() => { setDestService(currentService); setError(null) }} />
+                Gleiche Instanz ({capService(currentService)})
+              </label>
+              {hasOtherService && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, userSelect: 'none' }}>
+                  <input type="radio" name="destService" checked={destService === otherService}
+                    onChange={() => { setDestService(otherService); setError(null) }} />
+                  {capService(currentService)} → {capService(otherService)}
+                </label>
+              )}
+            </div>
+          </div>
+          <div>
+            <label className="form-label">Neuer Name *</label>
+            <input
+              className="form-input"
+              value={newName}
+              onChange={e => { setNewName(e.target.value); if (error) setError(null) }}
+              style={{ width: '100%', boxSizing: 'border-box' }}
+            />
+            {isDuplicate && <span className="badge-error" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>Name bereits vergeben</span>}
+          </div>
+          {error && <span className="badge-error" style={{ fontSize: 12 }}>{error}</span>}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={onClose} className="btn btn-ghost">Abbrechen</button>
+            <button onClick={handleCopy} disabled={saving || isDuplicate || !newName.trim()} className="btn btn-primary">
+              {saving ? 'Kopieren…' : 'Kopieren'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Import Modal ───────────────────────────────────────────────────────────────
+
+function ImportModal({
+  instanceId,
+  service,
+  onClose,
+  onImported,
+}: {
+  instanceId: string
+  service: 'radarr' | 'sonarr'
+  onClose: () => void
+  onImported: (count: number) => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [importable, setImportable] = useState<ArrCustomFormat[]>([])
+  const [alreadyManaged, setAlreadyManaged] = useState<{ cf: ArrCustomFormat; hasChanges: boolean }[]>([])
+  const [selectedImport, setSelectedImport] = useState<Set<number>>(new Set())
+  const [selectedOverwrite, setSelectedOverwrite] = useState<Set<number>>(new Set())
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.recyclarr.importableCfs(instanceId)
+      .then(data => {
+        setImportable(data.importable)
+        setAlreadyManaged(data.alreadyManaged)
+        setLoading(false)
+      })
+      .catch((e: unknown) => {
+        setFetchError((e as Error).message)
+        setLoading(false)
+      })
+  }, [instanceId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggle(set: Set<number>, id: number): Set<number> {
+    const next = new Set(set)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  }
+
+  async function handleImport() {
+    const toImport = importable.filter(c => selectedImport.has(c.id))
+    const toOverwrite = alreadyManaged.filter(m => selectedOverwrite.has(m.cf.id))
+    if (toImport.length === 0 && toOverwrite.length === 0) return
+    setSaving(true)
+    setSaveError(null)
+    let count = 0
+    try {
+      for (const cf of toImport) {
+        await api.recyclarr.createUserCf(service, {
+          name: cf.name,
+          specifications: cf.specifications as unknown as UserCfSpecification[],
+        })
+        count++
+      }
+      for (const { cf } of toOverwrite) {
+        const trashId = toUserSlug(cf.name)
+        await api.recyclarr.updateUserCf(service, trashId, {
+          name: cf.name,
+          specifications: cf.specifications as unknown as UserCfSpecification[],
+        })
+        count++
+      }
+      onImported(count)
+    } catch (e: unknown) {
+      setSaveError((e as Error).message)
+      setSaving(false)
+    }
+  }
+
+  const managedWithChanges = alreadyManaged.filter(m => m.hasChanges)
+  const totalSelected = selectedImport.size + selectedOverwrite.size
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '40px 16px' }}>
+      <div className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24, width: '100%', maxWidth: 560 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>Custom Formats importieren</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {loading && <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>Lade…</p>}
+
+        {fetchError && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.08)', borderRadius: 'var(--radius-sm)' }}>
+            <AlertTriangle size={13} style={{ color: '#f87171', flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: '#f87171' }}>{fetchError}</span>
+          </div>
+        )}
+
+        {!loading && !fetchError && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Importable */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
+                  Importierbar
+                </span>
+                <span className="badge-neutral" style={{ fontSize: 11 }}>{importable.length}</span>
+                {importable.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+                    <button onClick={() => setSelectedImport(new Set(importable.map(c => c.id)))}
+                      className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}>
+                      Alle auswählen
+                    </button>
+                    <button onClick={() => setSelectedImport(new Set())}
+                      className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}>
+                      Alle abwählen
+                    </button>
+                  </div>
+                )}
+              </div>
+              {importable.length === 0 ? (
+                <div className="badge-neutral" style={{ fontSize: 12, display: 'block', padding: '8px 12px', lineHeight: 1.5 }}>
+                  Keine importierbaren CFs gefunden — alle vorhandenen CFs werden bereits von Recyclarr verwaltet
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+                  {importable.map(cf => (
+                    <label key={cf.id} className="glass"
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={selectedImport.has(cf.id)}
+                        onChange={() => setSelectedImport(prev => toggle(prev, cf.id))} />
+                      <span style={{ fontSize: 13, flex: 1 }}>{cf.name}</span>
+                      <span className="badge-neutral" style={{ fontSize: 11 }}>{cf.specifications.length} Conditions</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Already managed with changes */}
+            {managedWithChanges.length > 0 && (
+              <div>
+                <div style={{ marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
+                    Bereits verwaltet — Unterschied erkannt
+                  </span>
+                  <span className="badge-neutral" style={{ fontSize: 11, marginLeft: 6 }}>{managedWithChanges.length}</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {managedWithChanges.map(({ cf }) => (
+                    <label key={cf.id} className="glass"
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={selectedOverwrite.has(cf.id)}
+                        onChange={() => setSelectedOverwrite(prev => toggle(prev, cf.id))} />
+                      <span style={{ fontSize: 13, flex: 1 }}>{cf.name}</span>
+                      <span className="badge-warning" style={{ fontSize: 11 }}
+                        title="JSON-Datei weicht von Radarr/Sonarr ab">
+                        Lokal abweichend
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {saveError && <span className="badge-error" style={{ fontSize: 12 }}>{saveError}</span>}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button onClick={onClose} className="btn btn-ghost">Abbrechen</button>
+              <button onClick={handleImport} disabled={saving || totalSelected === 0} className="btn btn-primary">
+                {saving ? 'Importieren…' : `Importieren (${totalSelected} ausgewählt)`}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -3880,6 +4424,9 @@ function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void })
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleteInUse, setDeleteInUse] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [showImport, setShowImport] = useState(false)
+  const [copyCf, setCopyCf] = useState<UserCfFile | null>(null)
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null)
 
   const activeInstance = useMemo(() => (
     instances.find(i => i.type === service && i.enabled) ?? null
@@ -3958,16 +4505,29 @@ function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void })
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 600, fontSize: 15, fontFamily: 'var(--font-sans)' }}>Custom Formats</span>
-          <span className="badge-neutral" style={{ fontSize: 11 }}>{cfFiles.length}</span>
+          <span className="badge-neutral" style={{ fontSize: 11 }}>{cfFiles.length} / {arrCfList.length}</span>
           <div style={{ flex: 1 }} />
+          {actionSuccess && (
+            <span className="badge-success" style={{ fontSize: 11 }}>{actionSuccess}</span>
+          )}
           {isAdmin && (
-            <button
-              onClick={() => setEditingCf('new')}
-              className="btn btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
-            >
-              <Plus size={12} /> Erstellen
-            </button>
+            <>
+              <button
+                onClick={() => { setShowImport(true); setActionSuccess(null) }}
+                className="btn btn-ghost"
+                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+                disabled={!activeInstance}
+              >
+                <Upload size={12} /> Importieren
+              </button>
+              <button
+                onClick={() => setEditingCf('new')}
+                className="btn btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+              >
+                <Plus size={12} /> Erstellen
+              </button>
+            </>
           )}
         </div>
 
@@ -4027,6 +4587,13 @@ function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void })
                 onDeleteRequest={() => { setConfirmDeleteTrashId(file.trash_id); setDeleteError(null); setDeleteInUse(false) }}
                 onDeleteConfirm={() => handleDelete(file.trash_id, arrCf)}
                 onDeleteCancel={() => { setConfirmDeleteTrashId(null); setDeleteError(null); setDeleteInUse(false) }}
+                onExport={() => downloadJson(`${file.name}.json`, {
+                  trash_id: file.trash_id,
+                  name: file.name,
+                  includeCustomFormatWhenRenaming: file.includeCustomFormatWhenRenaming,
+                  specifications: file.specifications,
+                })}
+                onCopy={() => { setCopyCf(file); setActionSuccess(null) }}
               />
             ))}
           </div>
@@ -4058,6 +4625,38 @@ function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void })
           }}
         />
       )}
+
+      {/* Import Modal */}
+      {showImport && activeInstance && (
+        <ImportModal
+          instanceId={activeInstance.id}
+          service={service}
+          onClose={() => setShowImport(false)}
+          onImported={count => {
+            setShowImport(false)
+            setActionSuccess(`${count} CF${count !== 1 ? 's' : ''} importiert`)
+            Promise.all([loadCustomFormats(activeInstance.id), loadUserCfFiles(service)]).catch(() => {})
+          }}
+        />
+      )}
+
+      {/* Copy Modal */}
+      {copyCf && (
+        <CopyCfModal
+          cf={copyCf}
+          instances={instances}
+          currentService={service}
+          onClose={() => setCopyCf(null)}
+          onCopied={(targetService, msg) => {
+            setCopyCf(null)
+            setActionSuccess(msg)
+            const targetInst = instances.find(i => i.enabled && i.type === targetService)
+            if (targetInst) {
+              Promise.all([loadCustomFormats(targetInst.id), loadUserCfFiles(targetService)]).catch(() => {})
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -4082,6 +4681,7 @@ interface Props {
 
 export function MediaPage({ showAddForm: showFromParent, onFormClose, onNavigate }: Props) {
   const { settings } = useStore()
+  const { instances, customFormats, userCfFiles } = useArrStore()
   const [activeTab, setActiveTab] = useState<MediaTab>('instances')
 
   // When Topbar "Add Instance" fires, switch to Instances tab
@@ -4093,13 +4693,22 @@ export function MediaPage({ showAddForm: showFromParent, onFormClose, onNavigate
 
   const hasTmdbKey = !!(settings?.tmdb_api_key)
 
+  const cfBadge = useMemo(() => {
+    const inst = instances.find(i => i.enabled && (i.type === 'radarr' || i.type === 'sonarr'))
+    if (!inst) return undefined
+    const cfs = customFormats[inst.id]
+    const ucs = userCfFiles[inst.type as 'radarr' | 'sonarr']
+    if (cfs === undefined || ucs === undefined) return undefined
+    return `${ucs.length}/${cfs.length}`
+  }, [instances, customFormats, userCfFiles])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, flex: 1 }}>Media</h2>
       </div>
 
-      <TabBar active={activeTab} onChange={setActiveTab} />
+      <TabBar active={activeTab} onChange={setActiveTab} cfBadge={cfBadge} />
 
       {activeTab === 'instances' && (
         <InstancesTab showAddForm={showFromParent} onFormClose={onFormClose} />

@@ -225,6 +225,21 @@ interface ArrCustomFormat {
   trash_id?: string
 }
 
+interface ArrCustomFormatFull {
+  id: number
+  name: string
+  trash_id?: string
+  includeCustomFormatWhenRenaming: boolean
+  specifications: Array<{
+    name: string
+    implementation: string
+    implementationName: string
+    negate: boolean
+    required: boolean
+    fields: Array<{ name: string; value: unknown }>
+  }>
+}
+
 interface ScoreChange {
   profileTrashId: string
   profileName: string
@@ -406,6 +421,19 @@ function listUserCfs(service: 'radarr' | 'sonarr'): UserCfFile[] {
   return result.sort((a, b) => a.name.localeCompare(b.name))
 }
 
+
+function normalizeSpecsForCompare(specs: unknown[]): unknown {
+  return specs.map((s: unknown) => {
+    const spec = s as { name: string; implementation: string; negate: boolean; required: boolean; fields: unknown }
+    let fields: Record<string, unknown>
+    if (Array.isArray(spec.fields)) {
+      fields = Object.fromEntries((spec.fields as { name: string; value: unknown }[]).map(f => [f.name, f.value]))
+    } else {
+      fields = spec.fields as Record<string, unknown>
+    }
+    return { name: spec.name, implementation: spec.implementation, negate: spec.negate, required: spec.required, fields }
+  })
+}
 
 function deriveGroup(name: string): string {
   const lower = name.toLowerCase()
@@ -1427,6 +1455,75 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
       } catch (e) {
         return reply.send({ running: false, name })
       }
+    }
+  )
+
+  // GET /api/recyclarr/importable-cfs/:instanceId
+  app.get<{ Params: { instanceId: string } }>(
+    '/api/recyclarr/importable-cfs/:instanceId',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { instanceId } = req.params
+      const db = getDb()
+      const inst = db.prepare('SELECT * FROM arr_instances WHERE id = ?').get(instanceId) as ArrInstanceRow | undefined
+      if (!inst) return reply.status(404).send({ error: 'Instance not found' })
+      if (inst.type !== 'radarr' && inst.type !== 'sonarr') {
+        return reply.status(400).send({ error: 'Only radarr/sonarr supported' })
+      }
+      const service = inst.type as 'radarr' | 'sonarr'
+      const agent = new Agent({ connect: { rejectUnauthorized: false } })
+      const baseUrl = inst.url.replace(/\/$/, '')
+      const headers = { 'X-Api-Key': inst.api_key, 'Content-Type': 'application/json' }
+
+      // 1. Get all CFs from Arr
+      let arrCfs: ArrCustomFormatFull[] = []
+      try {
+        const res = await undiciRequest(`${baseUrl}/api/v3/customformat`, { method: 'GET', headers, dispatcher: agent })
+        arrCfs = await res.body.json() as ArrCustomFormatFull[]
+      } catch (e) {
+        return reply.status(500).send({ error: e instanceof Error ? e.message : 'Failed to reach instance' })
+      }
+
+      // 2. Get Recyclarr-known CF names via docker exec
+      const { containerName } = getRecyclarrSettings()
+      const recyclarrKnownNames = new Set<string>()
+      try {
+        const { stdout, exitCode } = await dockerExecInContainer(
+          containerName,
+          ['recyclarr', 'list', 'custom-formats', service],
+          15_000
+        )
+        if (exitCode === 0) {
+          for (const cf of parseCustomFormats(stdout, service)) {
+            recyclarrKnownNames.add(cf.name.toLowerCase())
+          }
+        }
+      } catch { /* recyclarr unavailable — skip name filtering */ }
+
+      // 3. Load already managed CFs from user-cfs/
+      const managedCfs = listUserCfs(service)
+      const managedByTrashId = new Map(managedCfs.map(cf => [cf.trash_id, cf]))
+      const managedByName = new Map(managedCfs.map(cf => [cf.name.toLowerCase(), cf]))
+
+      // 4. Classify
+      const importable: ArrCustomFormatFull[] = []
+      const alreadyManaged: { cf: ArrCustomFormatFull; hasChanges: boolean }[] = []
+
+      for (const cf of arrCfs) {
+        if (recyclarrKnownNames.has(cf.name.toLowerCase())) continue
+        const slug = toUserCfSlug(cf.name)
+        const managedCf = managedByTrashId.get(slug) ?? managedByName.get(cf.name.toLowerCase())
+        if (managedCf) {
+          const hasChanges =
+            JSON.stringify(normalizeSpecsForCompare(managedCf.specifications as unknown[])) !==
+            JSON.stringify(normalizeSpecsForCompare(cf.specifications))
+          alreadyManaged.push({ cf, hasChanges })
+        } else {
+          importable.push(cf)
+        }
+      }
+
+      return reply.send({ importable, alreadyManaged })
     }
   )
 }

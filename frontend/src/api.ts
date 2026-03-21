@@ -353,6 +353,8 @@ export const api = {
       req<{ scoreSets: string[] }>(`/recyclarr/list-score-sets/${instanceId}`),
     containerStatus: (containerName: string) =>
       req<{ running: boolean; name: string }>(`/recyclarr/container-status?name=${encodeURIComponent(containerName)}`),
+    importableCfs: (instanceId: string) =>
+      req<{ importable: import('./types/arr').ArrCustomFormat[]; alreadyManaged: { cf: import('./types/arr').ArrCustomFormat; hasChanges: boolean }[] }>(`/recyclarr/importable-cfs/${instanceId}`),
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),
