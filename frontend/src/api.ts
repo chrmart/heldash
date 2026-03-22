@@ -1,4 +1,4 @@
-import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull, HaArea, EnergyData, CalendarEntry, HaFloorplan, HaFloorplanEntity, HaAlert, HaHistoryEntry } from './types'
+import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull, HaArea, EnergyData, CalendarEntry, HaFloorplan, HaFloorplanEntity, HaAlert, HaHistoryEntry, NetworkDevice, NetworkDeviceHistory, ScanResult, BackupSource, BackupStatusResult, ResourceSnapshot, ChangelogRelease } from './types'
 import type { SyncHistoryEntry, BackupEntry } from './types/recyclarr'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse, RadarrMovie, SonarrSeries, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile } from './types/arr'
 import type { TmdbPage, TmdbGenre, TmdbProvider, TmdbTvDetail, TmdbDiscoverFilters } from './types/tmdb'
@@ -432,6 +432,39 @@ export const api = {
     }>('/logbuch/health-score'),
     calendar: () => req<{ days: { date: string; count: number; maxSeverity: string }[] }>('/logbuch/calendar'),
     anomalies: () => req<{ anomalies: { serviceId: string; serviceName: string | null; offlineCount: number }[] }>('/logbuch/anomalies'),
+  },
+
+  network: {
+    devices: {
+      list: () => req<NetworkDevice[]>('/network/devices'),
+      create: (data: Partial<NetworkDevice>) => req<NetworkDevice>('/network/devices', { method: 'POST', body: JSON.stringify(data) }),
+      update: (id: string, data: Partial<NetworkDevice>) => req<NetworkDevice>(`/network/devices/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+      delete: (id: string) => req<void>(`/network/devices/${id}`, { method: 'DELETE' }),
+    },
+    wol: (id: string) => req<{ ok: boolean; error?: string }>(`/network/devices/${id}/wol`, { method: 'POST', body: JSON.stringify({}) }),
+    scan: (subnet: string) => req<ScanResult[]>(`/network/scan?subnet=${encodeURIComponent(subnet)}`),
+    history: (id: string) => req<NetworkDeviceHistory[]>(`/network/devices/${id}/history`),
+  },
+
+  backup: {
+    sources: {
+      list: () => req<BackupSource[]>('/backup/sources'),
+      create: (data: { name: string; type: string; config?: Record<string, unknown>; enabled?: boolean }) =>
+        req<BackupSource>('/backup/sources', { method: 'POST', body: JSON.stringify(data) }),
+      update: (id: string, data: Partial<BackupSource>) =>
+        req<BackupSource>(`/backup/sources/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+      delete: (id: string) => req<void>(`/backup/sources/${id}`, { method: 'DELETE' }),
+    },
+    status: () => req<{ sources: BackupStatusResult[] }>('/backup/status'),
+    dockerExport: () => fetch('/api/backup/docker/export', { credentials: 'include' }).then(r => r.blob()),
+  },
+
+  resources: {
+    history: (range?: '1h' | '24h' | '7d') => req<ResourceSnapshot[]>(`/resources/history${range ? `?range=${range}` : ''}`),
+  },
+
+  changelog: {
+    list: () => req<ChangelogRelease[]>('/changelog'),
   },
 
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),

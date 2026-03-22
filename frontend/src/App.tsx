@@ -12,8 +12,11 @@ import { WidgetsPage } from './pages/WidgetsPage'
 import { DockerPage } from './pages/DockerPage'
 import { HaPage } from './pages/HaPage'
 import { LogbuchPage } from './pages/LogbuchPage'
+import { NetworkPage } from './pages/NetworkPage'
+import { BackupPage } from './pages/BackupPage'
 import { AboutPage } from './pages/AboutPage'
 import { SetupPage } from './pages/SetupPage'
+import { ChangelogModal } from './components/ChangelogModal'
 import { ServiceModal } from './components/ServiceModal'
 import { LoginModal } from './components/LoginModal'
 import { ToastProvider, useToast } from './components/Toast'
@@ -90,6 +93,7 @@ function App() {
   const [showAddHaInstance, setShowAddHaInstance] = useState(false)
   const [showAddHaPanel, setShowAddHaPanel] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showChangelog, setShowChangelog] = useState(false)
 
   useEffect(() => {
     checkAuth().then(() => Promise.all([loadAll(), loadDashboard(), loadMyBackground()])).then(() => startHealthPolling())
@@ -248,7 +252,9 @@ function App() {
                 />
               )}
               {page === 'logbuch' && <LogbuchPage />}
-              {page === 'about' && <AboutPage />}
+              {page === 'network' && <NetworkPage />}
+              {page === 'backup' && <BackupPage />}
+              {page === 'about' && <AboutPage onShowChangelog={() => setShowChangelog(true)} />}
             </div>
           </div>
         </div>
@@ -271,6 +277,10 @@ function App() {
           onAddService={() => { setShowOnboarding(false); setShowModal(true) }}
           onAddInstance={() => { setShowOnboarding(false); setShowAddInstance(true); setPage('media') }}
         />
+      )}
+
+      {showChangelog && (
+        <ChangelogModal onClose={() => setShowChangelog(false)} />
       )}
     </>
     </ToastProvider>

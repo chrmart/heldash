@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { Activity, TrendingUp, RefreshCw, Container, Home, Box, AlertTriangle, CheckCircle, XCircle, Search, ChevronRight } from 'lucide-react'
+import { Activity, TrendingUp, RefreshCw, Container, Home, Box, AlertTriangle, CheckCircle, XCircle, Search, ChevronRight, Cpu } from 'lucide-react'
+import type { ResourceSnapshot } from '../types'
 import { useStore } from '../store/useStore'
 import { useActivityStore } from '../store/useActivityStore'
 import type { ActivityEntry } from '../store/useActivityStore'
@@ -37,7 +38,7 @@ const TABS = [
   { key: 'aktivitaeten', label: 'Aktivitäten', icon: Activity },
   { key: 'uptime', label: 'Uptime', icon: TrendingUp },
   { key: 'sync', label: 'Sync-Verlauf', icon: RefreshCw },
-  // Future: { key: 'unraid', label: 'Unraid', icon: Server },
+  { key: 'ressourcen', label: 'Ressourcen', icon: Cpu },
 ]
 
 // ── Health Score Badge ────────────────────────────────────────────────────────
@@ -720,6 +721,155 @@ function SyncTab() {
 }
 
 
+// ── Ressourcen Tab ────────────────────────────────────────────────────────────
+
+type ResourceRange = '1h' | '24h' | '7d'
+
+interface MiniChartProps {
+  data: number[]
+  color: string
+  maxVal?: number
+  height?: number
+}
+
+function MiniChart({ data, color, maxVal, height = 60 }: MiniChartProps) {
+  if (data.length < 2) return <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text-muted)' }}>Keine Daten</div>
+
+  const max = maxVal ?? Math.max(...data, 1)
+  const width = 400
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width
+    const y = height - (v / max) * height
+    return `${x},${y}`
+  }).join(' ')
+
+  const areaPoints = `0,${height} ${pts} ${width},${height}`
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id={`grad-${color.replace(/[^a-z]/gi, '')}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <polygon points={areaPoints} fill={`url(#grad-${color.replace(/[^a-z]/gi, '')})`} />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+interface MetricCardProps {
+  label: string
+  value: string
+  subValue?: string
+  color: string
+  data: number[]
+  maxVal?: number
+}
+
+function MetricCard({ label, value, subValue, color, data, maxVal }: MetricCardProps) {
+  return (
+    <div className="glass" style={{ borderRadius: 'var(--radius-md)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{label}</span>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color }}>{value}</span>
+          {subValue && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{subValue}</div>}
+        </div>
+      </div>
+      <MiniChart data={data} color={color} maxVal={maxVal} height={56} />
+    </div>
+  )
+}
+
+function RessourcenTab() {
+  const [range, setRange] = useState<ResourceRange>('24h')
+  const [snapshots, setSnapshots] = useState<ResourceSnapshot[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = async (r: ResourceRange) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await api.resources.history(r)
+      setSnapshots(data)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler beim Laden')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load(range) }, [range])
+
+  const cpuData = snapshots.map(s => s.cpu_percent)
+  const ramData = snapshots.map(s => s.ram_percent)
+  const ramGbData = snapshots.map(s => s.ram_used_gb)
+  const netRxData = snapshots.map(s => s.net_rx_mbps)
+  const netTxData = snapshots.map(s => s.net_tx_mbps)
+
+  const last = snapshots[snapshots.length - 1]
+  const cpuVal = last ? `${last.cpu_percent.toFixed(1)}%` : '—'
+  const ramVal = last ? `${last.ram_percent.toFixed(1)}%` : '—'
+  const ramGbVal = last ? `${last.ram_used_gb.toFixed(1)} GB` : undefined
+  const netRxVal = last ? `${last.net_rx_mbps.toFixed(2)} Mbps` : '—'
+  const netTxVal = last ? `${last.net_tx_mbps.toFixed(2)} Mbps` : '—'
+
+  const maxNet = Math.max(...netRxData, ...netTxData, 1)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          {snapshots.length > 0 ? `${snapshots.length} Messpunkte` : ''}
+        </span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['1h', '24h', '7d'] as ResourceRange[]).map(r => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={range === r ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+              style={{ fontSize: 11, padding: '3px 10px' }}
+            >
+              {r === '1h' ? '1 Std.' : r === '24h' ? '24 Std.' : '7 Tage'}
+            </button>
+          ))}
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: 11, padding: '3px 8px' }}
+            onClick={() => load(range)}
+            disabled={loading}
+            title="Aktualisieren"
+          >
+            <RefreshCw size={11} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="error-banner">{error}</div>}
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" /></div>
+      ) : snapshots.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
+          <p style={{ margin: 0, fontSize: 13 }}>Noch keine Ressourcen-Daten vorhanden.</p>
+          <p style={{ margin: '4px 0 0', fontSize: 12 }}>Daten werden minütlich aufgezeichnet — bitte warte einen Moment.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+          <MetricCard label="CPU" value={cpuVal} color="var(--accent)" data={cpuData} maxVal={100} />
+          <MetricCard label="RAM" value={ramVal} subValue={ramGbVal} color="#a855f7" data={ramData} maxVal={100} />
+          <MetricCard label="Netz RX" value={netRxVal} color="var(--status-online)" data={netRxData} maxVal={maxNet} />
+          <MetricCard label="Netz TX" value={netTxVal} color="#f59e0b" data={netTxData} maxVal={maxNet} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── LogbuchPage ───────────────────────────────────────────────────────────────
 
 export function LogbuchPage() {
@@ -796,6 +946,7 @@ export function LogbuchPage() {
       {activeTab === 'aktivitaeten' && <AktivitaetenTab anomalies={anomalies} />}
       {activeTab === 'uptime' && <UptimeOverview services={services} />}
       {activeTab === 'sync' && <SyncTab />}
+      {activeTab === 'ressourcen' && <RessourcenTab />}
     </div>
   )
 }

@@ -398,3 +398,76 @@ export interface HaHistoryEntry {
   state: string
   last_changed: string
 }
+
+// ── Network Monitor ───────────────────────────────────────────────────────────
+
+export interface NetworkDevice {
+  id: string
+  name: string
+  ip: string
+  mac: string | null
+  wol_enabled: boolean
+  wol_broadcast: string | null
+  check_port: number | null
+  subnet: string | null
+  group_name: string | null
+  icon: string
+  last_status: string | null
+  last_checked: string | null
+  created_at: string
+}
+
+export interface NetworkDeviceHistory {
+  status: string
+  checked_at: string
+}
+
+export interface ScanResult {
+  ip: string
+  latency: number
+  open_ports: number[]
+}
+
+// ── Backup Center ─────────────────────────────────────────────────────────────
+
+export interface BackupSource {
+  id: string
+  name: string
+  type: string
+  config: Record<string, unknown>
+  enabled: boolean
+  last_checked_at: string | null
+  last_status: string | null
+  created_at: string
+}
+
+export interface BackupStatusResult {
+  id: string
+  name: string
+  type: string
+  lastRun: string | null
+  success: boolean | null
+  size: string | null
+  error: string | null
+}
+
+// ── Resource History ──────────────────────────────────────────────────────────
+
+export interface ResourceSnapshot {
+  recorded_at: string
+  resolution: string
+  cpu_percent: number
+  ram_percent: number
+  ram_used_gb: number
+  net_rx_mbps: number
+  net_tx_mbps: number
+}
+
+// ── Changelog ─────────────────────────────────────────────────────────────────
+
+export interface ChangelogRelease {
+  tag_name: string
+  name: string
+  body: string
+  published_at: string
+}

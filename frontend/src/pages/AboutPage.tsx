@@ -154,7 +154,7 @@ function Collapsible({ title, children }: { title: string; children: React.React
 }
 
 // ── Tab 1: Übersicht ──────────────────────────────────────────────────────────
-function TabOverview({ version }: { version: string | null }) {
+function TabOverview({ version, onShowChangelog }: { version: string | null; onShowChangelog?: () => void }) {
   const features = [
     { icon: '🗂️', title: 'Dashboard', desc: 'Modulares Grid, Drag & Drop, Gruppen' },
     { icon: '🐳', title: 'Docker', desc: 'Container verwalten, Logs, Start/Stop' },
@@ -218,6 +218,15 @@ function TabOverview({ version }: { version: string | null }) {
           >
             i18n / Weitere Sprachen: siehe CONTRIBUTING.md
           </a>
+          {onShowChangelog && (
+            <button
+              onClick={onShowChangelog}
+              className="badge badge-neutral"
+              style={{ cursor: 'pointer', background: 'none', border: '1px solid var(--glass-border)' }}
+            >
+              Changelog anzeigen
+            </button>
+          )}
         </div>
       </DocSection>
     </>
@@ -1089,7 +1098,7 @@ const TAB_LABELS: Record<AboutTab, string> = {
   design: 'Design',
 }
 
-export function AboutPage() {
+export function AboutPage({ onShowChangelog }: { onShowChangelog?: () => void } = {}) {
   const [activeTab, setActiveTab] = useState<AboutTab>(() => {
     const saved = localStorage.getItem(LS_ABOUT_TAB)
     return (saved && TAB_ORDER.includes(saved as AboutTab) ? saved : 'overview') as AboutTab
@@ -1125,7 +1134,7 @@ export function AboutPage() {
       </div>
 
       {/* Tab content */}
-      {activeTab === 'overview'   && <TabOverview version={version} />}
+      {activeTab === 'overview'   && <TabOverview version={version} onShowChangelog={onShowChangelog} />}
       {activeTab === 'setup'      && <TabSetup />}
       {activeTab === 'docker'     && <TabDocker />}
       {activeTab === 'logbuch'    && <TabLogbuch />}

@@ -367,6 +367,52 @@ function applySchema(db: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Network devices
+    CREATE TABLE IF NOT EXISTS network_devices (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      ip TEXT NOT NULL,
+      mac TEXT,
+      wol_enabled INTEGER NOT NULL DEFAULT 0,
+      wol_broadcast TEXT,
+      check_port INTEGER,
+      subnet TEXT,
+      group_name TEXT,
+      icon TEXT NOT NULL DEFAULT '🖥️',
+      last_status TEXT,
+      last_checked TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS network_device_history (
+      id TEXT PRIMARY KEY,
+      device_id TEXT NOT NULL REFERENCES network_devices(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS resource_history (
+      id TEXT PRIMARY KEY,
+      recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+      resolution TEXT NOT NULL,
+      cpu_percent REAL,
+      ram_percent REAL,
+      ram_used_gb REAL,
+      net_rx_mbps REAL,
+      net_tx_mbps REAL
+    );
+
+    CREATE TABLE IF NOT EXISTS backup_sources (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      config TEXT NOT NULL DEFAULT '{}',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_checked_at TEXT,
+      last_status TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- Insert default settings if not exist
     INSERT OR IGNORE INTO settings (key, value) VALUES
       ('theme_mode', '"dark"'),
