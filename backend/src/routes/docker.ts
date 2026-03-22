@@ -141,7 +141,7 @@ export function initDockerPoller(): void {
 
             if (attrs.name) containerNames.set(id, attrs.name)
 
-            if (status === 'die') {
+            if (status === 'stop') {
               logActivity('docker', `Container '${name}' gestoppt`, 'warning', { containerId: id })
             } else if (status === 'start') {
               logActivity('docker', `Container '${name}' gestartet`, 'info', { containerId: id })

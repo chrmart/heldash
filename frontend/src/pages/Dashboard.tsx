@@ -841,13 +841,11 @@ export function Dashboard({ onEdit }: Props) {
     </DndContext>
   )
 
-  // Relative time helper
-  const relTime = (iso: string) => {
-    const diff = Date.now() - new Date(iso).getTime()
-    if (diff < 60_000) return 'gerade eben'
-    if (diff < 3_600_000) return `vor ${Math.floor(diff / 60_000)} min`
-    if (diff < 86_400_000) return `vor ${Math.floor(diff / 3_600_000)} h`
-    return `vor ${Math.floor(diff / 86_400_000)} d`
+  const formatActivityTime = (iso: string) => {
+    const d = new Date(iso)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ` +
+           `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
   }
 
   const ACTIVITY_CATEGORIES = ['all', 'media', 'docker', 'recyclarr', 'ha', 'system']
@@ -1004,7 +1002,7 @@ export function Dashboard({ onEdit }: Props) {
                           : 'var(--text-secondary)',
                       }}>{entry.message}</span>
                       <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                        {relTime(entry.created_at)}
+                        {formatActivityTime(entry.created_at)}
                       </span>
                     </div>
                   ))}
