@@ -31,13 +31,23 @@ jobs:
 
             console.log(`Found ${versions.length} total versions`)
 
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
             const devVersions = versions.filter(v => {
               const tags = v.metadata?.container?.tags ?? []
-              // Delete if: has dev-* tag OR has no tags at all (untagged/sha256)
-              return tags.some(tag => tag.startsWith('dev-')) || tags.length === 0
+              const createdAt = new Date(v.created_at)
+
+              // Always delete dev-* tagged versions
+              if (tags.some(tag => tag.startsWith('dev-'))) return true
+
+              // Only delete untagged versions older than 7 days
+              // Newer untagged versions are likely attestation layers of recent releases
+              if (tags.length === 0 && createdAt < sevenDaysAgo) return true
+
+              return false
             })
 
-            console.log(`Found ${devVersions.length} dev-* and untagged versions to delete`)
+            console.log(`Found ${devVersions.length} dev-* and old untagged versions to delete`)
 
             let deleted = 0
             for (const version of devVersions) {
@@ -56,6 +66,6 @@ jobs:
               }
             }
 
-            console.log(`Deleted ${deleted} of ${devVersions.length} dev-* and untagged versions`)
-            core.summary.addRaw(`## ✅ Cleanup complete\n- Found: ${devVersions.length} dev-* and untagged versions\n- Deleted: ${deleted}`)
+            console.log(`Deleted ${deleted} of ${devVersions.length} dev-* and old untagged versions`)
+            core.summary.addRaw(`## ✅ Cleanup complete\n- Found: ${devVersions.length} dev-* and old untagged versions (>7 days)\n- Deleted: ${deleted}`)
             await core.summary.write()
