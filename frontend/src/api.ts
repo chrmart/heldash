@@ -1,4 +1,4 @@
-import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull, HaArea, EnergyData, CalendarEntry } from './types'
+import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull, HaArea, EnergyData, CalendarEntry, HaFloorplan, HaFloorplanEntity } from './types'
 import type { SyncHistoryEntry, BackupEntry } from './types/recyclarr'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse, RadarrMovie, SonarrSeries, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile } from './types/arr'
 import type { TmdbPage, TmdbGenre, TmdbProvider, TmdbTvDetail, TmdbDiscoverFilters } from './types/tmdb'
@@ -289,6 +289,29 @@ export const api = {
         req<HaPanel>(`/ha/panels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
       delete: (id: string) => req<void>(`/ha/panels/${id}`, { method: 'DELETE' }),
       reorder: (ids: string[]) => req<{ ok: boolean }>('/ha/panels/reorder', { method: 'PATCH', body: JSON.stringify({ ids }) }),
+    },
+    floorplans: {
+      list: () => req<HaFloorplan[]>('/ha/floorplans'),
+      create: (data: { name: string; type?: string; level?: number; icon?: string; orientation?: string }) =>
+        req<HaFloorplan>('/ha/floorplans', { method: 'POST', body: JSON.stringify(data) }),
+      update: (id: string, data: { name?: string; type?: string; level?: number; icon?: string; orientation?: string }) =>
+        req<HaFloorplan>(`/ha/floorplans/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+      delete: (id: string) => req<void>(`/ha/floorplans/${id}`, { method: 'DELETE' }),
+      uploadImage: (id: string, data: string, content_type: string) =>
+        req<{ url: string }>(`/ha/floorplans/${id}/image`, { method: 'POST', body: JSON.stringify({ data, content_type }) }),
+      deleteImage: (id: string) => req<{ ok: boolean }>(`/ha/floorplans/${id}/image`, { method: 'DELETE' }),
+      export: () => req<{ floorplans: HaFloorplan[]; entities: Record<string, HaFloorplanEntity[]> }>('/ha/floorplans/export'),
+      import: (data: { floorplans: HaFloorplan[]; entities: Record<string, HaFloorplanEntity[]> }) =>
+        req<{ imported: number; skipped: number }>('/ha/floorplans/import', { method: 'POST', body: JSON.stringify(data) }),
+      entities: {
+        list: (id: string) => req<HaFloorplanEntity[]>(`/ha/floorplans/${id}/entities`),
+        add: (id: string, data: { entity_id: string; pos_x: number; pos_y: number; display_size?: string; show_label?: boolean }) =>
+          req<HaFloorplanEntity>(`/ha/floorplans/${id}/entities`, { method: 'POST', body: JSON.stringify(data) }),
+        update: (id: string, entityId: string, data: { pos_x?: number; pos_y?: number; display_size?: string; show_label?: boolean }) =>
+          req<HaFloorplanEntity>(`/ha/floorplans/${id}/entities/${entityId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+        remove: (id: string, entityId: string) =>
+          req<void>(`/ha/floorplans/${id}/entities/${entityId}`, { method: 'DELETE' }),
+      },
     },
   },
 

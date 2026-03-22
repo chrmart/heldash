@@ -640,6 +640,16 @@ h4 { font-size: 15px; line-height: 1.5; }
   50% { opacity: 0.10; }
 }
 
+/* Floorplan entity marker animations */
+@keyframes fp-pulse {
+  0%, 100% { box-shadow: 0 0 6px 2px hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.5); }
+  50% { box-shadow: 0 0 14px 4px hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.8); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes fp-pulse { 0%, 100% { opacity: 1; } }
+}
+
 .service-name {
   font-size: 15px;
   font-weight: 600;

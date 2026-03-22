@@ -16,6 +16,7 @@ import { useStore } from '../store/useStore'
 import { api } from '../api'
 import type { HaEntityFull, HaPanel, HaInstance, HaArea } from '../types'
 import { HaPanelCard } from './HaPanelCard'
+import { HaFloorplan } from '../components/HaFloorplan'
 import { LS_HA_VIEW_MODE } from '../constants'
 
 // ── Domain helpers ────────────────────────────────────────────────────────────
@@ -1043,6 +1044,7 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
   const [editPanel, setEditPanel] = useState<HaPanel | null>(null)
   const [showManageModal, setShowManageModal] = useState(false)
   const [activeInstanceId, setActiveInstanceId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'panels' | 'grundriss'>('panels')
   const [viewMode, setViewMode] = useState<'flat' | 'grouped'>(() =>
     (localStorage.getItem(LS_HA_VIEW_MODE) as 'flat' | 'grouped' | null) ?? 'flat'
   )
@@ -1119,6 +1121,11 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
 
   const enabledInstances = instances.filter(i => i.enabled)
   const visiblePanels = activeInstanceId ? panels.filter(p => p.instance_id === activeInstanceId) : panels
+  // Flatten all instance state maps for floorplan (entity_id → HaEntityFull)
+  const allEntityStates = Object.values(stateMap).reduce<Record<string, HaEntityFull>>(
+    (acc, m) => ({ ...acc, ...m }),
+    {}
+  )
   const energyPanels = visiblePanels.filter(p => p.panel_type === 'energy')
   const regularPanels = visiblePanels.filter(p => p.panel_type !== 'energy')
 
@@ -1253,6 +1260,32 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
         </div>
       </div>
 
+      {/* Tab navigation */}
+      {instances.length > 0 && (
+        <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--glass-border)' }}>
+          {(['panels', 'grundriss'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                padding: '8px 20px', border: 'none', borderBottom: `2px solid ${activeTab === tab ? 'var(--accent)' : 'transparent'}`,
+                cursor: 'pointer', fontSize: 13, background: 'transparent',
+                color: activeTab === tab ? 'var(--accent)' : 'var(--text-secondary)',
+                fontWeight: activeTab === tab ? 600 : 400,
+                marginBottom: -1, transition: 'all var(--transition-fast)',
+              }}
+            >
+              {tab === 'panels' ? 'Panels' : '🗺 Grundriss'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Grundriss tab */}
+      {instances.length > 0 && activeTab === 'grundriss' && (
+        <HaFloorplan instances={enabledInstances} entityStates={allEntityStates} />
+      )}
+
       {/* Empty state */}
       {instances.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
@@ -1270,8 +1303,8 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
         </div>
       )}
 
-      {/* Panels grid (empty) */}
-      {instances.length > 0 && visiblePanels.length === 0 && (
+      {/* Panels tab content */}
+      {activeTab === 'panels' && instances.length > 0 && visiblePanels.length === 0 && (
         <div style={{ textAlign: 'center', padding: '32px 24px', color: 'var(--text-muted)' }}>
           <p style={{ fontSize: 14, marginBottom: 12 }}>No panels added yet.</p>
           {enabledInstances.length > 0 && (
@@ -1283,7 +1316,7 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
       )}
 
       {/* Energy Panels (full-width, non-sortable) */}
-      {energyPanels.length > 0 && (
+      {activeTab === 'panels' && energyPanels.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {energyPanels.map(panel => (
             <EnergyPanel
@@ -1297,7 +1330,7 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
       )}
 
       {/* Flat DnD Panel Grid */}
-      {regularPanels.length > 0 && viewMode === 'flat' && (
+      {activeTab === 'panels' && regularPanels.length > 0 && viewMode === 'flat' && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={regularPanels.map(p => p.id)} strategy={rectSortingStrategy}>
             <div style={{
@@ -1324,7 +1357,7 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
       )}
 
       {/* Grouped by Room view */}
-      {regularPanels.length > 0 && viewMode === 'grouped' && activeAreas.length > 0 && (() => {
+      {activeTab === 'panels' && regularPanels.length > 0 && viewMode === 'grouped' && activeAreas.length > 0 && (() => {
         const areaSet = new Set(activeAreas.map(a => a.area_id))
         const knownRooms = activeAreas
           .slice()

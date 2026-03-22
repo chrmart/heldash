@@ -346,3 +346,36 @@ export interface DockerLogEvent {
   log: string
   timestamp: string
 }
+
+// ── HA Floorplan ──────────────────────────────────────────────────────────────
+
+export interface HaFloorplan {
+  id: string
+  instance_id: string
+  name: string
+  type: 'indoor' | 'outdoor'
+  level: number
+  icon: string
+  orientation: 'landscape' | 'portrait'
+  image_path: string | null
+  image_url: string | null
+  entity_count: number
+  created_at: string
+}
+
+export interface HaFloorplanEntity {
+  id: string
+  floorplan_id: string
+  entity_id: string
+  pos_x: number
+  pos_y: number
+  display_size: 'small' | 'medium' | 'large'
+  show_label: boolean
+  created_at: string
+}
+
+export type FloorplanAction =
+  | { type: 'place'; entity: HaFloorplanEntity }
+  | { type: 'move'; entityId: string; from: { x: number; y: number }; to: { x: number; y: number } }
+  | { type: 'remove'; entity: HaFloorplanEntity }
+  | { type: 'resize'; entityId: string; from: string; to: string }

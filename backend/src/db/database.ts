@@ -330,6 +330,30 @@ function applySchema(db: Database.Database) {
       meta       TEXT
     );
 
+    -- Floorplans for HA
+    CREATE TABLE IF NOT EXISTS ha_floorplans (
+      id TEXT PRIMARY KEY,
+      instance_id TEXT NOT NULL REFERENCES ha_instances(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'indoor',
+      level INTEGER NOT NULL DEFAULT 0,
+      icon TEXT NOT NULL DEFAULT '🏠',
+      orientation TEXT NOT NULL DEFAULT 'landscape',
+      image_path TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS ha_floorplan_entities (
+      id TEXT PRIMARY KEY,
+      floorplan_id TEXT NOT NULL REFERENCES ha_floorplans(id) ON DELETE CASCADE,
+      entity_id TEXT NOT NULL,
+      pos_x REAL NOT NULL,
+      pos_y REAL NOT NULL,
+      display_size TEXT NOT NULL DEFAULT 'medium',
+      show_label INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- Insert default settings if not exist
     INSERT OR IGNORE INTO settings (key, value) VALUES
       ('theme_mode', '"dark"'),

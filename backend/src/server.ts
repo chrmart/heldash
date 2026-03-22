@@ -19,6 +19,7 @@ import { widgetsRoutes } from './routes/widgets'
 import { dockerRoutes, initDockerPoller } from './routes/docker'
 import { backgroundsRoutes } from './routes/backgrounds'
 import { haRoutes } from './routes/ha'
+import { haFloorplanRoutes } from './routes/ha-floorplan'
 import { tmdbRoutes } from './routes/tmdb'
 import recyclarrRoutes, { initRecyclarrSchedulers } from './routes/recyclarr'
 import { activityRoutes, logActivity } from './routes/activity'
@@ -213,6 +214,23 @@ async function start() {
     return reply.send(fs.createReadStream(filePath))
   })
 
+  // ── Serve uploaded floorplan images ──────────────────────────────────────────
+  app.get<{ Params: { filename: string } }>('/floorplan-images/:filename', async (req, reply) => {
+    const fpDir = path.join(DATA_DIR, 'floorplans')
+    const filePath = path.join(fpDir, path.basename(req.params.filename))
+    if (!fs.existsSync(filePath)) return reply.status(404).send({ error: 'Not found' })
+    const mimeTypes: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+    }
+    const ext = path.extname(filePath).toLowerCase()
+    reply.header('Content-Type', mimeTypes[ext] ?? 'application/octet-stream')
+    reply.header('Cache-Control', 'public, max-age=3600')
+    return reply.send(fs.createReadStream(filePath))
+  })
+
   // ── Health check — silent (polled every 30s by Docker healthcheck) ────────────
   app.get('/api/health', { logLevel: 'silent' }, async () => ({
     status: 'ok',
@@ -235,6 +253,7 @@ async function start() {
   await app.register(backgroundsRoutes)
   await app.register(settingsRoutes)
   await app.register(haRoutes)
+  await app.register(haFloorplanRoutes)
   await app.register(tmdbRoutes)
   await app.register(recyclarrRoutes)
   await app.register(activityRoutes)
