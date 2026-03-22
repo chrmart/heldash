@@ -62,6 +62,27 @@ function sanitizeDevice(row: NetworkDeviceRow) {
   }
 }
 
+function cidrToIpList(cidr: string): string[] | null {
+  const match = cidr.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/)
+  if (!match) return null
+  const [, a, b, c, d, p] = match
+  const octets = [Number(a), Number(b), Number(c), Number(d)]
+  const prefix = Number(p)
+  if (octets.some(o => o > 255) || prefix < 0 || prefix > 32) return null
+  if (prefix < 22) return Array(9999) // will be caught as > 1024 by caller
+  const networkInt = (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]
+  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0
+  const network = (networkInt & mask) >>> 0
+  const count = (1 << (32 - prefix)) >>> 0
+  const ips: string[] = []
+  // skip network (.0) and broadcast (last)
+  for (let i = 1; i < count - 1; i++) {
+    const ip = (network + i) >>> 0
+    ips.push(`${(ip >>> 24) & 0xff}.${(ip >>> 16) & 0xff}.${(ip >>> 8) & 0xff}.${ip & 0xff}`)
+  }
+  return ips
+}
+
 export function tcpPing(ip: string, port: number, timeoutMs: number): Promise<number | null> {
   return new Promise(resolve => {
     const start = Date.now()
@@ -195,16 +216,33 @@ export async function networkRoutes(app: FastifyInstance) {
     '/api/network/scan',
     { logLevel: 'silent', onRequest: [app.authenticate] },
     async (req, reply) => {
-      const subnet = req.query.subnet
-      if (!subnet || !/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(subnet)) {
-        return reply.status(400).send({ error: 'Ungültiges Subnetz (z.B. 192.168.1)' })
+      const subnetParam = req.query.subnet?.trim()
+      if (!subnetParam) {
+        return reply.status(400).send({ error: 'Subnetz erforderlich' })
       }
+
+      // Accept either CIDR (e.g. 10.10.0.0/20) or simple prefix (e.g. 192.168.1 → 192.168.1.0/24)
+      let ipList: string[]
+      if (/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(subnetParam)) {
+        // Legacy simple format → convert to /24
+        const base = subnetParam
+        ipList = Array.from({ length: 254 }, (_, i) => `${base}.${i + 1}`)
+      } else {
+        const parsed = cidrToIpList(subnetParam)
+        if (parsed === null) {
+          return reply.status(400).send({ error: 'Ungültiges CIDR-Format (z.B. 192.168.1.0/24 oder 10.10.0.0/20)' })
+        }
+        if (parsed.length > 1024) {
+          return reply.status(400).send({ error: 'Subnetz zu groß — mindestens /22 erforderlich' })
+        }
+        ipList = parsed
+      }
+
       const scanPorts = [80, 443, 22, 8080]
       const results: { ip: string; latency: number; open_ports: number[] }[] = []
       const promises: Promise<void>[] = []
 
-      for (let i = 1; i <= 254; i++) {
-        const ip = `${subnet}.${i}`
+      for (const ip of ipList) {
         promises.push((async () => {
           const open_ports: number[] = []
           let firstLatency: number | null = null
@@ -228,9 +266,12 @@ export async function networkRoutes(app: FastifyInstance) {
       ])
 
       return results.sort((a, b) => {
-        const aLast = parseInt(a.ip.split('.').pop() ?? '0', 10)
-        const bLast = parseInt(b.ip.split('.').pop() ?? '0', 10)
-        return aLast - bLast
+        const aParts = a.ip.split('.').map(Number)
+        const bParts = b.ip.split('.').map(Number)
+        for (let i = 0; i < 4; i++) {
+          if (aParts[i] !== bParts[i]) return (aParts[i] ?? 0) - (bParts[i] ?? 0)
+        }
+        return 0
       })
     }
   )

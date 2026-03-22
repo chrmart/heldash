@@ -126,7 +126,7 @@ function DeviceModal({ device, existingGroups, onClose, onSave }: DeviceModalPro
 
           <div>
             <label className="field-label">Subnetz (für Scanner-Vorausfüllung)</label>
-            <input className="input" value={subnet} onChange={e => setSubnet(e.target.value)} placeholder="192.168.1" />
+            <input className="input" value={subnet} onChange={e => setSubnet(e.target.value)} placeholder="z.B. 192.168.1.0/24" />
           </div>
 
           <div>
@@ -203,9 +203,13 @@ function ScannerModal({ defaultSubnet, existingIps, onClose, onAddDevice }: Scan
   const [scanned, setScanned] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const isValidSubnet = (s: string) =>
+    /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(s) ||
+    /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/.test(s)
+
   const handleScan = async () => {
     if (!subnet.trim()) { setError('Subnetz eingeben'); return }
-    if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(subnet.trim())) { setError('Format: 192.168.1'); return }
+    if (!isValidSubnet(subnet.trim())) { setError('Format: 192.168.1.0/24 oder 10.10.0.0/20 (max. /22)'); return }
     setScanning(true)
     setError(null)
     setResults([])
@@ -228,14 +232,15 @@ function ScannerModal({ defaultSubnet, existingIps, onClose, onAddDevice }: Scan
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={20} /></button>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <input className="input" style={{ flex: 1 }} value={subnet} onChange={e => setSubnet(e.target.value)} placeholder="192.168.1" />
+        <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+          <input className="input" style={{ flex: 1 }} value={subnet} onChange={e => setSubnet(e.target.value)} placeholder="z.B. 192.168.1.0/24 oder 10.10.0.0/20" />
           <button className="btn btn-primary" onClick={handleScan} disabled={scanning}>
             {scanning ? 'Scanne...' : 'Scannen'}
           </button>
         </div>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, marginTop: 0 }}>Maximal /22 (1024 Hosts)</p>
 
-        {!scanned && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 0 }}>Scan dauert ca. 20–30 Sekunden</p>}
+        {!scanned && !error && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 0 }}>Scan dauert ca. 20–30 Sekunden</p>}
         {error && <div className="error-banner" style={{ marginBottom: 12 }}>{error}</div>}
 
         {scanned && !scanning && (

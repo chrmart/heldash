@@ -277,6 +277,31 @@ function GuideTab() {
         </ul>
       </GuideSection>
 
+      <GuideSection title="Duplicati einrichten">
+        <p style={{ margin: '0 0 8px' }}>Duplicati ist ein benutzerfreundliches, verschlüsseltes Backup-Tool mit Web-UI:</p>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, background: 'var(--bg-surface)', border: '1px solid var(--glass-border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', margin: '0 0 10px', overflowX: 'auto', whiteSpace: 'pre' }}>{`docker run -d \\
+  --name duplicati \\
+  -p 8200:8200 \\
+  -v /mnt/user/appdata/duplicati:/data \\
+  -v /mnt/user/appdata:/source:ro \\
+  -v /mnt/user/backup:/backup \\
+  lscr.io/linuxserver/duplicati:latest`}</div>
+        <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <li>Container starten (Befehl oben)</li>
+          <li><code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>http://server-ip:8200</code> öffnen</li>
+          <li>"Neue Sicherung" → Name vergeben</li>
+          <li>Verschlüsselung: Passwort setzen (<strong>IMMER!</strong>)</li>
+          <li>Ziel: "Lokaler Ordner oder Laufwerk" → <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>/backup</code></li>
+          <li>Quelle: <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>/source/appdata</code> (oder einzelne Ordner)</li>
+          <li>Zeitplan: täglich 02:00 Uhr</li>
+          <li>Speichern + ersten Backup starten</li>
+          <li>HELDASH: URL <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>http://server-ip:8200</code> + API-Key eintragen</li>
+        </ol>
+        <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+          API-Key finden: Duplicati → Einstellungen → API-Schlüssel
+        </p>
+      </GuideSection>
+
       <GuideSection title="Backup testen">
         <p style={{ margin: '0 0 8px' }}>Ein Backup das nie getestet wurde ist keines:</p>
         <ul style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -285,6 +310,54 @@ function GuideTab() {
           <li>Prüfe Backup-Integrität (Checksummen) automatisch</li>
           <li>Stelle sicher dass Backups vollständig und lesbar sind</li>
         </ul>
+      </GuideSection>
+
+      <GuideSection title="Vollständige Wiederherstellung (Disaster Recovery)">
+        <p style={{ margin: '0 0 10px' }}>Schritt-für-Schritt-Anleitung um das gesamte System neu aufzusetzen:</p>
+        <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <li>
+            <strong>Unraid USB neu erstellen</strong><br />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>usb.unraid.net → USB Creator herunterladen → Neuen USB erstellen</span>
+          </li>
+          <li>
+            <strong>USB Backup einspielen</strong> (falls CA USB Backup vorhanden)<br />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>config/</code> Ordner vom Backup auf neuen USB kopieren — Netzwerk, Shares, Benutzer wiederhergestellt
+            </span>
+          </li>
+          <li>
+            <strong>Unraid starten + Array/Pool konfigurieren</strong><br />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>RAID1 SSDs/NVMes werden automatisch erkannt → Pool zuweisen + starten</span>
+          </li>
+          <li>
+            <strong>HELDASH zuerst starten</strong><br />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>docker run ... (aus Docker Config Export) oder manuell neu einrichten</span>
+          </li>
+          <li>
+            <strong>Docker Configs importieren</strong><br />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>HELDASH → Backup → Docker → JSON importieren → Alle Container werden neu erstellt</span>
+          </li>
+          <li>
+            <strong>CA Backup restore (Appdata)</strong><br />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>CA Backup Plugin installieren → Restore aus Backup-Ziel starten</span>
+          </li>
+          <li>
+            <strong>Datenbanken wiederherstellen</strong><br />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              SQL-Dateien in Container kopieren: <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>docker exec mariadb mysql {'<'} db.sql</code>
+            </span>
+          </li>
+          <li>
+            <strong>VMs wiederherstellen</strong><br />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              XML + IMG Dateien zurückkopieren nach <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>/etc/libvirt/</code>
+            </span>
+          </li>
+          <li>
+            <strong>Fertig ✓</strong><br />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Alle Services prüfen → Backup-Quellen in HELDASH neu verbinden</span>
+          </li>
+        </ol>
       </GuideSection>
     </div>
   )

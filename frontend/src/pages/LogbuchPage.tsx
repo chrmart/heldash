@@ -249,8 +249,8 @@ function EreignisKalender({ days }: { days: CalendarDay[] }) {
 
 // ── Aktivitäten Tab ───────────────────────────────────────────────────────────
 
-const ACTIVITY_CATEGORIES = ['all', 'system', 'docker', 'ha', 'recyclarr']
-const categoryLabel: Record<string, string> = { all: 'Alle', system: 'System', docker: 'Docker', ha: 'HA', recyclarr: 'Recyclarr' }
+const ACTIVITY_CATEGORIES = ['all', 'system', 'docker', 'ha', 'recyclarr', 'network', 'backup']
+const categoryLabel: Record<string, string> = { all: 'Alle', system: 'System', docker: 'Docker', ha: 'HA', recyclarr: 'Recyclarr', network: 'Netzwerk', backup: 'Backup' }
 const categoryIconNode: Record<string, React.ReactNode> = {
   docker: <Container size={12} />,
   ha: <Home size={12} />,
