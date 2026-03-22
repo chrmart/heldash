@@ -281,8 +281,8 @@ async function start() {
   const runScheduledHealthChecks = async () => {
     const db = getDb()
     const services = db.prepare(
-      'SELECT id, name, url, check_url, last_status FROM services WHERE check_enabled = 1'
-    ).all() as { id: string; name: string; url: string; check_url: string | null; last_status: string | null }[]
+      'SELECT id, name, url, check_url, last_status, last_checked FROM services WHERE check_enabled = 1'
+    ).all() as { id: string; name: string; url: string; check_url: string | null; last_status: string | null; last_checked: string | null }[]
 
     await Promise.allSettled(services.map(async (svc) => {
       const checkUrl = svc.check_url || svc.url

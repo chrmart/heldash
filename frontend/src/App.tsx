@@ -116,14 +116,6 @@ function App() {
     if (!canSeeDocker) setPage('dashboard')
   }, [isAdmin, authReady, authUser, userGroups, page])
 
-  // Poll service statuses every 30s (reads DB, no pinging)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadServices()
-    }, 30_000)
-    return () => clearInterval(interval)
-  }, [])
-
   // Auto theme: re-apply every 60s so switches happen on time
   useEffect(() => {
     if (!settings?.auto_theme_enabled) return

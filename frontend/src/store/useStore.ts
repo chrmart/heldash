@@ -275,7 +275,7 @@ export const useStore = create<AppState>((set, get) => ({
   startHealthPolling: () => {
     if (healthCheckInterval) return
     healthCheckInterval = setInterval(async () => {
-      try { await get().checkAllServices() } catch { /* ignore */ }
+      try { await get().loadServices() } catch { /* ignore */ }
     }, 30_000)
   },
 
