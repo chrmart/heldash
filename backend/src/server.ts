@@ -270,8 +270,8 @@ async function start() {
   // ── Always-on HA WebSocket connections ────────────────────────────────────────
   initHaWsClients()
 
-  // ── Server-side service health check scheduler (every 2 minutes) ─────────────
-  const HEALTH_INTERVAL_MS = 2 * 60 * 1000
+  // ── Server-side service health check scheduler (every 30 seconds) ────────────
+  const HEALTH_INTERVAL_MS = 30_000
   const healthPingAgent = new Agent({
     headersTimeout: 10_000,
     bodyTimeout: 10_000,
