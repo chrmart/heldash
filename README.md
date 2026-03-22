@@ -104,6 +104,15 @@ Home Assistant und mehr — alles in einer Oberfläche.
 - ▶️ Start / Stop / Restart (nur Admins)
 - 🔒 Docker-Seitenzugriff per Gruppe konfigurierbar
 
+**Logbuch**
+- 📋 Zentrales Monitoring-Center — alle Aktivitäten an einem Ort
+- 💯 Homelab Health Score (0–100) — berechnet aus Services, Docker, Recyclarr, HA
+- 📅 Ereignis-Kalender — GitHub-Graph-Stil, letzten 84 Tage
+- 🔔 Anomalie-Erkennung — instabile Services automatisch markiert
+- 📊 Tabs: Aktivitäten | Uptime | Sync-Verlauf | Docker Events
+- 🔍 Filter nach Kategorie, Zeitraum und Freitext
+- 🔄 Erweiterbar — neue Integrationen (z.B. Unraid) als eigener Tab
+
 **Home Assistant**
 - 🏠 Multi-Instanz-Support (hinzufügen/bearbeiten/löschen/testen)
 - 🔍 Entity-Browser — Domain-Filter-Tabs + Suche
@@ -132,12 +141,7 @@ Home Assistant und mehr — alles in einer Oberfläche.
 - 📊 Pinbar in Topbar für Schnellübersicht
 - 🔄 Live-Polling — alle Widgets aktualisieren automatisch
 
-**Apps & Services**
-- 📈 Service Uptime-Graph — 24h Verlauf pro Service (auf Anfrage)
-- 📊 Uptime-Übersicht — dedizierter Tab mit allen Services, Sortierung, 7-Tage-Prozent
-
 **Dashboard & UX**
-- 📋 Aktivitäten-Feed — HA Events (state changes via WebSocket), Docker Container-Statuswechsel (via Events stream), Service-Ausfälle, Recyclarr Syncs
 - ➕ Quick-Actions in Topbar — kontextsensitiver Add-Button pro Seite
 - 🎓 Onboarding-Wizard — geführte Ersteinrichtung beim ersten Start
 - 👁️ Gast-Sichtbarkeits-Overlay — Admin sieht direkt welche Elemente für Gäste sichtbar sind
@@ -171,9 +175,9 @@ Home Assistant und mehr — alles in einer Oberfläche.
 docker run -d \
   --name heldash \
   -p 8282:8282 \
-  -v /mnt/cache/appdata/heldash:/data \
+  -v /mnt/user/appdata/heldash:/data \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  -v /mnt/cache/appdata/recyclarr:/recyclarr \
+  -v /mnt/user/appdata/recyclarr:/recyclarr \
   -e SECRET_KEY=$(openssl rand -hex 32) \
   -e SECURE_COOKIES=false \
   ghcr.io/kreuzbube88/heldash:latest
@@ -205,19 +209,32 @@ Beim ersten Start erscheint automatisch die Admin-Einrichtungsseite.
 | Variable | Pflicht | Standard | Beschreibung |
 |---|---|---|---|
 | `SECRET_KEY` | **Ja** | unsicher | JWT-Schlüssel. `openssl rand -hex 32` |
-| `SECURE_COOKIES` | **Ja** | `false` | `false` = HTTP, `true` = HTTPS |
-| `PORT` | Nein | `8282` | Listen-Port |
-| `DATA_DIR` | Nein | `/data` | Datenbank- und Icon-Verzeichnis |
+| `SECURE_COOKIES` | **Ja** | `false` | `false` = HTTP lokal, `true` = HTTPS via Reverse Proxy |
+| `PORT` | Nein | `8282` | Listen-Port des Webservers |
+| `DATA_DIR` | Nein | `/data` | Datenbank, Icons, Hintergründe |
 | `LOG_LEVEL` | Nein | `info` | `debug` · `info` · `warn` · `error` |
-| `LOG_FORMAT` | Nein | `pretty` | `pretty` = lesbar, `json` = strukturiert |
-| `RECYCLARR_CONFIG_PATH` | Nein | `/recyclarr/recyclarr.yml` | Recyclarr Config |
-| `RECYCLARR_CONTAINER_NAME` | Nein | `recyclarr` | Recyclarr Container-Name |
+| `LOG_FORMAT` | Nein | `pretty` | `pretty` = lesbar · `json` = für Log-Aggregatoren |
+| `RECYCLARR_CONFIG_PATH` | Nein | `/recyclarr/recyclarr.yml` | Pfad zur recyclarr.yml (Container-Perspektive) |
+| `RECYCLARR_CONTAINER_NAME` | Nein | `recyclarr` | Name des Recyclarr Docker-Containers |
+| `PUID` | Nein | `99` | User-ID für Dateiberechtigungen (Unraid: 99) |
+| `PGID` | Nein | `100` | Group-ID für Dateiberechtigungen (Unraid: 100) |
 
 ---
 
 ## Unraid
 
-Community Applications Template verfügbar: **`heldash.xml`**
+Community Applications Template: **`heldash.xml`** im Repository-Root.
+
+**Wichtige Pfade:**
+| Pfad im Container | Host-Pfad (Standard) | Beschreibung |
+|---|---|---|
+| `/data` | `/mnt/user/appdata/heldash` | Datenbank + Konfiguration |
+| `/var/run/docker.sock` | `/var/run/docker.sock` | Docker-Integration (ro) |
+| `/recyclarr` | `/mnt/user/appdata/recyclarr` | Recyclarr Config (optional) |
+
+**Pflichtfelder bei Installation:**
+- `SECRET_KEY` — `openssl rand -hex 32` im Terminal generieren
+- `SECURE_COOKIES` — `false` für lokalen Zugriff, `true` bei HTTPS
 
 ---
 
@@ -264,9 +281,16 @@ Vollständige Dokumentation direkt im Dashboard unter **About**.
 - [x] Gast-Sichtbarkeits-Overlay
 - [x] Import/Export Services
 - [x] About-Seite als integriertes Doku-Center
+- [x] Logbuch — Health Score, Ereignis-Kalender, Anomalie-Erkennung
+- [x] Aktivitäten-Feed mit Echtzeit-Updates (kein Page Reload)
+- [x] Service Status Echtzeit-Updates
+- [x] Docker Events stream (kein Polling)
+- [x] Recyclarr Zeitplan hot-reload (kein Container-Neustart)
+- [x] Unraid Community Applications Template
 
 ### Geplant
-- [ ] OIDC / SSO via voidauth oder Authentik (UI vorbereitet)
+- [ ] Unraid API Integration (Logbuch-Tab)
+- [ ] OIDC / SSO via Authentik oder voidauth
 - [ ] Torrent-Client Integration (qBittorrent, Transmission, Deluge)
 - [ ] Webhook-Benachrichtigungen (ntfy / Gotify)
 - [ ] Weitere Integrationen (Immich, Jellyfin, Emby, etc.)

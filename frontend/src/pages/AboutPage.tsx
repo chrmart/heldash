@@ -4,7 +4,7 @@ import { LS_ABOUT_TAB } from '../constants'
 import { api } from '../api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type AboutTab = 'overview' | 'setup' | 'docker' | 'media' | 'recyclarr' | 'cfmanager' | 'ha' | 'widgets' | 'design'
+type AboutTab = 'overview' | 'setup' | 'docker' | 'logbuch' | 'media' | 'recyclarr' | 'cfmanager' | 'ha' | 'widgets' | 'design'
 
 // ── CodeBlock ─────────────────────────────────────────────────────────────────
 function CodeBlock({ children }: { children: string }) {
@@ -164,8 +164,7 @@ function TabOverview({ version }: { version: string | null }) {
     { icon: '⚙️', title: 'CF-Manager', desc: 'CFs erstellen, importieren, kopieren' },
     { icon: '🏠', title: 'Home Assistant', desc: 'Entities, Panels, Energy, Areas' },
     { icon: '🧩', title: 'Widgets', desc: 'Systemstatus, AdGuard, Nginx PM' },
-    { icon: '📈', title: 'Uptime', desc: 'Service-Verlauf, 24h Graph, Übersicht' },
-    { icon: '📋', title: 'Aktivitäten', desc: 'HA Events, Docker, Sync-Verlauf' },
+    { icon: '📋', title: 'Logbuch', desc: 'Health Score, Aktivitäten, Uptime, Anomalien' },
     { icon: '🎨', title: 'Design', desc: 'Anpassbares Erscheinungsbild' },
   ]
 
@@ -801,7 +800,7 @@ function TabHA() {
 
       <DocSection title="Aktivitäten-Feed">
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
-          HA-Events werden automatisch im Dashboard-Aktivitäten-Feed erfasst.
+          HA-Events werden automatisch im Logbuch-Aktivitäten-Feed erfasst.
         </p>
         <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Erfasste Domains</p>
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
@@ -812,7 +811,7 @@ function TabHA() {
           <span className="badge badge-neutral">Rate-Limit: max 1 Eintrag pro Entity pro 60 Sekunden</span>
         </div>
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>
-          Anzeige: Dashboard → Aktivitäten-Feed → Filter "HA"
+          Anzeige: Logbuch → Tab "Aktivitäten" → Filter "HA"
         </p>
       </DocSection>
     </>
@@ -916,7 +915,98 @@ function TabWidgets() {
   )
 }
 
-// ── Tab 8: Design & Einstellungen ─────────────────────────────────────────────
+// ── Tab 8: Logbuch ────────────────────────────────────────────────────────────
+function TabLogbuch() {
+  return (
+    <>
+      <DocSection title="Übersicht">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>
+          Das Logbuch ist das zentrale Monitoring-Center von HELDASH.
+          Alle Aktivitäten, Service-Zustände, Sync-Verläufe und Docker-Events
+          sind hier an einem Ort zusammengefasst.
+        </p>
+      </DocSection>
+
+      <DocSection title="Homelab Health Score">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 16px' }}>
+          Der Health Score (0–100) gibt einen schnellen Überblick über den Zustand des Homelabs.
+          Er wird aus vier Bereichen berechnet:
+        </p>
+        <SimpleTable
+          headers={['Bereich', 'Gewichtung', 'Kriterium']}
+          rows={[
+            ['Services', '40 Punkte', 'Anteil online / gesamt'],
+            ['Docker', '30 Punkte', 'Anteil laufend / gesamt'],
+            ['Recyclarr', '20 Punkte', 'Letzter Sync erfolgreich'],
+            ['Home Assistant', '10 Punkte', 'Verbindung aktiv'],
+          ]}
+        />
+        <div style={{ marginTop: 12 }}>
+          <span className="badge badge-neutral">Score wird bei jedem Seitenaufruf neu berechnet — kein Caching</span>
+        </div>
+      </DocSection>
+
+      <DocSection title="Ereignis-Kalender">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          Der Kalender zeigt die Aktivitätsdichte der letzten 84 Tage im GitHub-Contribution-Graph-Stil.
+          Jede Zelle steht für einen Tag — dunklere Farbe = mehr Ereignisse.
+        </p>
+        <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>Datenbasis: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>activity_log</code> Tabelle, nach Datum gruppiert</li>
+          <li>Hover über eine Zelle zeigt Datum und Ereignis-Anzahl</li>
+          <li>Standardmäßig eingeklappt — per Klick ausklappen</li>
+        </ul>
+      </DocSection>
+
+      <DocSection title="Anomalie-Erkennung">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 12px' }}>
+          Services mit auffälligem Verhalten werden automatisch markiert.
+        </p>
+        <SimpleTable
+          headers={['Kriterium', 'Wert']}
+          rows={[
+            ['Kategorie', 'system'],
+            ['Schwere', 'warning'],
+            ['Schwellwert', 'mehr als 3 Offline-Ereignisse in 24 Stunden'],
+          ]}
+        />
+        <div style={{ marginTop: 12 }}>
+          <span className="badge badge-warning">⚠️ Anomalien erscheinen oben im Logbuch als hervorgehobene Karte</span>
+        </div>
+      </DocSection>
+
+      <DocSection title="Tabs">
+        <SimpleTable
+          headers={['Tab', 'Inhalt']}
+          rows={[
+            ['Aktivitäten', 'Chronologischer Feed: HA Events, Docker Statuswechsel, Service-Ausfälle, Recyclarr Syncs'],
+            ['Uptime', 'Service-Verfügbarkeit: 7-Tage-Prozent, 24h-Graph pro Service'],
+            ['Sync-Verlauf', 'Letzte 10 Recyclarr-Syncs mit Timestamp, Ergebnis und Output auf Anfrage'],
+            ['Docker Events', 'Rohe Container-Ereignisse aus dem Docker Events stream'],
+          ]}
+        />
+      </DocSection>
+
+      <DocSection title="Filter">
+        <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li><strong>Kategorie</strong>: Alle · HA · Docker · System · Recyclarr</li>
+          <li><strong>Zeitraum</strong>: Letzte Stunde · 24h · 7 Tage · 30 Tage</li>
+          <li><strong>Freitext</strong>: Suche in Ereignis-Beschreibungen</li>
+        </ul>
+      </DocSection>
+
+      <DocSection title="Erweiterbarkeit">
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>
+          Das Logbuch ist modular aufgebaut. Neue Integrationen (z.B. Unraid API) werden
+          als eigener Tab in das <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>TABS</code> Array
+          in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>LogbuchPage.tsx</code> eingetragen.
+        </p>
+      </DocSection>
+    </>
+  )
+}
+
+// ── Tab 9: Design & Einstellungen ─────────────────────────────────────────────
 function TabDesign() {
   return (
     <>
@@ -984,12 +1074,13 @@ function TabDesign() {
 }
 
 // ── AboutPage ─────────────────────────────────────────────────────────────────
-const TAB_ORDER: AboutTab[] = ['overview', 'setup', 'docker', 'media', 'recyclarr', 'cfmanager', 'ha', 'widgets', 'design']
+const TAB_ORDER: AboutTab[] = ['overview', 'setup', 'docker', 'logbuch', 'media', 'recyclarr', 'cfmanager', 'ha', 'widgets', 'design']
 
 const TAB_LABELS: Record<AboutTab, string> = {
   overview: 'Übersicht',
   setup: 'Installation',
   docker: 'Docker',
+  logbuch: 'Logbuch',
   media: 'Media & Seerr',
   recyclarr: 'Recyclarr',
   cfmanager: 'CF-Manager',
@@ -1037,6 +1128,7 @@ export function AboutPage() {
       {activeTab === 'overview'   && <TabOverview version={version} />}
       {activeTab === 'setup'      && <TabSetup />}
       {activeTab === 'docker'     && <TabDocker />}
+      {activeTab === 'logbuch'    && <TabLogbuch />}
       {activeTab === 'media'      && <TabMedia />}
       {activeTab === 'recyclarr'  && <TabTrash />}
       {activeTab === 'cfmanager'  && <TabCFManager />}

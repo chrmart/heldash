@@ -138,6 +138,13 @@ All colors via CSS variables. Theme switch: `data-theme` + `data-accent` on `<ht
 - **Service health scheduler**: server writes `last_status` every 2 min server-side; frontend polls `/api/services` every 30s to read it — no client-side ping.
 - **CF groups 50% threshold**: profile-cfs route filters group relevance at ≥50% CF overlap; `allGroupCfNamesLower` Set used as fallback to include CFs that appear in any group.
 - **User CFs in profile-cfs**: user-created CFs are excluded from `cfs[]` array in the response — frontend receives them separately and merges for display.
+- **Logbuch**: single source of truth for all monitoring; activity feed + uptime moved here from Dashboard/ServicesPage. New integrations (Unraid etc.) → add tab to TABS array in LogbuchPage.
+- **Health score**: services 40pts + docker 30pts + recyclarr 20pts + ha 10pts; range 0–100.
+- **Logbuch calendar**: activity_log grouped by date, last 84 days, GitHub-graph style.
+- **Anomaly detection**: category=system, severity=warning, >3 occurrences in 24h → service marked as unstable.
+- **Docker Events pendingStops**: delays 'gestoppt' log entry by 5s; 'start' event cancels pending stop (restart sequence); 'restart' event also cancels timer.
+- **Service health scheduler**: server-side, every 30s, writes last_status + last_checked; frontend loadServices() every 15s reads from DB. ServiceCard subscribes directly to Zustand store for last_status.
+- **Activity timestamps**: SQLite `datetime('now')` stores UTC without 'Z' suffix; backend appends 'Z' to created_at before returning to frontend for correct timezone display.
 
 ## Deploy
 
