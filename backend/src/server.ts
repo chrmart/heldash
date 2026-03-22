@@ -22,6 +22,7 @@ import { haRoutes } from './routes/ha'
 import { tmdbRoutes } from './routes/tmdb'
 import recyclarrRoutes, { initRecyclarrSchedulers } from './routes/recyclarr'
 import { activityRoutes, logActivity } from './routes/activity'
+import { logbuchRoutes } from './routes/logbuch'
 import { initHaWsClients } from './clients/ha-ws-manager'
 import { getDb } from './db/database'
 import { Agent, request as undiciRequest } from 'undici'
@@ -237,6 +238,7 @@ async function start() {
   await app.register(tmdbRoutes)
   await app.register(recyclarrRoutes)
   await app.register(activityRoutes)
+  await app.register(logbuchRoutes)
 
   // ── Docker container state poller (logs transitions to activity feed) ─────────
   if (dockerSocketPresent) {

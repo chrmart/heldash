@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react'
 import {
   LayoutDashboard, Settings, AppWindow, Info, Tv2, BarChart2, Container, Home,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, ScrollText,
 } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
@@ -113,6 +113,10 @@ export function Sidebar({ page, onNavigate }: Props) {
             )}
             <NavItem icon={<Home size={16} />} label="Home Assistant" active={page === 'home_assistant'} onClick={() => onNavigate('home_assistant')} collapsed={collapsed} />
           </>
+        )}
+
+        {isAuthenticated && (
+          <NavItem icon={<ScrollText size={16} />} label="Logbuch" active={page === 'logbuch'} onClick={() => onNavigate('logbuch')} collapsed={collapsed} />
         )}
 
         {!collapsed && <span className="nav-section-label" style={{ marginTop: 8 }}>System</span>}

@@ -11,6 +11,7 @@ import { MediaPage } from './pages/MediaPage'
 import { WidgetsPage } from './pages/WidgetsPage'
 import { DockerPage } from './pages/DockerPage'
 import { HaPage } from './pages/HaPage'
+import { LogbuchPage } from './pages/LogbuchPage'
 import { AboutPage } from './pages/AboutPage'
 import { SetupPage } from './pages/SetupPage'
 import { ServiceModal } from './components/ServiceModal'
@@ -215,6 +216,7 @@ function App() {
                   onAddPanelClose={() => setShowAddHaPanel(false)}
                 />
               )}
+              {page === 'logbuch' && <LogbuchPage />}
               {page === 'about' && <AboutPage />}
             </div>
           </div>

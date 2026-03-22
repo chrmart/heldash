@@ -1,10 +1,9 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { useWidgetStore } from '../store/useWidgetStore'
 import { useDockerStore } from '../store/useDockerStore'
-import { useActivityStore } from '../store/useActivityStore'
 import { ServiceCard } from '../components/ServiceCard'
 import { ArrCardContent, SabnzbdCardContent, SeerrCardContent } from '../components/MediaCard'
 import { AdGuardStatsView, DockerOverviewContent, HaStatsView, CustomButtonsView, StatBar, NginxPMStatsView, HaEnergyWidgetView, CalendarWidgetContent } from './WidgetsPage'
@@ -57,7 +56,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, X, Container, ChevronDown, ChevronRight, Activity, Eye, EyeOff, RefreshCw, Home, Film, Box } from 'lucide-react'
+import { GripVertical, X, Container, ChevronDown, Eye, EyeOff, RefreshCw, Home } from 'lucide-react'
 
 // ── Shared edit-mode overlay (drag handle + remove button + group selector) ────
 function EditOverlay({
@@ -735,11 +734,7 @@ export function Dashboard({ onEdit }: Props) {
   const { items, groups, editMode, guestMode, loading, reorder, reorderGroups, createGroup, showVisibilityOverlay, setShowVisibilityOverlay } = useDashboardStore()
   const { loadStats, startPollingAll, stopPollingAll } = useWidgetStore()
   const { loadContainers } = useDockerStore()
-  const { entries: activityEntries, loading: activityLoading, loadEntries: loadActivityEntries } = useActivityStore()
-  const [activityOpen, setActivityOpen] = useState(false)
-  const [activityCategory, setActivityCategory] = useState('all')
   const [guestVisibility, setGuestVisibility] = useState<{ services: string[]; arr: string[]; widgets: string[] }>({ services: [], arr: [], widgets: [] })
-  const activityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -777,24 +772,6 @@ export function Dashboard({ onEdit }: Props) {
     startPollingAll(allPollable.map(i => ({ id: i.widget.id, type: i.widget.type })))
     return () => stopPollingAll()
   }, [widgetItemIds])
-
-  // Activity feed auto-refresh — always poll regardless of panel state
-  useEffect(() => {
-    if (!isAuthenticated) return
-    activityIntervalRef.current = setInterval(() => {
-      loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
-    }, 10_000)
-    return () => {
-      if (activityIntervalRef.current) { clearInterval(activityIntervalRef.current); activityIntervalRef.current = null }
-    }
-  }, [activityCategory, isAuthenticated])
-
-  // Load immediately when panel opens
-  useEffect(() => {
-    if (activityOpen) {
-      loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
-    }
-  }, [activityOpen, activityCategory])
 
   // Load guest visibility data when overlay toggled
   useEffect(() => {
@@ -865,24 +842,6 @@ export function Dashboard({ onEdit }: Props) {
     </DndContext>
   )
 
-  const formatActivityTime = (iso: string) => {
-    const d = new Date(iso)
-    const pad = (n: number) => String(n).padStart(2, '0')
-    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ` +
-           `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  }
-
-  const ACTIVITY_CATEGORIES = ['all', 'media', 'docker', 'recyclarr', 'ha', 'system']
-  const categoryLabel: Record<string, string> = { all: 'Alle', media: 'Media', docker: 'Docker', recyclarr: 'Recyclarr', ha: 'HA', system: 'System' }
-  const categoryIconNode: Record<string, React.ReactNode> = {
-    media: <Film size={12} />,
-    docker: <Container size={12} />,
-    recyclarr: <RefreshCw size={12} />,
-    ha: <Home size={12} />,
-    system: <Activity size={12} />,
-    all: <Box size={12} />,
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Visibility overlay toggle (admin + guest mode) */}
@@ -934,108 +893,6 @@ export function Dashboard({ onEdit }: Props) {
         ungroupedSection
       )}
 
-      {/* Activity Feed — only for authenticated users, never guests */}
-      {isAuthenticated && !guestMode && (
-        <div className="glass" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
-          {/* Header */}
-          <button
-            onClick={() => {
-              const next = !activityOpen
-              setActivityOpen(next)
-              if (next && activityEntries.length === 0) {
-                loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
-              }
-            }}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-              padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--text-primary)',
-            }}
-          >
-            <Activity size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, flex: 1, textAlign: 'left' }}>
-              Aktivitäten
-            </span>
-            {activityLoading && <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />}
-            <ChevronDown
-              size={14}
-              style={{
-                color: 'var(--text-muted)',
-                transform: activityOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform var(--transition-base)',
-              }}
-            />
-          </button>
-
-          {activityOpen && (
-            <div style={{ borderTop: '1px solid var(--glass-border)', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {/* Category filter pills */}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {ACTIVITY_CATEGORIES.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setActivityCategory(cat)}
-                    className={activityCategory === cat ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-                    style={{ fontSize: 11, padding: '3px 10px', gap: 4 }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center' }}>{categoryIconNode[cat]}</span>
-                    {categoryLabel[cat]}
-                  </button>
-                ))}
-                <button
-                  onClick={() => loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})}
-                  className="btn btn-ghost btn-sm"
-                  style={{ fontSize: 11, padding: '3px 8px', marginLeft: 'auto' }}
-                  title="Aktualisieren"
-                >
-                  <RefreshCw size={11} />
-                </button>
-              </div>
-
-              {/* Timeline */}
-              {activityEntries.length === 0 && !activityLoading ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0', lineHeight: 1.6 }}>
-                  Noch keine Aktivitäten aufgezeichnet —<br />
-                  Aktivitäten erscheinen nach dem ersten Sync, Docker-Event oder HA-Aktion
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {activityEntries.slice(0, 20).map(entry => (
-                    <div
-                      key={entry.id}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '6px 8px', borderRadius: 'var(--radius-sm)',
-                        background: entry.severity === 'error' ? 'rgba(var(--red-rgb,220,38,38),0.08)'
-                          : entry.severity === 'warning' ? 'rgba(var(--yellow-rgb,234,179,8),0.08)'
-                          : 'transparent',
-                      }}
-                    >
-                      <span style={{
-                        display: 'flex', alignItems: 'center', flexShrink: 0,
-                        color: entry.severity === 'error' ? 'var(--status-offline)'
-                          : entry.severity === 'warning' ? 'var(--status-warning)'
-                          : 'var(--text-muted)',
-                      }}>
-                        {categoryIconNode[entry.category] ?? <Box size={12} />}
-                      </span>
-                      <span style={{
-                        fontSize: 12, flex: 1, lineHeight: 1.4,
-                        color: entry.severity === 'error' ? 'var(--status-offline)'
-                          : entry.severity === 'warning' ? 'var(--status-warning)'
-                          : 'var(--text-secondary)',
-                      }}>{entry.message}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                        {formatActivityTime(entry.created_at)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }

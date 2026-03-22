@@ -385,6 +385,20 @@ export const api = {
     healthHistory: (id: string) => req<{ history: { hour: string; uptime: number }[]; uptimePercent7d: number | null }>(`/services/${id}/health-history`),
   },
 
+  logbuch: {
+    healthScore: () => req<{
+      score: number
+      breakdown: {
+        services: { online: number; total: number; points: number }
+        docker: { running: number; total: number; points: number; available: boolean }
+        recyclarr: { lastSyncSuccess: boolean | null; points: number }
+        ha: { reachable: number; total: number; points: number }
+      }
+    }>('/logbuch/health-score'),
+    calendar: () => req<{ days: { date: string; count: number; maxSeverity: string }[] }>('/logbuch/calendar'),
+    anomalies: () => req<{ anomalies: { serviceId: string; serviceName: string | null; offlineCount: number }[] }>('/logbuch/anomalies'),
+  },
+
   health: () => req<{ status: string; version: string; uptime: number }>('/health'),
   serverTime: () => req<{ iso: string }>('/time'),
 }
