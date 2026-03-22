@@ -89,6 +89,7 @@ export function initDockerPoller(): void {
       const res = await dockerReq('/v1.41/containers/json?all=true')
       if (!res.statusCode || res.statusCode >= 400) { await res.body.text().catch(() => {}); return }
       const containers = await res.body.json() as DockerContainerJson[]
+      console.log(`[Docker Poller] Containers: ${containers.length}, Tracked: ${containerStates.size}`)
       let anyStateChange = false
       for (const c of containers) {
         const name = (c.Names[0] ?? c.Id).replace(/^\//, '')
