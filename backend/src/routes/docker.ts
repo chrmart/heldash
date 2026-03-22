@@ -77,74 +77,97 @@ function parseMuxedFrame(buf: Buffer): { consumed: number; stream: 'stdout' | 's
   return { consumed: 8 + size, stream, payload }
 }
 
-// ── Docker container state polling ────────────────────────────────────────────
-// Tracks container state transitions and logs to activity feed.
-const containerStates = new Map<string, { name: string; state: string }>()
-const containerExitedAt = new Map<string, number>()
+// ── Docker Events stream ──────────────────────────────────────────────────────
+// Persistent stream to Docker Events API — no polling overhead.
+const containerNames = new Map<string, string>()  // id → name
 
 export function initDockerPoller(): void {
-  console.log('[Docker Poller] Starting with 10s delay, 15s interval')
-  const poll = async () => {
+  console.log('[Docker Events] Starting event stream listener')
+
+  const loadContainerNames = async () => {
     try {
       const res = await dockerReq('/v1.41/containers/json?all=true')
-      if (!res.statusCode || res.statusCode >= 400) { await res.body.text().catch(() => {}); return }
-      const containers = await res.body.json() as DockerContainerJson[]
-      console.log(`[Docker Poller] Containers: ${containers.length}, Tracked: ${containerStates.size}`)
-      let anyStateChange = false
-      for (const c of containers) {
-        const name = (c.Names[0] ?? c.Id).replace(/^\//, '')
-        const prev = containerStates.get(c.Id)
-        if (prev && prev.state !== c.State) {
-          anyStateChange = true
-          console.log(`[Docker Poller] State change: ${name} ${prev.state} → ${c.State}`)
-          if (c.State === 'running' && prev.state === 'exited') {
-            const exitedAt = containerExitedAt.get(c.Id)
-            if (exitedAt && Date.now() - exitedAt < 30_000) {
-              logActivity('docker', `Container '${name}' neugestartet`, 'info', { containerId: c.Id })
-            } else {
-              logActivity('docker', `Container '${name}' gestartet`, 'info', { containerId: c.Id })
-            }
-            containerExitedAt.delete(c.Id)
-          } else if (c.State === 'exited' && prev.state === 'running') {
-            containerExitedAt.set(c.Id, Date.now())
-            logActivity('docker', `Container '${name}' gestoppt/neugestartet...`, 'info', { containerId: c.Id })
-          } else if (c.State === 'restarting' && prev.state === 'running') {
-            logActivity('docker', `Container '${name}' wird neugestartet`, 'info', { containerId: c.Id })
-          } else if (c.State === 'running' && prev.state === 'restarting') {
-            logActivity('docker', `Container '${name}' neugestartet`, 'info', { containerId: c.Id })
-          } else if (c.State === 'dead') {
-            logActivity('docker', `Container '${name}' gestoppt`, 'warning', { containerId: c.Id })
-          }
+      if (res.statusCode === 200) {
+        const containers = await res.body.json() as DockerContainerJson[]
+        for (const c of containers) {
+          const name = (c.Names[0] ?? c.Id).replace(/^\//, '')
+          containerNames.set(c.Id, name)
         }
-        containerStates.set(c.Id, { name, state: c.State })
-      }
-      // Remove containers no longer present
-      const currentIds = new Set(containers.map(c => c.Id))
-      for (const [id] of containerStates) {
-        if (!currentIds.has(id)) containerStates.delete(id)
-      }
-      // Fast follow-up polls to catch rapid transitions (running→restarting→running)
-      if (anyStateChange) {
-        setTimeout(() => poll().catch(() => {}), 1_000)
-        setTimeout(() => poll().catch(() => {}), 5_000)
-        setTimeout(() => poll().catch(() => {}), 10_000)
+        console.log(`[Docker Events] Loaded ${containerNames.size} container names`)
+      } else {
+        await res.body.dump()
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (!msg.includes('ENOENT') && !msg.includes('ECONNREFUSED')) {
-        console.error('[Docker Poller] Poll error:', msg)
-      }
+      console.error('[Docker Events] Failed to load container names:', e)
     }
   }
-  // 10s startup delay so Docker socket is settled, then every 15s
-  setTimeout(() => {
-    console.log('[Docker Poller] First poll starting')
-    poll()
-      .then(() => console.log('[Docker Poller] First poll complete'))
-      .catch(e => console.error('[Docker Poller] First poll failed:', e))
-    setInterval(() => {
-      poll().catch(e => console.error('[Docker Poller] Poll failed:', e))
-    }, 2_000)
+
+  const startEventStream = async () => {
+    try {
+      const res = await dockerClient.request({
+        path: '/v1.41/events?filters=' + encodeURIComponent(JSON.stringify({ type: ['container'] })),
+        method: 'GET',
+      })
+
+      if (!res.statusCode || res.statusCode >= 400) {
+        await res.body.text().catch(() => {})
+        console.error('[Docker Events] Failed to connect, retrying in 10s')
+        setTimeout(() => startEventStream(), 10_000)
+        return
+      }
+
+      console.log('[Docker Events] Stream connected')
+
+      let buffer = ''
+      for await (const chunk of res.body) {
+        buffer += (chunk as Buffer).toString('utf8')
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          try {
+            const event = JSON.parse(trimmed) as {
+              status: string
+              id: string
+              Actor: { Attributes: Record<string, string> }
+            }
+
+            const status = event.status
+            const id = event.id
+            const attrs = event.Actor?.Attributes ?? {}
+            const name = attrs.name ?? containerNames.get(id) ?? id.slice(0, 12)
+
+            if (attrs.name) containerNames.set(id, attrs.name)
+
+            if (status === 'die') {
+              logActivity('docker', `Container '${name}' gestoppt`, 'warning', { containerId: id })
+            } else if (status === 'start') {
+              logActivity('docker', `Container '${name}' gestartet`, 'info', { containerId: id })
+            } else if (status === 'restart') {
+              logActivity('docker', `Container '${name}' neugestartet`, 'info', { containerId: id })
+            }
+
+            console.log(`[Docker Events] ${status}: ${name}`)
+          } catch { /* ignore malformed JSON */ }
+        }
+      }
+
+      // Stream ended — reconnect
+      console.log('[Docker Events] Stream ended, reconnecting in 5s')
+      setTimeout(() => startEventStream(), 5_000)
+
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[Docker Events] Stream error:', msg)
+      setTimeout(() => startEventStream(), 10_000)
+    }
+  }
+
+  setTimeout(async () => {
+    await loadContainerNames()
+    await startEventStream()
   }, 10_000)
 }
 
