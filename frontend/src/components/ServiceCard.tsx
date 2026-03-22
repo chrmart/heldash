@@ -11,11 +11,14 @@ interface Props {
 
 export function ServiceCard({ service, onEdit, hideAdminActions }: Props) {
   const { checkService, deleteService, isAdmin } = useStore()
+  const liveStatus = useStore(state => state.services.find(s => s.id === service.id)?.last_status)
+  const liveCheckEnabled = useStore(state => state.services.find(s => s.id === service.id)?.check_enabled)
   const [checking, setChecking] = useState(false)
   const [showActions, setShowActions] = useState(false)
   const [imgError, setImgError] = useState(false)
 
-  const status = service.check_enabled ? (service.last_status ?? 'unknown') : 'unknown'
+  const checkEnabled = liveCheckEnabled ?? service.check_enabled
+  const status = checkEnabled ? (liveStatus ?? service.last_status ?? 'unknown') : 'unknown'
 
   const handleCheck = async (e: React.MouseEvent) => {
     e.preventDefault()
