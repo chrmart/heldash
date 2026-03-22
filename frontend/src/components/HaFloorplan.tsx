@@ -467,6 +467,7 @@ export function HaFloorplan({ instances, entityStates }: HaFloorplanProps) {
   const [selectedMarker, setSelectedMarker] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showLightsOffConfirm, setShowLightsOffConfirm] = useState(false)
   const settingsBtnRef = useRef<HTMLButtonElement>(null)
   const importRef = useRef<HTMLInputElement>(null)
 
@@ -688,8 +689,6 @@ export function HaFloorplan({ instances, entityStates }: HaFloorplanProps) {
   // All lights off
   const handleAllLightsOff = async () => {
     if (!activeFloorplanId) return
-    const name = activeFloorplan?.name ?? 'dieser Etage'
-    if (!window.confirm(`Alle Lichter in "${name}" ausschalten?`)) return
     const firstInstance = instances[0]
     if (!firstInstance) return
     for (const entityId of lightEntityIds) {
@@ -938,9 +937,47 @@ export function HaFloorplan({ instances, entityStates }: HaFloorplanProps) {
       {/* "Alle Lichter aus" FAB */}
       {!editMode && lightEntityIds.length > 0 && (
         <div style={{ position: 'fixed', bottom: 32, right: 32, zIndex: 100 }}>
+          {showLightsOffConfirm && (
+            <>
+              <div
+                style={{ position: 'fixed', inset: 0, zIndex: 0 }}
+                onClick={() => setShowLightsOffConfirm(false)}
+                onKeyDown={e => { if (e.key === 'Escape') setShowLightsOffConfirm(false) }}
+                role="button"
+                tabIndex={-1}
+                aria-label="Abbrechen"
+              />
+              <div className="glass" style={{
+                position: 'absolute', bottom: 'calc(100% + 10px)', right: 0,
+                zIndex: 1, padding: '14px 16px', borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--glass-border)', boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+                minWidth: 240, display: 'flex', flexDirection: 'column', gap: 10,
+              }}>
+                <span style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                  Alle Lichter in &ldquo;{activeFloorplan?.name ?? 'dieser Etage'}&rdquo; ausschalten?
+                </span>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ fontSize: 12, padding: '5px 12px' }}
+                    onClick={() => setShowLightsOffConfirm(false)}
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    className="btn btn-danger"
+                    style={{ fontSize: 12, padding: '5px 12px' }}
+                    onClick={() => { setShowLightsOffConfirm(false); handleAllLightsOff().catch(() => {}) }}
+                  >
+                    Ausschalten
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
           <button
             className="btn btn-ghost"
-            onClick={() => handleAllLightsOff().catch(() => {})}
+            onClick={() => setShowLightsOffConfirm(true)}
             style={{
               borderRadius: 'var(--radius-xl)', padding: '10px 18px',
               background: 'var(--surface-2)', backdropFilter: 'blur(12px)',
