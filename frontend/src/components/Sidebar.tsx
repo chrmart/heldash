@@ -115,11 +115,10 @@ export function Sidebar({ page, onNavigate }: Props) {
           </>
         )}
 
+        {!collapsed && <span className="nav-section-label" style={{ marginTop: 8 }}>System</span>}
         {isAuthenticated && (
           <NavItem icon={<ScrollText size={16} />} label="Logbuch" active={page === 'logbuch'} onClick={() => onNavigate('logbuch')} collapsed={collapsed} />
         )}
-
-        {!collapsed && <span className="nav-section-label" style={{ marginTop: 8 }}>System</span>}
         {isAdmin && (
           <NavItem icon={<Settings size={16} />} label="Settings" active={page === 'settings'} onClick={() => onNavigate('settings')} collapsed={collapsed} />
         )}

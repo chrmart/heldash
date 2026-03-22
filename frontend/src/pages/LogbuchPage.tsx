@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { Activity, TrendingUp, RefreshCw, Container, Film, Home, Box, AlertTriangle, CheckCircle, XCircle, Search } from 'lucide-react'
+import { Activity, TrendingUp, RefreshCw, Container, Home, Box, AlertTriangle, CheckCircle, XCircle, Search } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useActivityStore } from '../store/useActivityStore'
 import type { ActivityEntry } from '../store/useActivityStore'
@@ -37,7 +37,6 @@ const TABS = [
   { key: 'aktivitaeten', label: 'Aktivitäten', icon: Activity },
   { key: 'uptime', label: 'Uptime', icon: TrendingUp },
   { key: 'sync', label: 'Sync-Verlauf', icon: RefreshCw },
-  { key: 'docker', label: 'Docker', icon: Container },
   // Future: { key: 'unraid', label: 'Unraid', icon: Server },
 ]
 
@@ -195,16 +194,21 @@ function EreignisKalender({ days }: { days: CalendarDay[] }) {
               {grid.map((row, rowIdx) => {
                 const cell = row[col]
                 if (!cell) return <div key={rowIdx} style={{ width: 12, height: 12 }} />
+                const todayIso = today.toISOString().split('T')[0]
+                const isInRange = cell.date && cell.date <= todayIso && cell.date >= new Date(today.getTime() - 83 * 86400000).toISOString().split('T')[0]
+                const tooltipText = !cell.date || !isInRange
+                  ? ''
+                  : cell.day
+                    ? `${fmtDate(cell.date)} — ${cell.day.count} Event${cell.day.count !== 1 ? 's' : ''}`
+                    : `${fmtDate(cell.date)} — Keine Events`
                 return (
                   <div
                     key={rowIdx}
-                    title={cell.date && cell.day
-                      ? `${fmtDate(cell.date)} — ${cell.day.count} Event${cell.day.count !== 1 ? 's' : ''}`
-                      : cell.date ? fmtDate(cell.date) : ''}
+                    data-tooltip={tooltipText || undefined}
                     style={{
                       width: 12, height: 12, borderRadius: 2,
                       background: cellColor(cell),
-                      cursor: cell.day ? 'default' : 'default',
+                      cursor: 'default',
                       transition: 'opacity 150ms',
                       opacity: 0.85,
                     }}
@@ -230,10 +234,9 @@ function EreignisKalender({ days }: { days: CalendarDay[] }) {
 
 // ── Aktivitäten Tab ───────────────────────────────────────────────────────────
 
-const ACTIVITY_CATEGORIES = ['all', 'system', 'docker', 'ha', 'recyclarr', 'media']
-const categoryLabel: Record<string, string> = { all: 'Alle', system: 'System', docker: 'Docker', ha: 'HA', recyclarr: 'Recyclarr', media: 'Media' }
+const ACTIVITY_CATEGORIES = ['all', 'system', 'docker', 'ha', 'recyclarr']
+const categoryLabel: Record<string, string> = { all: 'Alle', system: 'System', docker: 'Docker', ha: 'HA', recyclarr: 'Recyclarr' }
 const categoryIconNode: Record<string, React.ReactNode> = {
-  media: <Film size={12} />,
   docker: <Container size={12} />,
   ha: <Home size={12} />,
   recyclarr: <RefreshCw size={12} />,
@@ -702,47 +705,6 @@ function SyncTab() {
   )
 }
 
-// ── Docker Tab ────────────────────────────────────────────────────────────────
-
-function DockerTab() {
-  const { entries, loading, loadEntries } = useActivityStore()
-  const dockerEntries = entries.filter(e => e.category === 'docker')
-
-  useEffect(() => {
-    loadEntries('docker').catch(() => {})
-  }, [])
-
-  const fmtTime = (iso: string) => {
-    const d = new Date(iso)
-    const pad = (n: number) => String(n).padStart(2, '0')
-    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          className="btn btn-ghost btn-sm"
-          style={{ fontSize: 11, padding: '3px 8px' }}
-          onClick={() => loadEntries('docker').catch(() => {})}
-        >
-          <RefreshCw size={11} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Aktualisieren
-        </button>
-      </div>
-      {dockerEntries.length === 0 && !loading ? (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>
-          Keine Docker-Events aufgezeichnet
-        </div>
-      ) : (
-        <div className="glass" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-          {dockerEntries.map((entry, i) => (
-            <ActivityRow key={entry.id} entry={entry} fmtTime={fmtTime} last={i === dockerEntries.length - 1} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── LogbuchPage ───────────────────────────────────────────────────────────────
 
@@ -820,7 +782,6 @@ export function LogbuchPage() {
       {activeTab === 'aktivitaeten' && <AktivitaetenTab anomalies={anomalies} />}
       {activeTab === 'uptime' && <UptimeOverview services={services} />}
       {activeTab === 'sync' && <SyncTab />}
-      {activeTab === 'docker' && <DockerTab />}
     </div>
   )
 }
