@@ -142,12 +142,16 @@ export function initDockerPoller(): void {
 
             if (attrs.name) containerNames.set(id, attrs.name)
 
+            // Ignored events: die, kill, attach, exec_start, exec_create, exec_die,
+            // health_status, network_connect, network_disconnect, copy, rename
+            console.log(`[Docker Events] ${status}: ${name} | pendingStop: ${pendingStops.has(id)}`)
+
             if (status === 'stop') {
-              // Delay logging — cancel if restart follows within 3s
+              // Delay logging — cancel if restart follows within 5s
               const timer = setTimeout(() => {
                 pendingStops.delete(id)
                 logActivity('docker', `Container '${name}' gestoppt`, 'warning', { containerId: id })
-              }, 3_000)
+              }, 5_000)
               pendingStops.set(id, timer)
             } else if (status === 'start') {
               // Only log standalone starts (no pending stop = not part of a restart)
@@ -162,9 +166,9 @@ export function initDockerPoller(): void {
                 pendingStops.delete(id)
               }
               logActivity('docker', `Container '${name}' neugestartet`, 'info', { containerId: id })
+            } else if (status === 'die') {
+              // 'die' fires during restart — ignore (stop/restart events handle logging)
             }
-
-            console.log(`[Docker Events] ${status}: ${name}`)
           } catch { /* ignore malformed JSON */ }
         }
       }

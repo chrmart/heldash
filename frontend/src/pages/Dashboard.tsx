@@ -778,19 +778,23 @@ export function Dashboard({ onEdit }: Props) {
     return () => stopPollingAll()
   }, [widgetItemIds])
 
-  // Activity feed auto-refresh
+  // Activity feed auto-refresh — always poll regardless of panel state
   useEffect(() => {
     if (!isAuthenticated) return
-    if (activityOpen) {
+    activityIntervalRef.current = setInterval(() => {
       loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
-      activityIntervalRef.current = setInterval(() => {
-        loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
-      }, 30_000)
-    }
+    }, 30_000)
     return () => {
       if (activityIntervalRef.current) clearInterval(activityIntervalRef.current)
     }
-  }, [activityOpen, activityCategory, isAuthenticated])
+  }, [activityCategory, isAuthenticated])
+
+  // Load immediately when panel opens
+  useEffect(() => {
+    if (activityOpen) {
+      loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
+    }
+  }, [activityOpen])
 
   // Load guest visibility data when overlay toggled
   useEffect(() => {

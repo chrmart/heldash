@@ -3226,18 +3226,27 @@ function RecyclarrTab() {
                                       </div>
                                     )
                                   })}
-                                  {/* Ungrouped CFs */}
+                                  {/* Ungrouped CFs — shown as "Allgemein" with collapse */}
                                   {(() => {
                                     const ungrouped = profileCfs.filter(cf => cf.groups.length === 0).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
                                     if (ungrouped.length === 0) return null
+                                    const isCollapsed = collapsedGroups.has('__ungrouped__')
                                     return (
                                       <div style={{ marginBottom: 8 }}>
-                                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', padding: '2px 8px 4px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                          Ohne Gruppe
-                                          <span className="badge-neutral" style={{ fontSize: 9 }}>{ungrouped.length}</span>
-                                        </div>
-                                        {colHeader}
-                                        {ungrouped.map(cfRow)}
+                                        <button
+                                          onClick={() => toggleGroup('__ungrouped__')}
+                                          style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, padding: '2px 8px 4px', fontFamily: 'var(--font-sans)' }}
+                                        >
+                                          {isCollapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
+                                          Allgemein
+                                          <span className="badge-neutral" style={{ fontSize: 9 }}>{ungrouped.length} CFs</span>
+                                        </button>
+                                        {!isCollapsed && (
+                                          <>
+                                            {colHeader}
+                                            {ungrouped.map(cfRow)}
+                                          </>
+                                        )}
                                       </div>
                                     )
                                   })()}
