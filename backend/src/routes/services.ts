@@ -103,6 +103,7 @@ export async function servicesRoutes(app: FastifyInstance) {
     reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
     reply.header('Pragma', 'no-cache')
     reply.header('Expires', '0')
+    reply.header('Surrogate-Control', 'no-store')
 
     let groupId = 'grp_guest'
     try {
@@ -473,7 +474,7 @@ export async function servicesRoutes(app: FastifyInstance) {
       `).all(serviceId) as HealthRow[]
 
       const history = rows.map(r => ({
-        hour: r.hour,
+        hour: r.hour.endsWith('Z') ? r.hour : r.hour + 'Z',
         uptime: r.total_count > 0 ? Math.round((r.online_count / r.total_count) * 100) : 0,
       }))
 

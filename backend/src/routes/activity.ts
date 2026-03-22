@@ -41,7 +41,12 @@ export async function activityRoutes(app: FastifyInstance): Promise<void> {
       } else {
         rows = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 50').all() as ActivityLogRow[]
       }
-      return { entries: rows }
+      return {
+        entries: rows.map(r => ({
+          ...r,
+          created_at: r.created_at.endsWith('Z') ? r.created_at : r.created_at.replace(' ', 'T') + 'Z',
+        }))
+      }
     }
   )
 }

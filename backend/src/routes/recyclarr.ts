@@ -1834,7 +1834,7 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
     return reply.send({
       history: rows.map(r => ({
         id: r.id,
-        synced_at: r.synced_at,
+        synced_at: r.synced_at.endsWith('Z') ? r.synced_at : r.synced_at.replace(' ', 'T') + 'Z',
         success: r.success === 1,
         output: r.output,
         changes_summary: r.changes_summary ? JSON.parse(r.changes_summary) as { created?: number; updated?: number; deleted?: number } : null,
