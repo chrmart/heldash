@@ -10,6 +10,7 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     credentials: 'include', // send cookies with every request
+    cache: 'no-store',
     ...options,
   })
   if (!res.ok) {

@@ -99,7 +99,11 @@ export async function servicesRoutes(app: FastifyInstance) {
   const db = getDb()
 
   // GET /api/services — filtered by the caller's group visibility
-  app.get('/api/services', async (req) => {
+  app.get('/api/services', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+    reply.header('Pragma', 'no-cache')
+    reply.header('Expires', '0')
+
     let groupId = 'grp_guest'
     try {
       await req.jwtVerify()
@@ -122,6 +126,10 @@ export async function servicesRoutes(app: FastifyInstance) {
 
   // GET /api/services/:id
   app.get<{ Params: { id: string } }>('/api/services/:id', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+    reply.header('Pragma', 'no-cache')
+    reply.header('Expires', '0')
+
     const row = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id) as ServiceRow | undefined
     if (!row) return reply.status(404).send({ error: 'Not found' })
 
