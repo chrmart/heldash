@@ -1562,6 +1562,8 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
           const matchCount = g.cfNames.filter(n => profileCfNamesLower.has(n.toLowerCase())).length
           return matchCount > 0 && matchCount >= Math.ceil(g.cfNames.length * 0.5)
         })
+        // Groups loaded from cache successfully — clear any warning from earlier steps
+        warning = false; warningMessage = undefined
       } else {
         try {
           // --raw output format: paired lines per CF
@@ -1603,6 +1605,9 @@ export default async function recyclarrRoutes(app: FastifyInstance): Promise<voi
                 const matchCount = g.cfNames.filter(n => profileCfNamesLower.has(n.toLowerCase())).length
                 return matchCount > 0 && matchCount >= Math.ceil(g.cfNames.length * 0.5)
               })
+              // Groups parsed successfully — clear any warning from earlier steps
+              // Even if filtering leaves 0 relevant groups, that's normal (not an error)
+              warning = false; warningMessage = undefined
             }
           } else if (rawResult.exitCode !== 0) {
             app.log.warn({ exitCode: rawResult.exitCode, service }, 'recyclarr list custom-format-groups exited non-zero')

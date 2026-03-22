@@ -783,9 +783,9 @@ export function Dashboard({ onEdit }: Props) {
     if (!isAuthenticated) return
     activityIntervalRef.current = setInterval(() => {
       loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
-    }, 30_000)
+    }, 10_000)
     return () => {
-      if (activityIntervalRef.current) clearInterval(activityIntervalRef.current)
+      if (activityIntervalRef.current) { clearInterval(activityIntervalRef.current); activityIntervalRef.current = null }
     }
   }, [activityCategory, isAuthenticated])
 
@@ -794,7 +794,7 @@ export function Dashboard({ onEdit }: Props) {
     if (activityOpen) {
       loadActivityEntries(activityCategory !== 'all' ? activityCategory : undefined).catch(() => {})
     }
-  }, [activityOpen])
+  }, [activityOpen, activityCategory])
 
   // Load guest visibility data when overlay toggled
   useEffect(() => {

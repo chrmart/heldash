@@ -274,9 +274,11 @@ export const useStore = create<AppState>((set, get) => ({
 
   startHealthPolling: () => {
     if (healthCheckInterval) return
+    // Immediate first load so last_status from DB is shown without waiting 15s
+    get().loadServices().catch(() => {})
     healthCheckInterval = setInterval(async () => {
       try { await get().loadServices() } catch { /* ignore */ }
-    }, 30_000)
+    }, 15_000)
   },
 
   stopHealthPolling: () => {
