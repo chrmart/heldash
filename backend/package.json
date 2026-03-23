@@ -1,6 +1,6 @@
 {
   "name": "heldash-backend",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "HEL Dashboard Backend",
   "main": "dist/server.js",
   "scripts": {
