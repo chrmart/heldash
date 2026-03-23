@@ -209,7 +209,7 @@ function ScannerModal({ defaultSubnet, existingIps, onClose, onAddDevice }: Scan
 
   const handleScan = async () => {
     if (!subnet.trim()) { setError('Subnetz eingeben'); return }
-    if (!isValidSubnet(subnet.trim())) { setError('Format: 192.168.1.0/24 oder 10.10.0.0/20 (max. /22)'); return }
+    if (!isValidSubnet(subnet.trim())) { setError('Format: 192.168.1.0/24 oder 10.10.0.0/20 (max. /20)'); return }
     setScanning(true)
     setError(null)
     setResults([])
@@ -238,7 +238,7 @@ function ScannerModal({ defaultSubnet, existingIps, onClose, onAddDevice }: Scan
             {scanning ? 'Scanne...' : 'Scannen'}
           </button>
         </div>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, marginTop: 0 }}>Maximal /22 (1024 Hosts)</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, marginTop: 0 }}>Unterstützt /20–/32 (max. 4096 Hosts)</p>
 
         {!scanned && !error && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 0 }}>Scan dauert ca. 20–30 Sekunden</p>}
         {error && <div className="error-banner" style={{ marginBottom: 12 }}>{error}</div>}

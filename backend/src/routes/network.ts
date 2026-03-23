@@ -69,7 +69,7 @@ function cidrToIpList(cidr: string): string[] | null {
   const octets = [Number(a), Number(b), Number(c), Number(d)]
   const prefix = Number(p)
   if (octets.some(o => o > 255) || prefix < 0 || prefix > 32) return null
-  if (prefix < 22) return Array(9999) // will be caught as > 1024 by caller
+  if (prefix < 20) return Array(9999) // will be caught as > 4096 by caller
   const networkInt = (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]
   const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0
   const network = (networkInt & mask) >>> 0
@@ -232,8 +232,8 @@ export async function networkRoutes(app: FastifyInstance) {
         if (parsed === null) {
           return reply.status(400).send({ error: 'Ungültiges CIDR-Format (z.B. 192.168.1.0/24 oder 10.10.0.0/20)' })
         }
-        if (parsed.length > 1024) {
-          return reply.status(400).send({ error: 'Subnetz zu groß — mindestens /22 erforderlich' })
+        if (parsed.length > 4096) {
+          return reply.status(400).send({ error: 'Subnetz zu groß — mindestens /20 erforderlich' })
         }
         ipList = parsed
       }
