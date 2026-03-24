@@ -14,6 +14,32 @@ interface ReorderBody { ids: string[] }
 interface TestBody    { url: string; api_key: string }
 interface ParityStartBody { correct: boolean }
 
+type DiskRaw = Record<string, unknown>
+
+interface ArrayGqlResult {
+  array?: {
+    state?: string
+    capacity?: unknown
+    parityCheckStatus?: unknown
+    parities?: DiskRaw[]
+    disks?: DiskRaw[]
+    caches?: DiskRaw[]
+  }
+}
+
+interface NotifCountRaw { info?: number; warning?: number; alert?: number }
+interface NotifGqlResult {
+  notifications?: {
+    overview?: { unread?: NotifCountRaw; total?: NotifCountRaw }
+    list?: unknown[]
+  }
+}
+
+interface RegistrationGqlResult {
+  registration?: { id?: string; type?: string; state?: string; expiration?: string }
+  vars?: { version?: string; name?: string; regTo?: string }
+}
+
 function sanitizeInstance(row: UnraidInstanceRow) {
   return {
     id: row.id,
@@ -50,6 +76,22 @@ async function getInstance(id: string, reply: FastifyReply): Promise<UnraidInsta
   if (!row) { reply.status(404).send({ error: 'Not found' }); return null }
   if (!row.enabled) { reply.status(423).send({ error: 'Instanz deaktiviert' }); return null }
   return row
+}
+
+function addPercent(disks: DiskRaw[] | undefined): DiskRaw[] {
+  return (disks ?? []).map(d => {
+    const fsSize = typeof d['fsSize'] === 'number' ? d['fsSize'] : null
+    const fsUsed = typeof d['fsUsed'] === 'number' ? d['fsUsed'] : null
+    return {
+      ...d,
+      fsUsedPercent: fsSize !== null && fsUsed !== null ? Math.round((fsUsed / fsSize) * 100) : null,
+      isSpinning: typeof d['isSpinning'] === 'boolean' ? d['isSpinning'] : null,
+    }
+  })
+}
+
+function sumCount(c?: NotifCountRaw): number {
+  return (c?.info ?? 0) + (c?.warning ?? 0) + (c?.alert ?? 0)
 }
 
 export async function unraidRoutes(app: FastifyInstance) {
@@ -139,12 +181,14 @@ export async function unraidRoutes(app: FastifyInstance) {
     try {
       return await unraidGql(row.url, row.api_key, `query {
         info {
-          os { platform distro release uptime hostname }
+          id
+          time
+          baseboard { manufacturer model version }
           cpu { manufacturer brand cores threads }
-          memory { total free used }
-          baseboard { manufacturer model }
+          os { platform distro release uptime hostname arch }
+          versions { core { unraid } }
         }
-        online
+        vars { version name }
       }`)
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
@@ -156,26 +200,24 @@ export async function unraidRoutes(app: FastifyInstance) {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
     try {
-      return await unraidGql(row.url, row.api_key, `query {
+      const data = await unraidGql(row.url, row.api_key, `query {
         array {
           state
           capacity { kilobytes { free used total } }
-          disks { id name device size status temp rotational fsSize fsFree fsUsed fsUsedPercent }
+          parityCheckStatus { status running paused correcting progress errors speed date duration }
+          parities { id name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
+          disks    { id name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
+          caches   { id name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
         }
-      }`)
-    } catch (e) {
-      return reply.status(502).send({ error: (e as Error).message })
-    }
-  })
-
-  // GET /api/unraid/:id/parity
-  app.get<{ Params: { id: string } }>('/api/unraid/:id/parity', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const row = await getInstance(req.params.id, reply)
-    if (!row) return
-    try {
-      return await unraidGql(row.url, row.api_key, `query {
-        array { parityHistory { date duration speed status errors } }
-      }`)
+      }`) as ArrayGqlResult
+      return {
+        array: {
+          ...(data.array ?? {}),
+          parities: addPercent(data.array?.parities),
+          disks:    addPercent(data.array?.disks),
+          caches:   addPercent(data.array?.caches),
+        },
+      }
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
     }
@@ -186,7 +228,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation { startArray { state } }`)
+      const result = await unraidGql(row.url, row.api_key, `mutation { array { setState(input: { desiredState: START }) { state } } }`)
       logActivity('unraid', `Array gestartet — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -199,7 +241,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation { stopArray { state } }`)
+      const result = await unraidGql(row.url, row.api_key, `mutation { array { setState(input: { desiredState: STOP }) { state } } }`)
       logActivity('unraid', `Array gestoppt — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -213,7 +255,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const correct = req.body.correct ?? false
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($correct: Boolean!) { startParityCheck(correct: $correct) { status } }`, { correct })
+      const result = await unraidGql(row.url, row.api_key, `mutation($correct: Boolean!) { parityCheck { start(correct: $correct) } }`, { correct })
       logActivity('unraid', `Parity Check gestartet — ${row.name}`, 'info', { instanceId: req.params.id, correct })
       return result
     } catch (e) {
@@ -226,7 +268,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
     try {
-      return await unraidGql(row.url, row.api_key, `mutation { pauseParityCheck { status } }`)
+      return await unraidGql(row.url, row.api_key, `mutation { parityCheck { pause } }`)
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
     }
@@ -237,7 +279,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
     try {
-      return await unraidGql(row.url, row.api_key, `mutation { resumeParityCheck { status } }`)
+      return await unraidGql(row.url, row.api_key, `mutation { parityCheck { resume } }`)
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
     }
@@ -248,34 +290,20 @@ export async function unraidRoutes(app: FastifyInstance) {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
     try {
-      return await unraidGql(row.url, row.api_key, `mutation { cancelParityCheck { status } }`)
+      return await unraidGql(row.url, row.api_key, `mutation { parityCheck { cancel } }`)
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
     }
   })
 
-  // POST /api/unraid/:id/disks/:diskId/spinup
-  app.post<{ Params: { id: string; diskId: string } }>('/api/unraid/:id/disks/:diskId/spinup', { onRequest: [app.requireAdmin] }, async (req, reply) => {
-    const row = await getInstance(req.params.id, reply)
-    if (!row) return
-    const diskId = decodeURIComponent(req.params.diskId)
-    try {
-      return await unraidGql(row.url, row.api_key, `mutation($id: String!) { spinUpDisk(id: $id) { id status } }`, { id: diskId })
-    } catch (e) {
-      return reply.status(502).send({ error: (e as Error).message })
-    }
+  // POST /api/unraid/:id/disks/:diskId/spinup — not available in this API version
+  app.post<{ Params: { id: string; diskId: string } }>('/api/unraid/:id/disks/:diskId/spinup', { onRequest: [app.requireAdmin] }, async (_req, reply) => {
+    return reply.status(501).send({ error: 'Disk Spin-Control ist in dieser API-Version nicht verfügbar.' })
   })
 
-  // POST /api/unraid/:id/disks/:diskId/spindown
-  app.post<{ Params: { id: string; diskId: string } }>('/api/unraid/:id/disks/:diskId/spindown', { onRequest: [app.requireAdmin] }, async (req, reply) => {
-    const row = await getInstance(req.params.id, reply)
-    if (!row) return
-    const diskId = decodeURIComponent(req.params.diskId)
-    try {
-      return await unraidGql(row.url, row.api_key, `mutation($id: String!) { spinDownDisk(id: $id) { id status } }`, { id: diskId })
-    } catch (e) {
-      return reply.status(502).send({ error: (e as Error).message })
-    }
+  // POST /api/unraid/:id/disks/:diskId/spindown — not available in this API version
+  app.post<{ Params: { id: string; diskId: string } }>('/api/unraid/:id/disks/:diskId/spindown', { onRequest: [app.requireAdmin] }, async (_req, reply) => {
+    return reply.status(501).send({ error: 'Disk Spin-Control ist in dieser API-Version nicht verfügbar.' })
   })
 
   // GET /api/unraid/:id/docker
@@ -284,9 +312,9 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     try {
       const data = await unraidGql(row.url, row.api_key, `query {
-        dockerContainers { id names state status image autoStart hostConfig { networkMode } }
-      }`) as { dockerContainers?: unknown[] }
-      return data?.dockerContainers ?? []
+        docker { containers { id names image state status autoStart hostConfig { networkMode } } }
+      }`) as { docker?: { containers?: unknown[] } }
+      return data?.docker?.containers ?? []
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
     }
@@ -296,11 +324,10 @@ export async function unraidRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string; containerName: string } }>('/api/unraid/:id/docker/:containerName/start', { onRequest: [app.authenticate] }, async (req, reply) => {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
-    const containerName = decodeURIComponent(req.params.containerName)
-    const mutationId = 'container:' + containerName.replace(/^\//, '')
+    const containerId = decodeURIComponent(req.params.containerName)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { startContainer(id: $id) { id state } }`, { id: mutationId })
-      logActivity('unraid', `Docker ${containerName} start — ${row.name}`, 'info', { instanceId: req.params.id })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { start(id: $id) { id state } } }`, { id: containerId })
+      logActivity('unraid', `Docker ${containerId} start — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
@@ -311,29 +338,32 @@ export async function unraidRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string; containerName: string } }>('/api/unraid/:id/docker/:containerName/stop', { onRequest: [app.authenticate] }, async (req, reply) => {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
-    const containerName = decodeURIComponent(req.params.containerName)
-    const mutationId = 'container:' + containerName.replace(/^\//, '')
+    const containerId = decodeURIComponent(req.params.containerName)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { stopContainer(id: $id) { id state } }`, { id: mutationId })
-      logActivity('unraid', `Docker ${containerName} stop — ${row.name}`, 'info', { instanceId: req.params.id })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { stop(id: $id) { id state } } }`, { id: containerId })
+      logActivity('unraid', `Docker ${containerId} stop — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
     }
   })
 
-  // POST /api/unraid/:id/docker/:containerName/restart
+  // POST /api/unraid/:id/docker/:containerName/restart — sequential stop then start
   app.post<{ Params: { id: string; containerName: string } }>('/api/unraid/:id/docker/:containerName/restart', { onRequest: [app.authenticate] }, async (req, reply) => {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
-    const containerName = decodeURIComponent(req.params.containerName)
-    const mutationId = 'container:' + containerName.replace(/^\//, '')
+    const containerId = decodeURIComponent(req.params.containerName)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { restartContainer(id: $id) { id state } }`, { id: mutationId })
-      logActivity('unraid', `Docker ${containerName} restart — ${row.name}`, 'info', { instanceId: req.params.id })
+      await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { stop(id: $id) { id state } } }`, { id: containerId })
+    } catch (e) {
+      return reply.status(502).send({ error: `Stop fehlgeschlagen: ${(e as Error).message}` })
+    }
+    try {
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { start(id: $id) { id state } } }`, { id: containerId })
+      logActivity('unraid', `Docker ${containerId} restart — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
-      return reply.status(502).send({ error: (e as Error).message })
+      return reply.status(502).send({ error: `Start fehlgeschlagen: ${(e as Error).message}` })
     }
   })
 
@@ -343,7 +373,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     try {
       return await unraidGql(row.url, row.api_key, `query {
-        vms { domains { uuid name state coreCount memoryMin primaryGPU os autoStart } }
+        vms { domains { id uuid name state type description } }
       }`)
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
@@ -354,10 +384,10 @@ export async function unraidRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string; uuid: string } }>('/api/unraid/:id/vms/:uuid/start', { onRequest: [app.authenticate] }, async (req, reply) => {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
-    const uuid = decodeURIComponent(req.params.uuid)
+    const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { startVm(id: $id) { uuid state } }`, { id: uuid })
-      logActivity('unraid', `VM ${uuid} start — ${row.name}`, 'info', { instanceId: req.params.id })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { start(id: $id) } }`, { id: vmId })
+      logActivity('unraid', `VM ${vmId} start — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
@@ -368,10 +398,10 @@ export async function unraidRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string; uuid: string } }>('/api/unraid/:id/vms/:uuid/stop', { onRequest: [app.authenticate] }, async (req, reply) => {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
-    const uuid = decodeURIComponent(req.params.uuid)
+    const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { stopVm(id: $id) { uuid state } }`, { id: uuid })
-      logActivity('unraid', `VM ${uuid} stop — ${row.name}`, 'info', { instanceId: req.params.id })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { stop(id: $id) } }`, { id: vmId })
+      logActivity('unraid', `VM ${vmId} stop — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
@@ -382,10 +412,10 @@ export async function unraidRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string; uuid: string } }>('/api/unraid/:id/vms/:uuid/pause', { onRequest: [app.authenticate] }, async (req, reply) => {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
-    const uuid = decodeURIComponent(req.params.uuid)
+    const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { pauseVm(id: $id) { uuid state } }`, { id: uuid })
-      logActivity('unraid', `VM ${uuid} pause — ${row.name}`, 'info', { instanceId: req.params.id })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { pause(id: $id) } }`, { id: vmId })
+      logActivity('unraid', `VM ${vmId} pause — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
@@ -396,10 +426,10 @@ export async function unraidRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string; uuid: string } }>('/api/unraid/:id/vms/:uuid/resume', { onRequest: [app.authenticate] }, async (req, reply) => {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
-    const uuid = decodeURIComponent(req.params.uuid)
+    const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { resumeVm(id: $id) { uuid state } }`, { id: uuid })
-      logActivity('unraid', `VM ${uuid} resume — ${row.name}`, 'info', { instanceId: req.params.id })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { resume(id: $id) } }`, { id: vmId })
+      logActivity('unraid', `VM ${vmId} resume — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
@@ -412,7 +442,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     try {
       return await unraidGql(row.url, row.api_key, `query {
-        shares { name comment security free used size cacheEnabled }
+        shares { id name comment free used size cache nameOrig color luksStatus }
       }`)
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
@@ -437,12 +467,21 @@ export async function unraidRoutes(app: FastifyInstance) {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
     try {
-      return await unraidGql(row.url, row.api_key, `query {
+      const data = await unraidGql(row.url, row.api_key, `query {
         notifications {
-          overview { unread total }
-          list(filter: { limit: 30 }) { id title subject description importance timestamp }
+          overview { unread { info warning alert } total { info warning alert } }
+          list(filter: { limit: 30 }) { id title subject description importance timestamp read }
         }
-      }`)
+      }`) as NotifGqlResult
+      return {
+        notifications: {
+          overview: {
+            unread: sumCount(data.notifications?.overview?.unread),
+            total:  sumCount(data.notifications?.overview?.total),
+          },
+          list: data.notifications?.list ?? [],
+        },
+      }
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
     }
@@ -454,7 +493,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const notifId = decodeURIComponent(req.params.notifId)
     try {
-      return await unraidGql(row.url, row.api_key, `mutation($id: String!) { dismissNotification(id: $id) { id } }`, { id: notifId })
+      return await unraidGql(row.url, row.api_key, `mutation($id: String!) { notifications { dismiss(id: $id) } }`, { id: notifId })
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
     }
@@ -465,9 +504,19 @@ export async function unraidRoutes(app: FastifyInstance) {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
     try {
-      return await unraidGql(row.url, row.api_key, `query {
-        config { valid error registrationTo registrationType }
-      }`)
+      const data = await unraidGql(row.url, row.api_key, `query {
+        registration { id type state expiration }
+        vars { version name regTo }
+      }`) as RegistrationGqlResult
+      const state = data.registration?.state
+      return {
+        config: {
+          valid: state ? !state.startsWith('E') : undefined,
+          error: state?.startsWith('E') ? state : undefined,
+          registrationTo: data.vars?.regTo,
+          registrationType: data.registration?.type,
+        },
+      }
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
     }
