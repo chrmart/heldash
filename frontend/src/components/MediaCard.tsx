@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useArrStore } from '../store/useArrStore'
 import { useStore } from '../store/useStore'
+import { useConfirm } from './ConfirmDialog'
 import type { ArrStatus, ArrStats, ArrQueueItem, ArrCalendarItem, RadarrCalendarItem, SonarrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SabnzbdWarningItem, SeerrRequest, ArrHealthIssue } from '../types/arr'
 import { ChevronDown, ChevronUp, Check, X, Trash2, AlertTriangle } from 'lucide-react'
 import { normalizeUrl } from '../utils'
@@ -611,6 +612,7 @@ export function SeerrCardContent({ instance }: { instance: ArrInstanceBase }) {
   const { stats, statuses, seerrRequests, loadSeerrRequests, seerrApprove, seerrDecline, seerrDelete } = useArrStore()
   const { isAdmin } = useStore()
   const { services } = useStore()
+  const { confirm: confirmDlg } = useConfirm()
   const instUrl = normalizeUrl(instance.url)
   const matchingSvc = services.find(s =>
     normalizeUrl(s.url) === instUrl || (s.check_url && normalizeUrl(s.check_url) === instUrl)
@@ -663,7 +665,8 @@ export function SeerrCardContent({ instance }: { instance: ArrInstanceBase }) {
   }
 
   const handleDelete = async (requestId: number) => {
-    if (!confirm('Delete this request?')) return
+    const ok = await confirmDlg({ title: 'Delete this request?', danger: true, confirmLabel: 'Delete' })
+    if (!ok) return
     setControlling(requestId)
     try {
       await seerrDelete(instance.id, requestId)

@@ -21,6 +21,7 @@ import { ChangelogModal } from './components/ChangelogModal'
 import { ServiceModal } from './components/ServiceModal'
 import { LoginModal } from './components/LoginModal'
 import { ToastProvider, useToast } from './components/Toast'
+import { ConfirmDialogProvider } from './components/ConfirmDialog'
 import { OnboardingWizard } from './components/OnboardingWizard'
 import type { Service } from './types'
 import { calcAutoTheme } from './utils'
@@ -194,6 +195,7 @@ function App() {
 
   return (
     <ToastProvider>
+    <ConfirmDialogProvider>
     <>
       <HaAlertListener isAuthenticated={isAuthenticated} />
       {/* User-assigned background image */}
@@ -285,6 +287,7 @@ function App() {
         <ChangelogModal onClose={() => setShowChangelog(false)} />
       )}
     </>
+    </ConfirmDialogProvider>
     </ToastProvider>
   )
 }

@@ -95,8 +95,6 @@ export function Sidebar({ page, onNavigate }: Props) {
           </div>
         )}
 
-        {!collapsed && <span className="nav-section-label">Navigation</span>}
-
         <NavItem icon={<LayoutDashboard size={16} />} label="Dashboard" active={page === 'dashboard'} onClick={() => onNavigate('dashboard')} collapsed={collapsed} />
 
         {isAuthenticated && (
@@ -116,7 +114,6 @@ export function Sidebar({ page, onNavigate }: Props) {
           </>
         )}
 
-        {!collapsed && <span className="nav-section-label" style={{ marginTop: 8 }}>System</span>}
         {isAuthenticated && (
           <NavItem icon={<Network size={16} />} label="Netzwerk" active={page === 'network'} onClick={() => onNavigate('network')} collapsed={collapsed} />
         )}

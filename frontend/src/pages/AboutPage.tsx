@@ -4,7 +4,7 @@ import { LS_ABOUT_TAB } from '../constants'
 import { api } from '../api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type AboutTab = 'overview' | 'setup' | 'docker' | 'logbuch' | 'media' | 'recyclarr' | 'cfmanager' | 'ha' | 'netzwerk' | 'backup' | 'widgets' | 'design'
+type AboutTab = 'overview' | 'setup' | 'docker' | 'logbuch' | 'media' | 'recyclarr' | 'cfmanager' | 'ha' | 'unraid' | 'netzwerk' | 'backup' | 'widgets' | 'design'
 
 // ── CodeBlock ─────────────────────────────────────────────────────────────────
 function CodeBlock({ children }: { children: string }) {
@@ -150,6 +150,50 @@ function Collapsible({ title, children }: { title: string; children: React.React
         </div>
       )}
     </div>
+  )
+}
+
+// ── Tab: Unraid ───────────────────────────────────────────────────────────────
+function TabUnraid() {
+  return (
+    <>
+      <DocSection title="Verbindung einrichten">
+        <ol style={{ margin: 0, paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li><strong>Settings → Integrations → Unraid</strong></li>
+          <li>Unraid-URL eingeben (z.B. <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>http://192.168.1.10</code>)</li>
+          <li>API-Key eingeben: <strong>Unraid → Settings → Management Access → API Key</strong></li>
+          <li>Verbindung speichern — Dashboard aktualisiert sich automatisch</li>
+        </ol>
+        <div style={{ marginTop: 12 }}>
+          <span className="badge badge-neutral">🔒 API-Key wird serverseitig gespeichert — nie an den Browser übertragen</span>
+        </div>
+      </DocSection>
+
+      <DocSection title="Unterstützte Funktionen">
+        <SimpleTable
+          headers={['Feature', 'Beschreibung']}
+          rows={[
+            ['Array Status', 'Started / Stopped, laufende Parities, Fehler-Übersicht'],
+            ['Laufwerke', 'Disk-Status, Temperatur, Read/Write Errors'],
+            ['Cache-Pools', 'Status, freier Speicher pro Pool'],
+            ['Parity', 'Letzter Check: Datum, Dauer, Fehler'],
+            ['CPU & RAM', 'Auslastung, CPU-Temperatur (falls verfügbar)'],
+            ['VMs', 'Status: Running / Stopped / Paused'],
+            ['Netzwerk', 'Interface-Statistiken (RX / TX)'],
+          ]}
+        />
+      </DocSection>
+
+      <DocSection title="Bekannte Einschränkungen">
+        <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 2, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <li>Unraid API über GraphQL — manche Features abhängig von Unraid-Version (≥ 6.12)</li>
+          <li>Disk-Temperaturen nur verfügbar wenn Laufwerk aktiv (nicht im Standby)</li>
+          <li>VM-Steuerung (Start/Stop) nicht implementiert — nur Status-Anzeige</li>
+          <li>Parity-Check starten/stoppen nicht unterstützt</li>
+          <li>Docker-Verwaltung: separater Docker-Tab in HELDASH empfohlen</li>
+        </ul>
+      </DocSection>
+    </>
   )
 }
 
@@ -1376,7 +1420,7 @@ function TabDesign() {
 }
 
 // ── AboutPage ─────────────────────────────────────────────────────────────────
-const TAB_ORDER: AboutTab[] = ['overview', 'setup', 'docker', 'logbuch', 'media', 'recyclarr', 'cfmanager', 'ha', 'netzwerk', 'backup', 'widgets', 'design']
+const TAB_ORDER: AboutTab[] = ['overview', 'setup', 'docker', 'logbuch', 'media', 'recyclarr', 'cfmanager', 'ha', 'unraid', 'netzwerk', 'backup', 'widgets', 'design']
 
 const TAB_LABELS: Record<AboutTab, string> = {
   overview: 'Übersicht',
@@ -1387,6 +1431,7 @@ const TAB_LABELS: Record<AboutTab, string> = {
   recyclarr: 'Recyclarr',
   cfmanager: 'CF-Manager',
   ha: 'Home Assistant',
+  unraid: 'Unraid',
   netzwerk: 'Netzwerk',
   backup: 'Backup',
   widgets: 'Widgets',
@@ -1412,35 +1457,37 @@ export function AboutPage({ onShowChangelog }: { onShowChangelog?: () => void } 
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      {/* Tab bar */}
-      <div className="about-tabs" style={{ marginBottom: 'var(--spacing-2xl)' }}>
-        <div className="tabs" style={{ display: 'inline-flex', minWidth: 'max-content' }}>
-          {TAB_ORDER.map(tab => (
-            <button
-              key={tab}
-              className={`tab${activeTab === tab ? ' active' : ''}`}
-              onClick={() => handleTabChange(tab)}
-            >
-              {TAB_LABELS[tab]}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="about-layout">
+      {/* Left sticky navigation */}
+      <nav className="about-nav glass">
+        {TAB_ORDER.map(tab => (
+          <button
+            key={tab}
+            className={`nav-item${activeTab === tab ? ' active' : ''}`}
+            onClick={() => handleTabChange(tab)}
+            style={{ width: '100%', textAlign: 'left', background: 'none', fontFamily: 'var(--font-sans)', justifyContent: 'flex-start' }}
+          >
+            {TAB_LABELS[tab]}
+          </button>
+        ))}
+      </nav>
 
-      {/* Tab content */}
-      {activeTab === 'overview'   && <TabOverview version={version} onShowChangelog={onShowChangelog} />}
-      {activeTab === 'setup'      && <TabSetup />}
-      {activeTab === 'docker'     && <TabDocker />}
-      {activeTab === 'logbuch'    && <TabLogbuch />}
-      {activeTab === 'media'      && <TabMedia />}
-      {activeTab === 'recyclarr'  && <TabTrash />}
-      {activeTab === 'cfmanager'  && <TabCFManager />}
-      {activeTab === 'ha'         && <TabHA />}
-      {activeTab === 'netzwerk'   && <TabNetzwerk />}
-      {activeTab === 'backup'     && <TabBackup />}
-      {activeTab === 'widgets'    && <TabWidgets />}
-      {activeTab === 'design'     && <TabDesign />}
+      {/* Right scrollable content */}
+      <div className="about-content">
+        {activeTab === 'overview'   && <TabOverview version={version} onShowChangelog={onShowChangelog} />}
+        {activeTab === 'setup'      && <TabSetup />}
+        {activeTab === 'docker'     && <TabDocker />}
+        {activeTab === 'logbuch'    && <TabLogbuch />}
+        {activeTab === 'media'      && <TabMedia />}
+        {activeTab === 'recyclarr'  && <TabTrash />}
+        {activeTab === 'cfmanager'  && <TabCFManager />}
+        {activeTab === 'ha'         && <TabHA />}
+        {activeTab === 'unraid'     && <TabUnraid />}
+        {activeTab === 'netzwerk'   && <TabNetzwerk />}
+        {activeTab === 'backup'     && <TabBackup />}
+        {activeTab === 'widgets'    && <TabWidgets />}
+        {activeTab === 'design'     && <TabDesign />}
+      </div>
     </div>
   )
 }

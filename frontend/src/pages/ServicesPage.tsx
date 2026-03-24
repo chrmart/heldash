@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import type { Service } from '../types'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
+import { useConfirm } from '../components/ConfirmDialog'
 import { Pencil, Trash2, GripVertical, Download, Upload, LayoutDashboard, Shield, ShieldOff, BarChart2, List } from 'lucide-react'
 import { api } from '../api'
 import {
@@ -104,16 +105,16 @@ function SortableGroupSection({
   const { addService, removeItem, isOnDashboard } = useDashboardStore()
   const { updateService, deleteService } = useStore()
   const { items: dashboardItems } = useDashboardStore()
+  const { confirm: confirmDlg } = useConfirm()
   const [uptimeOpen, setUptimeOpen] = useState<Set<string>>(() => new Set())
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: section.id || section.label,
     disabled: !editMode,
   })
 
-  const handleDelete = (service: Service) => {
-    if (confirm(`Delete "${service.name}"?`)) {
-      deleteService(service.id)
-    }
+  const handleDelete = async (service: Service) => {
+    const ok = await confirmDlg({ title: `Delete "${service.name}"?`, danger: true, confirmLabel: 'Delete' })
+    if (ok) deleteService(service.id)
   }
 
   // Sort services A-Z

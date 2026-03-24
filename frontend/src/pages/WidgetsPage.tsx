@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useConfirm } from '../components/ConfirmDialog'
 import { useWidgetStore } from '../store/useWidgetStore'
 import { useDockerStore } from '../store/useDockerStore'
 import { useDashboardStore } from '../store/useDashboardStore'
@@ -1298,6 +1299,7 @@ export function WidgetsPage({ showAddForm, onFormClose }: Props) {
   const { widgets, loadWidgets, loadStats, createWidget, updateWidget, deleteWidget, uploadWidgetIcon, startPollingAll, stopPollingAll } = useWidgetStore()
   const { isOnDashboard, addWidget, removeByRef } = useDashboardStore()
   const { loadContainers: loadDockerContainers } = useDockerStore()
+  const { confirm: confirmDlg } = useConfirm()
   const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -1332,7 +1334,8 @@ export function WidgetsPage({ showAddForm, onFormClose }: Props) {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete widget "${name}"?`)) return
+    const ok = await confirmDlg({ title: `Delete widget "${name}"?`, danger: true, confirmLabel: 'Delete' })
+    if (!ok) return
     await deleteWidget(id)
   }
 

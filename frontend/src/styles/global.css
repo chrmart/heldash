@@ -908,14 +908,57 @@ h4 { font-size: 15px; line-height: 1.5; }
   }
 }
 
-/* ─── About page tab overrides ────────────────────────────────────────────── */
-.about-tabs {
-  overflow-x: auto;
+/* ─── About page two-column layout ────────────────────────────────────────── */
+.about-layout {
+  display: flex;
+  gap: var(--spacing-3xl);
+  align-items: flex-start;
+  max-width: 1100px;
+  margin: 0 auto;
 }
-.about-tabs .tab {
-  min-width: unset;
+
+.about-nav {
+  position: sticky;
+  top: 20px;
+  flex-shrink: 0;
+  width: 176px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-xl);
+}
+
+.about-nav .nav-item {
+  font-size: 13px;
   padding: var(--spacing-sm) var(--spacing-md);
-  white-space: nowrap;
+}
+
+.about-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .about-layout {
+    flex-direction: column;
+  }
+  .about-nav {
+    position: relative;
+    top: unset;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .about-nav .nav-item {
+    flex: 1;
+    min-width: max-content;
+    font-size: 12px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    justify-content: center;
+    text-align: center;
+  }
 }
 
 /* ─── Badges ──────────────────────────────────────────────────────────────── */

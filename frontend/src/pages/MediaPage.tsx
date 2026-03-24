@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
+import { useConfirm } from '../components/ConfirmDialog'
 import { useTmdbStore } from '../store/useTmdbStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { useRecyclarrStore } from '../store/useRecyclarrStore'
@@ -199,6 +200,7 @@ function InstancesTab({ showAddForm: showFromParent, onFormClose }: { showAddFor
   const { isAdmin } = useStore()
   const { instances, loadInstances, loadAllStats, loadSabQueue, createInstance, updateInstance, deleteInstance, reorderInstances } = useArrStore()
   const { addArrInstance, removeByRef, isOnDashboard, getDashboardItemId, removeItem } = useDashboardStore()
+  const { confirm: confirmDlg } = useConfirm()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -263,6 +265,11 @@ function InstancesTab({ showAddForm: showFromParent, onFormClose }: { showAddFor
     setEditingId(null)
   }
 
+  const handleDeleteInstance = async (name: string, id: string) => {
+    const ok = await confirmDlg({ title: `Delete "${name}"?`, danger: true, confirmLabel: 'Delete' })
+    if (ok) deleteInstance(id)
+  }
+
   if (instances.length === 0 && !isAdmin) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
@@ -303,7 +310,7 @@ function InstancesTab({ showAddForm: showFromParent, onFormClose }: { showAddFor
                     isAdmin={isAdmin}
                     isEditing={editingId === inst.id}
                     onEdit={() => setEditingId(inst.id)}
-                    onDelete={() => { if (confirm(`Delete "${inst.name}"?`)) deleteInstance(inst.id) }}
+                    onDelete={() => handleDeleteInstance(inst.name, inst.id)}
                   />
                 )
             ))}

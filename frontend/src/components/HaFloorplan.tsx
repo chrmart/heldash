@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useToast } from './Toast'
 import {
   Plus, Edit2, Check, Download, Upload, Grid, Image as ImageIcon,
   Undo, Trash2, X, Search, Settings, AlertCircle, Lightbulb,
@@ -432,6 +433,7 @@ interface HaFloorplanProps {
 }
 
 export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorplanProps) {
+  const { toast } = useToast()
   const [floorplans, setFloorplans] = useState<HaFloorplan[]>([])
   const [entities, setEntities] = useState<Record<string, HaFloorplanEntity[]>>({})
   const [activeFloorplanId, setActiveFloorplanId] = useState<string | null>(
@@ -654,7 +656,7 @@ export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorp
       const data = JSON.parse(text) as { floorplans: HaFloorplan[]; entities: Record<string, HaFloorplanEntity[]> }
       const result = await api.ha.floorplans.import(data)
       await loadFloorplans()
-      alert(`${result.imported} Etagen importiert, ${result.skipped} übersprungen.\nBilder müssen erneut hochgeladen werden.`)
+      toast({ message: `${result.imported} Etagen importiert, ${result.skipped} übersprungen. Bilder müssen erneut hochgeladen werden.`, type: 'success', duration: 6000 })
     } catch { /* ignore */ }
   }
 

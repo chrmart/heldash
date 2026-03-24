@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Service } from '../types'
 import { useStore } from '../store/useStore'
+import { useConfirm } from './ConfirmDialog'
 import { RefreshCw, Pencil, Trash2 } from 'lucide-react'
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 
 export function ServiceCard({ service, onEdit, hideAdminActions }: Props) {
   const { checkService, deleteService, isAdmin } = useStore()
+  const { confirm: confirmDlg } = useConfirm()
   const liveStatus = useStore(state => state.services.find(s => s.id === service.id)?.last_status)
   const liveCheckEnabled = useStore(state => state.services.find(s => s.id === service.id)?.check_enabled)
   const [checking, setChecking] = useState(false)
@@ -36,9 +38,8 @@ export function ServiceCard({ service, onEdit, hideAdminActions }: Props) {
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (confirm(`Delete "${service.name}"?`)) {
-      await deleteService(service.id)
-    }
+    const ok = await confirmDlg({ title: `Delete "${service.name}"?`, danger: true, confirmLabel: 'Delete' })
+    if (ok) await deleteService(service.id)
   }
 
   const handleEdit = (e: React.MouseEvent) => {

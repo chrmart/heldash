@@ -6,6 +6,7 @@ import { Plus, Trash2, Users, Shield, Pencil, X, Check, Eye, EyeOff, Settings, K
 import type { UserRecord, UserGroup, Service, Background, Settings as SettingsType } from '../types'
 import type { ArrInstance } from '../types/arr'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
 
 type SettingsTab = 'general' | 'design' | 'users' | 'groups' | 'oidc'
 
@@ -332,6 +333,7 @@ export function SettingsPage({ onStartOnboarding }: { onStartOnboarding?: () => 
   const { instances: arrInstances, loadInstances } = useArrStore()
   const { widgets, loadWidgets } = useWidgetStore()
   const { toast } = useToast()
+  const { confirm: confirmDlg } = useConfirm()
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
 
@@ -757,7 +759,7 @@ export function SettingsPage({ onStartOnboarding }: { onStartOnboarding?: () => 
                   <div key={bg.id} className="glass" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
                     <img src={bg.file_path} alt={bg.name} style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 'var(--radius-sm)', flexShrink: 0, border: '1px solid var(--glass-border)' }} />
                     <span style={{ flex: 1, fontSize: 13 }}>{bg.name}</span>
-                    <button className="btn btn-danger btn-icon btn-sm" onClick={() => { if (confirm(`Delete background "${bg.name}"?`)) deleteBackground(bg.id) }} style={{ padding: '4px', width: 28, height: 28, flexShrink: 0 }}>
+                    <button className="btn btn-danger btn-icon btn-sm" onClick={async () => { if (await confirmDlg({ title: `Delete "${bg.name}"?`, danger: true, confirmLabel: 'Delete' })) deleteBackground(bg.id) }} style={{ padding: '4px', width: 28, height: 28, flexShrink: 0 }}>
                       <Trash2 size={12} />
                     </button>
                   </div>
@@ -848,7 +850,7 @@ export function SettingsPage({ onStartOnboarding }: { onStartOnboarding?: () => 
                     <Pencil size={12} />
                   </button>
                   {u.id !== authUser?.sub && (
-                    <button className="btn btn-danger btn-icon btn-sm" onClick={() => { if (confirm(`Delete user "${u.username}"?`)) deleteUser(u.id) }} data-tooltip="Delete" style={{ padding: '4px', width: 28, height: 28, flexShrink: 0 }}>
+                    <button className="btn btn-danger btn-icon btn-sm" onClick={async () => { if (await confirmDlg({ title: `Delete "${u.username}"?`, danger: true, confirmLabel: 'Delete' })) deleteUser(u.id) }} data-tooltip="Delete" style={{ padding: '4px', width: 28, height: 28, flexShrink: 0 }}>
                       <Trash2 size={12} />
                     </button>
                   )}
@@ -920,7 +922,7 @@ export function SettingsPage({ onStartOnboarding }: { onStartOnboarding?: () => 
                     </button>
                   )}
                   {!g.is_system && (
-                    <button className="btn btn-danger btn-icon btn-sm" onClick={() => { if (confirm(`Delete group "${g.name}"?`)) deleteUserGroup(g.id) }} style={{ padding: '4px', width: 28, height: 28, flexShrink: 0 }}>
+                    <button className="btn btn-danger btn-icon btn-sm" onClick={async () => { if (await confirmDlg({ title: `Delete "${g.name}"?`, danger: true, confirmLabel: 'Delete' })) deleteUserGroup(g.id) }} style={{ padding: '4px', width: 28, height: 28, flexShrink: 0 }}>
                       <Trash2 size={12} />
                     </button>
                   )}
