@@ -27,7 +27,7 @@ interface ArrayGqlResult {
   }
 }
 
-interface NotifCountRaw { info?: number; warning?: number; alert?: number }
+interface NotifCountRaw { info?: number; warning?: number; alert?: number; total?: number }
 interface NotifGqlResult {
   notifications?: {
     overview?: { unread?: NotifCountRaw; total?: NotifCountRaw }
@@ -90,9 +90,6 @@ function addPercent(disks: DiskRaw[] | undefined): DiskRaw[] {
   })
 }
 
-function sumCount(c?: NotifCountRaw): number {
-  return (c?.info ?? 0) + (c?.warning ?? 0) + (c?.alert ?? 0)
-}
 
 export async function unraidRoutes(app: FastifyInstance) {
   const db = () => getDb()
@@ -188,7 +185,12 @@ export async function unraidRoutes(app: FastifyInstance) {
           os { platform distro release uptime hostname arch }
           versions { core { unraid } }
         }
+        metrics {
+          memory { used total percentTotal }
+          cpu { percentTotal }
+        }
         vars { version name }
+        online
       }`)
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
@@ -205,9 +207,9 @@ export async function unraidRoutes(app: FastifyInstance) {
           state
           capacity { kilobytes { free used total } }
           parityCheckStatus { status running paused correcting progress errors speed date duration }
-          parities { id name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
-          disks    { id name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
-          caches   { id name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
+          parities { id idx name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
+          disks    { id idx name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
+          caches   { id idx name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
         }
       }`) as ArrayGqlResult
       return {
@@ -373,7 +375,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     try {
       return await unraidGql(row.url, row.api_key, `query {
-        vms { domains { id uuid name state type description } }
+        vms { domains { id name state } }
       }`)
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
@@ -469,15 +471,15 @@ export async function unraidRoutes(app: FastifyInstance) {
     try {
       const data = await unraidGql(row.url, row.api_key, `query {
         notifications {
-          overview { unread { info warning alert } total { info warning alert } }
+          overview { unread { info warning alert total } total { info warning alert total } }
           list(filter: { limit: 30 }) { id title subject description importance timestamp read }
         }
       }`) as NotifGqlResult
       return {
         notifications: {
           overview: {
-            unread: sumCount(data.notifications?.overview?.unread),
-            total:  sumCount(data.notifications?.overview?.total),
+            unread: data.notifications?.overview?.unread,
+            total:  data.notifications?.overview?.total,
           },
           list: data.notifications?.list ?? [],
         },

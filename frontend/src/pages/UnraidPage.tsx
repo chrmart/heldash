@@ -30,6 +30,15 @@ function formatBytes(bytes?: number): string {
   return `${(gb / 1024).toFixed(2)} TB`
 }
 
+function formatKilobytes(kb?: number | string | null): string {
+  const n = typeof kb === 'string' ? parseInt(kb, 10) : (kb ?? 0)
+  if (!n || n === 0) return '–'
+  if (n < 1024)       return `${n} KB`
+  if (n < 1048576)    return `${(n / 1024).toFixed(1)} MB`
+  if (n < 1073741824) return `${(n / 1048576).toFixed(2)} GB`
+  return `${(n / 1073741824).toFixed(2)} TB`
+}
+
 function formatUptime(seconds?: number): string {
   if (!seconds) return '–'
   const d = Math.floor(seconds / 86400)
@@ -189,11 +198,12 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
 
   const os = data?.info?.os
   const cpu = data?.info?.cpu
-  const memory = data?.info?.memory
+  const memory = data?.metrics?.memory
   const baseboard = data?.info?.baseboard
   const arrState = arrData?.array?.state
   const cap = arrData?.array?.capacity?.kilobytes
-  const unread = notifData?.notifications?.overview?.unread ?? 0
+  const unreadObj = notifData?.notifications?.overview?.unread
+  const unread = unreadObj?.total ?? ((unreadObj?.info ?? 0) + (unreadObj?.warning ?? 0) + (unreadObj?.alert ?? 0))
   const err = errors[`info_${instanceId}`]
 
   const stateColor = (s?: string) => {
@@ -226,12 +236,12 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
           {memory?.total ? (
             <>
               <div style={{ background: 'var(--glass-bg)', borderRadius: 4, height: 6, marginBottom: 6 }}>
-                <div style={{ background: 'var(--accent)', height: '100%', borderRadius: 4, width: `${((memory.used ?? 0) / memory.total * 100).toFixed(0)}%` }} />
+                <div style={{ background: 'var(--accent)', height: '100%', borderRadius: 4, width: `${(memory.percentTotal ?? 0).toFixed(0)}%` }} />
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                 {formatBytes(memory.used)} / {formatBytes(memory.total)}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Frei: {formatBytes(memory.free)}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{(memory.percentTotal ?? 0).toFixed(1)}%</div>
             </>
           ) : <div style={{ color: 'var(--text-muted)' }}>–</div>}
         </div>
@@ -245,7 +255,7 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Array</div>
           <span style={{ background: stateColor(arrState), color: arrState === 'started' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{arrState ?? '–'}</span>
-          {cap && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>{formatBytes(cap.used)} / {formatBytes(cap.total)}</div>}
+          {cap && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>{formatKilobytes(parseInt(cap.used ?? '0', 10))} / {formatKilobytes(parseInt(cap.total ?? '1', 10))}</div>}
         </div>
 
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)', cursor: 'default' }}>
@@ -273,6 +283,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
   const [parityCorrect, setParityCorrect] = useState(false)
   const [diskLoading, setDiskLoading] = useState<Record<string, boolean>>({})
   const [showHistory, setShowHistory] = useState(false)
+  const [showCaches, setShowCaches] = useState(false)
 
   useEffect(() => {
     loadArray(instanceId)
@@ -283,7 +294,9 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
 
   const arrState = arrData?.array?.state ?? ''
   const cap = arrData?.array?.capacity?.kilobytes
+  const parities = arrData?.array?.parities ?? []
   const disks = arrData?.array?.disks ?? []
+  const caches = arrData?.array?.caches ?? []
   const isParityRunning = /resyncing|syncing|check/.test(arrState)
   const isParityPaused = /paused/.test(arrState)
   const err = errors[`array_${instanceId}`]
@@ -310,7 +323,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
     return 'var(--status-offline)'
   }
 
-  const usedPct = cap ? ((cap.used ?? 0) / (cap.total ?? 1) * 100) : 0
+  const usedPct = cap ? (parseInt(cap.used ?? '0', 10) / (parseInt(cap.total ?? '1', 10) || 1) * 100) : 0
   const barColor = usedPct < 80 ? 'var(--accent)' : usedPct < 90 ? 'var(--warning)' : 'var(--status-offline)'
 
   const runConfirm = useCallback(async (action: string) => {
@@ -369,7 +382,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
       {cap && (
         <div className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-            <span>{formatBytes(cap.used)} / {formatBytes(cap.total)}</span>
+            <span>{formatKilobytes(parseInt(cap.used ?? '0', 10))} / {formatKilobytes(parseInt(cap.total ?? '1', 10))}</span>
             <span>{usedPct.toFixed(1)}%</span>
           </div>
           <div style={{ background: 'var(--glass-bg)', borderRadius: 4, height: 8 }}>
@@ -378,54 +391,105 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
         </div>
       )}
 
-      {disks.length > 0 && (
-        <div className="glass" style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: 'var(--spacing-md)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Name', 'Gerät', 'Größe', 'Status', 'Temp', 'Belegung', ...(isAdmin ? ['Aktionen'] : [])].map(h => (
-                  <th key={h} style={{ padding: 'var(--spacing-sm) var(--spacing-md)', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {disks.map((disk, i) => (
-                <tr key={disk.id ?? i} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                  <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', fontWeight: 500 }}>{disk.name ?? '–'}</td>
-                  <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)' }}>{disk.device ?? '–'}</td>
-                  <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>{formatBytes(disk.size)}</td>
-                  <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
-                    <span style={{ background: diskStatusColor(disk.status), color: disk.status === 'DISK_OK' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{disk.status ?? '–'}</span>
-                  </td>
-                  <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(disk.temp) }}>{disk.temp != null ? `${disk.temp}°C` : '–'}</td>
-                  <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
-                    {disk.fsSize && disk.fsSize > 0 ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ background: 'var(--glass-bg)', borderRadius: 2, height: 6, width: 60 }}>
-                          <div style={{ background: 'var(--accent)', height: '100%', borderRadius: 2, width: `${(disk.fsUsedPercent ?? 0).toFixed(0)}%` }} />
-                        </div>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(disk.fsUsedPercent ?? 0).toFixed(0)}%</span>
-                      </div>
-                    ) : '–'}
-                  </td>
-                  {isAdmin && (
-                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn" disabled={diskLoading[disk.id ?? ''] || arrState !== 'started' || disk.status === 'DISK_NP'} onClick={() => handleDiskSpin(disk.id!, 'up')} title="Spin Up" style={{ padding: '2px 6px' }}>
-                          {diskLoading[disk.id ?? ''] ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <ChevronUp size={14} />}
-                        </button>
-                        <button className="btn" disabled={diskLoading[disk.id ?? ''] || arrState !== 'started' || disk.status === 'DISK_NP'} onClick={() => handleDiskSpin(disk.id!, 'down')} title="Spin Down" style={{ padding: '2px 6px' }}>
-                          <ChevronDown size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  )}
+      {(parities.length > 0 || disks.length > 0) && (
+        <div style={{ marginBottom: 'var(--spacing-md)' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, color: 'var(--text-secondary)' }}>Array</div>
+          <div className="glass" style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  {['Typ', 'Name', 'Gerät', 'Größe', 'Status', 'Temp', 'Belegung', ...(isAdmin ? ['Aktionen'] : [])].map(h => (
+                    <th key={h} style={{ padding: 'var(--spacing-sm) var(--spacing-md)', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {[...parities.map(d => ({ ...d, _section: 'parity' })), ...disks.map(d => ({ ...d, _section: 'data' }))].map((disk, i) => (
+                  <tr key={disk.id ?? i} style={{ borderBottom: '1px solid var(--glass-border)', opacity: disk.status === 'DISK_NP' ? 0.5 : 1 }}>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
+                      <span style={{ background: disk._section === 'parity' ? '#8b5cf6' : 'var(--accent)', color: '#000', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600 }}>{disk._section === 'parity' ? 'Parity' : 'Daten'}</span>
+                    </td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', fontWeight: 500 }}>{disk.name ?? '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)' }}>{disk.device ?? '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>{formatKilobytes(disk.size)}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
+                      <span style={{ background: diskStatusColor(disk.status), color: disk.status === 'DISK_OK' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{disk.status ?? '–'}</span>
+                    </td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(disk.temp) }}>{disk.temp != null ? `${disk.temp}°C` : '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
+                      {disk.fsSize && disk.fsSize > 0 ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ background: 'var(--glass-bg)', borderRadius: 2, height: 6, width: 60 }}>
+                            <div style={{ background: 'var(--accent)', height: '100%', borderRadius: 2, width: `${(disk.fsUsedPercent ?? 0).toFixed(0)}%` }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(disk.fsUsedPercent ?? 0).toFixed(0)}%</span>
+                        </div>
+                      ) : '–'}
+                    </td>
+                    {isAdmin && (
+                      <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn" disabled={diskLoading[disk.id ?? ''] || arrState !== 'started' || disk.status === 'DISK_NP'} onClick={() => handleDiskSpin(disk.id!, 'up')} title="Spin Up" style={{ padding: '2px 6px' }}>
+                            {diskLoading[disk.id ?? ''] ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <ChevronUp size={14} />}
+                          </button>
+                          <button className="btn" disabled={diskLoading[disk.id ?? ''] || arrState !== 'started' || disk.status === 'DISK_NP'} onClick={() => handleDiskSpin(disk.id!, 'down')} title="Spin Down" style={{ padding: '2px 6px' }}>
+                            <ChevronDown size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
+
+      <div className="glass" style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: 'var(--spacing-md)' }}>
+        <button className="btn" onClick={() => setShowCaches(v => !v)} style={{ width: '100%', textAlign: 'left', padding: 'var(--spacing-sm) var(--spacing-md)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>Cache Pools {caches.length > 0 ? `(${caches.length})` : ''}</span>
+          {showCaches ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+        {showCaches && (
+          caches.length === 0 ? (
+            <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)', fontSize: 13 }}>Keine Cache-Pools konfiguriert.</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, borderTop: '1px solid var(--border)' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  {['Name', 'Gerät', 'Größe', 'Status', 'Temp', 'Belegung'].map(h => (
+                    <th key={h} style={{ padding: 'var(--spacing-sm) var(--spacing-md)', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {caches.map((disk, i) => (
+                  <tr key={disk.id ?? i} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', fontWeight: 500 }}>{disk.name ?? '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)' }}>{disk.device ?? '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>{formatKilobytes(disk.size)}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
+                      <span style={{ background: diskStatusColor(disk.status), color: disk.status === 'DISK_OK' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{disk.status ?? '–'}</span>
+                    </td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(disk.temp) }}>{disk.temp != null ? `${disk.temp}°C` : '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
+                      {disk.fsSize && disk.fsSize > 0 ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ background: 'var(--glass-bg)', borderRadius: 2, height: 6, width: 60 }}>
+                            <div style={{ background: 'var(--accent)', height: '100%', borderRadius: 2, width: `${(disk.fsUsedPercent ?? 0).toFixed(0)}%` }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(disk.fsUsedPercent ?? 0).toFixed(0)}%</span>
+                        </div>
+                      ) : '–'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        )}
+      </div>
 
       <div className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)' }}>
         <button className="btn" onClick={() => setShowHistory(v => !v)} style={{ marginBottom: showHistory ? 'var(--spacing-sm)' : 0 }}>
@@ -491,14 +555,13 @@ function DockerTab({ instanceId }: { instanceId: string }) {
     const name = c.names?.[0]?.replace(/^\//, '') ?? ''
     const image = c.image?.split('@')[0] ?? ''
     const matchSearch = !search || name.toLowerCase().includes(search.toLowerCase()) || image.toLowerCase().includes(search.toLowerCase())
-    const matchFilter = filter === 'all' || (filter === 'running' && c.state === 'running') || (filter === 'stopped' && c.state !== 'running')
+    const matchFilter = filter === 'all' || (filter === 'running' && c.state === 'RUNNING') || (filter === 'stopped' && c.state !== 'RUNNING')
     return matchSearch && matchFilter
   })
 
   const stateColor = (s?: string) => {
-    if (s === 'running') return 'var(--status-online)'
-    if (s === 'restarting') return 'var(--warning)'
-    if (s === 'paused') return '#3b82f6'
+    if (s === 'RUNNING') return 'var(--status-online)'
+    if (s === 'PAUSED') return 'var(--warning)'
     return 'var(--text-muted)'
   }
 
@@ -536,8 +599,9 @@ function DockerTab({ instanceId }: { instanceId: string }) {
           const name = c.names?.[0]?.replace(/^\//, '') ?? 'Unbekannt'
           const image = c.image?.split('@')[0]?.split(':')[0] ?? '–'
           const isLoading = actionLoading[name]
-          const isRunning = c.state === 'running'
-          const isRestarting = c.state === 'restarting' || c.state === 'paused'
+          const isRunning = c.state === 'RUNNING'
+          const isExited = c.state === 'EXITED'
+          const isPaused = c.state === 'PAUSED'
           return (
             <div key={c.id ?? i} className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
@@ -553,13 +617,13 @@ function DockerTab({ instanceId }: { instanceId: string }) {
                 {c.autoStart && <span title="Auto Start"><RotateCcw size={12} /></span>}
               </div>
               <div style={{ display: 'flex', gap: 4 }}>
-                <button className="btn" disabled={isLoading || isRunning || isRestarting} onClick={() => handleAction(c, 'start')} style={{ padding: '3px 8px', fontSize: 12 }}>
+                <button className="btn" disabled={isLoading || !isExited} onClick={() => handleAction(c, 'start')} style={{ padding: '3px 8px', fontSize: 12 }}>
                   {isLoading ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Play size={12} />}
                 </button>
-                <button className="btn" disabled={isLoading || !isRunning || isRestarting} onClick={() => handleAction(c, 'stop')} style={{ padding: '3px 8px', fontSize: 12 }}>
+                <button className="btn" disabled={isLoading || !(isRunning || isPaused)} onClick={() => handleAction(c, 'stop')} style={{ padding: '3px 8px', fontSize: 12 }}>
                   <Square size={12} />
                 </button>
-                <button className="btn" disabled={isLoading || !isRunning || isRestarting} onClick={() => handleAction(c, 'restart')} style={{ padding: '3px 8px', fontSize: 12 }}>
+                <button className="btn" disabled={isLoading || !isRunning} onClick={() => handleAction(c, 'restart')} style={{ padding: '3px 8px', fontSize: 12 }}>
                   <RotateCcw size={12} />
                 </button>
               </div>
@@ -588,23 +652,26 @@ function VmsTab({ instanceId }: { instanceId: string }) {
   }, [instanceId])
 
   const stateColor = (s?: string) => {
-    if (s === 'running') return 'var(--status-online)'
-    if (s === 'shut off') return 'var(--text-muted)'
-    if (s === 'paused') return 'var(--warning)'
-    if (s === 'crashed') return 'var(--status-offline)'
-    return 'var(--warning)'
+    if (s === 'RUNNING') return 'var(--status-online)'
+    if (s === 'IDLE') return '#22c55e'
+    if (s === 'PAUSED') return 'var(--warning)'
+    if (s === 'SHUTDOWN') return 'var(--warning)'
+    if (s === 'SHUTOFF') return 'var(--text-muted)'
+    if (s === 'CRASHED') return 'var(--status-offline)'
+    if (s === 'PMSUSPENDED') return '#8b5cf6'
+    return 'var(--text-muted)'
   }
 
   const handleVmAction = async (vm: UnraidVm, action: 'start' | 'stop' | 'pause' | 'resume') => {
-    const uuid = vm.uuid ?? ''
-    setVmLoading(s => ({ ...s, [uuid]: true }))
+    const vmId = vm.id ?? ''
+    setVmLoading(s => ({ ...s, [vmId]: true }))
     try {
-      await vmControl(instanceId, uuid, action)
+      await vmControl(instanceId, vmId, action)
       toast({ message: `VM ${vm.name} ${action}`, type: 'success' })
     } catch (e) {
       toast({ message: (e as Error).message, type: 'error' })
     } finally {
-      setVmLoading(s => ({ ...s, [uuid]: false }))
+      setVmLoading(s => ({ ...s, [vmId]: false }))
     }
   }
 
@@ -619,31 +686,21 @@ function VmsTab({ instanceId }: { instanceId: string }) {
       {err && <div className="error-banner" style={{ marginBottom: 'var(--spacing-md)' }}>{err}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--spacing-md)' }}>
         {domains.map((vm, i) => {
-          const uuid = vm.uuid ?? String(i)
-          const isLoading = vmLoading[uuid]
-          const isShutoff = vm.state === 'shut off'
-          const isRunning = vm.state === 'running'
-          const isPaused = vm.state === 'paused'
-          const isCrashed = vm.state === 'crashed'
-          const isInShutdown = vm.state === 'in shutdown' || vm.state === 'idle'
+          const vmId = vm.id ?? String(i)
+          const isLoading = vmLoading[vmId]
+          const isShutoff = vm.state === 'SHUTOFF' || vm.state === 'SHUTDOWN' || vm.state === 'CRASHED' || vm.state === 'NOSTATE'
+          const isRunning = vm.state === 'RUNNING' || vm.state === 'IDLE'
+          const isPaused = vm.state === 'PAUSED'
           return (
-            <div key={uuid} className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)' }}>
+            <div key={vmId} className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                 <h3 style={{ margin: 0, fontSize: 15 }}>{vm.name ?? '–'}</h3>
-                <span style={{ background: stateColor(vm.state), color: isRunning ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{vm.state ?? '–'}</span>
+                <span style={{ background: stateColor(vm.state), color: vm.state === 'RUNNING' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{vm.state ?? '–'}</span>
               </div>
-              {vm.os && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{vm.os}</div>}
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                {vm.coreCount} Kerne | {((vm.memoryMin ?? 0) / 1024).toFixed(1)} GB RAM
-              </div>
-              {vm.primaryGPU && vm.primaryGPU !== '' && vm.primaryGPU !== 'none' && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{vm.primaryGPU}</div>
-              )}
-              {vm.autoStart && <div style={{ marginBottom: 8 }}><RotateCcw size={12} color="var(--accent)" /></div>}
               <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                {(isShutoff || isCrashed) && <button className="btn btn-primary" disabled={isLoading || isInShutdown} onClick={() => handleVmAction(vm, 'start')} style={{ fontSize: 12, padding: '3px 8px' }}>{isLoading ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Play size={12} />}</button>}
-                {isRunning && <button className="btn btn-danger" disabled={isLoading || isInShutdown} onClick={() => setConfirm({ vm, action: 'stop' })} style={{ fontSize: 12, padding: '3px 8px' }}><Square size={12} /></button>}
-                {isRunning && <button className="btn" disabled={isLoading || isInShutdown} onClick={() => setConfirm({ vm, action: 'pause' })} style={{ fontSize: 12, padding: '3px 8px' }}><Pause size={12} /></button>}
+                {isShutoff && <button className="btn btn-primary" disabled={isLoading} onClick={() => handleVmAction(vm, 'start')} style={{ fontSize: 12, padding: '3px 8px' }}>{isLoading ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Play size={12} />}</button>}
+                {isRunning && <button className="btn btn-danger" disabled={isLoading} onClick={() => setConfirm({ vm, action: 'stop' })} style={{ fontSize: 12, padding: '3px 8px' }}><Square size={12} /></button>}
+                {isRunning && <button className="btn" disabled={isLoading} onClick={() => setConfirm({ vm, action: 'pause' })} style={{ fontSize: 12, padding: '3px 8px' }}><Pause size={12} /></button>}
                 {isPaused && <button className="btn btn-primary" disabled={isLoading} onClick={() => handleVmAction(vm, 'resume')} style={{ fontSize: 12, padding: '3px 8px' }}><Play size={12} /></button>}
                 {isPaused && <button className="btn btn-danger" disabled={isLoading} onClick={() => setConfirm({ vm, action: 'stop' })} style={{ fontSize: 12, padding: '3px 8px' }}><Square size={12} /></button>}
               </div>
@@ -705,10 +762,10 @@ function SharesTab({ instanceId }: { instanceId: string }) {
                         <div style={{ background: 'var(--accent)', height: '100%', borderRadius: 2, width: `${((s.used ?? 0) / (s.size ?? 1) * 100).toFixed(0)}%` }} />
                       </div>
                     ) : null}
-                    <span>{formatBytes(s.used)} / {formatBytes(s.size)}</span>
+                    <span>{formatKilobytes(s.used)} / {formatKilobytes(s.size)}</span>
                   </div>
                 </td>
-                <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>{formatBytes(s.free)}</td>
+                <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>{formatKilobytes(s.free)}</td>
                 <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
                   <span style={{ background: s.cacheEnabled ? '#3b82f6' : 'var(--text-muted)', color: '#fff', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{s.cacheEnabled ? 'Ein' : 'Aus'}</span>
                 </td>
@@ -729,7 +786,8 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
   const { toast } = useToast()
   const data = notifications[instanceId]
   const list = data?.notifications?.list ?? []
-  const unread = data?.notifications?.overview?.unread ?? 0
+  const unreadObj = data?.notifications?.overview?.unread
+  const unread = unreadObj?.total ?? ((unreadObj?.info ?? 0) + (unreadObj?.warning ?? 0) + (unreadObj?.alert ?? 0))
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [dismissingAll, setDismissingAll] = useState(false)
   const err = errors[`notif_${instanceId}`]
@@ -831,7 +889,7 @@ function SystemTab({ instanceId }: { instanceId: string }) {
 
   const os = data?.info?.os
   const cpu = data?.info?.cpu
-  const memory = data?.info?.memory
+  const memory = data?.metrics?.memory
   const baseboard = data?.info?.baseboard
   const cfg = cfgData?.config
   const err = errors[`info_${instanceId}`] ?? errors[`config_${instanceId}`]
@@ -855,7 +913,7 @@ function SystemTab({ instanceId }: { instanceId: string }) {
               ['Uptime', formatUptime(os?.uptime)],
               ['CPU', `${cpu?.manufacturer ?? ''} ${cpu?.brand ?? ''}`.trim() || '–'],
               ['Kerne / Threads', `${cpu?.cores ?? '–'} / ${cpu?.threads ?? '–'}`],
-              ['RAM', formatBytes(memory?.total)],
+              ['RAM', memory?.total != null ? formatBytes(memory.total) : '–'],
               ['Mainboard', `${baseboard?.manufacturer ?? ''} ${baseboard?.model ?? ''}`.trim() || '–'],
             ] as [string, string | undefined][]).map(([label, val]) => (
               <React.Fragment key={label}>
@@ -1152,7 +1210,7 @@ function ManagementTab() {
 
 const CONTENT_TABS = [
   { key: 'overview',      label: 'Übersicht' },
-  { key: 'array',         label: 'Array' },
+  { key: 'array',         label: 'HDD' },
   { key: 'docker',        label: 'Docker' },
   { key: 'vms',           label: 'VMs' },
   { key: 'shares',        label: 'Freigaben' },
