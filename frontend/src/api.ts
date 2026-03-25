@@ -1,6 +1,6 @@
 import type { Service, Group, Settings, AuthUser, UserRecord, UserGroup, DashboardItem, DashboardGroup, DashboardResponse, Widget, WidgetStats, DockerContainer, ContainerStats, Background, HaInstance, HaPanel, HaEntityFull, HaArea, EnergyData, CalendarEntry, HaFloorplan, HaFloorplanEntity, HaAlert, HaHistoryEntry, NetworkDevice, NetworkDeviceHistory, ScanResult, BackupSource, BackupStatusResult, ResourceSnapshot, ChangelogRelease } from './types'
 import type { SyncHistoryEntry, BackupEntry } from './types/recyclarr'
-import type { UnraidInstance, UnraidInfo, UnraidArray, UnraidParityHistory, UnraidContainer, UnraidVm, UnraidShare, UnraidUser, UnraidNotifications, UnraidConfig } from './types/unraid'
+import type { UnraidInstance, UnraidInfo, UnraidArray, UnraidParityHistory, UnraidContainer, UnraidVm, UnraidShare, UnraidUser, UnraidNotifications, UnraidConfig, UnraidPhysicalDisk } from './types/unraid'
 import type { ArrInstance, ArrStatus, ArrStats, ArrQueueResponse, ArrCalendarItem, ProwlarrIndexer, SabnzbdQueueData, SabnzbdHistoryData, SeerrRequest, SeerrRequestsResponse, RadarrMovie, SonarrSeries, ArrCustomFormat, ArrCFSpecification, ArrQualityProfile } from './types/arr'
 import type { TmdbPage, TmdbGenre, TmdbProvider, TmdbTvDetail, TmdbDiscoverFilters } from './types/tmdb'
 import type { SeerrTvDetail, SeerrMovieDetail } from './types/seerr'
@@ -500,13 +500,19 @@ export const api = {
     diskSpinUp:          (id: string, diskId: string)                                                   => req<unknown>(`/unraid/${id}/disks/${encodeURIComponent(diskId)}/spinup`, { method: 'POST', body: JSON.stringify({}) }),
     diskSpinDown:        (id: string, diskId: string)                                                   => req<unknown>(`/unraid/${id}/disks/${encodeURIComponent(diskId)}/spindown`, { method: 'POST', body: JSON.stringify({}) }),
     docker:              (id: string)                                                                   => req<UnraidContainer[]>(`/unraid/${id}/docker`),
-    dockerControl:       (id: string, name: string, action: 'start' | 'stop' | 'restart' | 'unpause') => req<unknown>(`/unraid/${id}/docker/${encodeURIComponent(name)}/${action}`, { method: 'POST', body: JSON.stringify({}) }),
-    vms:                 (id: string)                                                                   => req<{ vms?: { domains?: UnraidVm[] } }>(`/unraid/${id}/vms`),
-    vmControl:           (id: string, uuid: string, action: 'start' | 'stop' | 'pause' | 'resume')    => req<unknown>(`/unraid/${id}/vms/${encodeURIComponent(uuid)}/${action}`, { method: 'POST', body: JSON.stringify({}) }),
-    shares:              (id: string)                                                                   => req<{ shares?: UnraidShare[] }>(`/unraid/${id}/shares`),
-    users:               (id: string)                                                                   => req<{ users?: UnraidUser[] }>(`/unraid/${id}/users`),
-    notifications:       (id: string)                                                                   => req<UnraidNotifications>(`/unraid/${id}/notifications`),
-    dismissNotification: (id: string, nId: string)                                                     => req<unknown>(`/unraid/${id}/notifications/${encodeURIComponent(nId)}/dismiss`, { method: 'POST', body: JSON.stringify({}) }),
-    config:              (id: string)                                                                   => req<UnraidConfig>(`/unraid/${id}/config`),
+    dockerControl:       (id: string, name: string, action: 'start' | 'stop' | 'restart' | 'unpause' | 'pause') => req<unknown>(`/unraid/${id}/docker/${encodeURIComponent(name)}/${action}`, { method: 'POST', body: JSON.stringify({}) }),
+    dockerUpdate:        (id: string, name: string)                                                             => req<unknown>(`/unraid/${id}/docker/${encodeURIComponent(name)}/update`, { method: 'POST', body: JSON.stringify({}) }),
+    dockerUpdateAll:     (id: string)                                                                           => req<unknown>(`/unraid/${id}/docker/update-all`, { method: 'POST', body: JSON.stringify({}) }),
+    vms:                 (id: string)                                                                           => req<{ vms?: { domains?: UnraidVm[] } }>(`/unraid/${id}/vms`),
+    vmControl:           (id: string, uuid: string, action: 'start' | 'stop' | 'pause' | 'resume' | 'forcestop' | 'reboot' | 'reset') => req<unknown>(`/unraid/${id}/vms/${encodeURIComponent(uuid)}/${action}`, { method: 'POST', body: JSON.stringify({}) }),
+    shares:              (id: string)                                                                           => req<{ shares?: UnraidShare[] }>(`/unraid/${id}/shares`),
+    users:               (id: string)                                                                           => req<{ users?: UnraidUser[] }>(`/unraid/${id}/users`),
+    notifications:       (id: string)                                                                           => req<UnraidNotifications>(`/unraid/${id}/notifications`),
+    notificationsArchive: (id: string)                                                                          => req<{ list?: import('./types/unraid').UnraidNotification[] }>(`/unraid/${id}/notifications/archive`),
+    dismissNotification: (id: string, nId: string)                                                             => req<unknown>(`/unraid/${id}/notifications/${encodeURIComponent(nId)}/dismiss`, { method: 'POST', body: JSON.stringify({}) }),
+    config:              (id: string)                                                                           => req<UnraidConfig>(`/unraid/${id}/config`),
+    physicalDisks:       (id: string)                                                                           => req<{ disks?: UnraidPhysicalDisk[] }>(`/unraid/${id}/physicaldisks`),
+    diskMount:           (id: string, diskId: string)                                                           => req<unknown>(`/unraid/${id}/disks/${encodeURIComponent(diskId)}/mount`, { method: 'POST', body: JSON.stringify({}) }),
+    diskUnmount:         (id: string, diskId: string)                                                           => req<unknown>(`/unraid/${id}/disks/${encodeURIComponent(diskId)}/unmount`, { method: 'POST', body: JSON.stringify({}) }),
   },
 }

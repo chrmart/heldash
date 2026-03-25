@@ -6,14 +6,17 @@ export interface UnraidInstance {
 export interface UnraidOs { platform?: string; distro?: string; release?: string; uptime?: string; hostname?: string; arch?: string }
 export interface UnraidCpu { manufacturer?: string; brand?: string; cores?: number; threads?: number }
 export interface UnraidBaseboard { manufacturer?: string; model?: string; version?: string }
-export interface UnraidMetricsMemory { used?: number; total?: number; percentTotal?: number }
-export interface UnraidMetricsCpu { percentTotal?: number }
+export interface UnraidMemoryLayout { size?: number; type?: string; clockSpeed?: number; manufacturer?: string; formFactor?: string; partNum?: string }
+export interface UnraidMetricsMemory { used?: number; total?: number; percentTotal?: number; swapTotal?: number; swapUsed?: number; swapFree?: number; percentSwapTotal?: number }
+export interface UnraidMetricsCpu { percentTotal?: number; cpus?: { percentTotal?: number }[] }
 export interface UnraidMetrics { memory?: UnraidMetricsMemory; cpu?: UnraidMetricsCpu }
 export interface UnraidInfo {
   info?: {
     id?: string; time?: string
     os?: UnraidOs; cpu?: UnraidCpu; baseboard?: UnraidBaseboard
-    versions?: { core?: { unraid?: string } }
+    memory?: { layout?: UnraidMemoryLayout[] }
+    system?: { manufacturer?: string; model?: string; virtual?: boolean }
+    versions?: { core?: { unraid?: string; api?: string; kernel?: string }; packages?: { docker?: string } }
   }
   metrics?: UnraidMetrics
   vars?: { version?: string; name?: string }
@@ -24,7 +27,7 @@ export interface UnraidDisk {
   status?: string; temp?: number | null; rotational?: boolean
   fsSize?: number; fsFree?: number; fsUsed?: number
   fsUsedPercent?: number | null
-  type?: string; isSpinning?: boolean | null
+  type?: string; isSpinning?: boolean | null; color?: string
 }
 export interface UnraidCapacity { kilobytes?: { free?: string; used?: string; total?: string } }
 export interface UnraidParityCheckStatus {
@@ -45,10 +48,14 @@ export interface UnraidParityHistory {
   date?: string; duration?: number; speed?: string; status?: string; errors?: number
   progress?: number; correcting?: boolean; paused?: boolean; running?: boolean
 }
+export interface UnraidContainerPort { privatePort?: number; publicPort?: number; type?: string; ip?: string }
 export interface UnraidContainer {
   id?: string; names?: string[]; state?: string; status?: string
   image?: string; autoStart?: boolean
   hostConfig?: { networkMode?: string }
+  iconUrl?: string; webUiUrl?: string; projectUrl?: string
+  isUpdateAvailable?: boolean; isOrphaned?: boolean
+  ports?: UnraidContainerPort[]
 }
 export interface UnraidVm {
   id?: string; name?: string; state?: string
@@ -64,6 +71,12 @@ export interface UnraidNotification {
   id?: string; title?: string; subject?: string; description?: string
   importance?: string; timestamp?: string
 }
+export interface UnraidPhysicalDisk {
+  id?: string; name?: string; vendor?: string; device?: string; type?: string
+  size?: number; serialNum?: string; interfaceType?: string
+  smartStatus?: string; temperature?: number | null; isSpinning?: boolean
+  partitions?: { name?: string; fsType?: string; size?: number }[]
+}
 export interface UnraidNotificationCount { info?: number; warning?: number; alert?: number; total?: number }
 export interface UnraidNotifications {
   notifications?: {
@@ -71,7 +84,9 @@ export interface UnraidNotifications {
       unread?: UnraidNotificationCount
       total?: UnraidNotificationCount
     }
+    warningsAndAlerts?: UnraidNotification[]
     list?: UnraidNotification[]
+    archive?: UnraidNotification[]
   }
 }
 export interface UnraidConfig {

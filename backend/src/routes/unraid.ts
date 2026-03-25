@@ -183,11 +183,13 @@ export async function unraidRoutes(app: FastifyInstance) {
           baseboard { manufacturer model version }
           cpu { manufacturer brand cores threads }
           os { platform distro release uptime hostname arch }
-          versions { core { unraid } }
+          memory { layout { size type clockSpeed manufacturer formFactor partNum } }
+          system { manufacturer model virtual }
+          versions { core { unraid api kernel } packages { docker } }
         }
         metrics {
-          memory { used total percentTotal }
-          cpu { percentTotal }
+          memory { used total percentTotal swapTotal swapUsed percentSwapTotal }
+          cpu { percentTotal cpus { percentTotal } }
         }
         vars { version name }
         online
@@ -207,9 +209,9 @@ export async function unraidRoutes(app: FastifyInstance) {
           state
           capacity { kilobytes { free used total } }
           parityCheckStatus { status running paused correcting progress errors speed date duration }
-          parities { id idx name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
-          disks    { id idx name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
-          caches   { id idx name device size status temp rotational fsSize fsFree fsUsed type isSpinning }
+          parities { id idx name device size status temp rotational fsSize fsFree fsUsed type isSpinning color }
+          disks    { id idx name device size status temp rotational fsSize fsFree fsUsed type isSpinning color }
+          caches   { id idx name device size status temp rotational fsSize fsFree fsUsed type isSpinning color }
         }
       }`) as ArrayGqlResult
       return {
@@ -328,7 +330,12 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     try {
       const data = await unraidGql(row.url, row.api_key, `query {
-        docker { containers { id names image state status autoStart hostConfig { networkMode } } }
+        docker { containers {
+          id names image state status autoStart
+          hostConfig { networkMode }
+          iconUrl webUiUrl projectUrl isUpdateAvailable isOrphaned
+          ports { privatePort publicPort type ip }
+        } }
       }`) as { docker?: { containers?: unknown[] } }
       return data?.docker?.containers ?? []
     } catch (e) {
@@ -380,6 +387,47 @@ export async function unraidRoutes(app: FastifyInstance) {
       return result
     } catch (e) {
       return reply.status(502).send({ error: `Start fehlgeschlagen: ${(e as Error).message}` })
+    }
+  })
+
+  // POST /api/unraid/:id/docker/update-all — BEFORE /:containerName routes
+  app.post<{ Params: { id: string } }>('/api/unraid/:id/docker/update-all', { onRequest: [app.requireAdmin] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    try {
+      const result = await unraidGql(row.url, row.api_key, `mutation { docker { updateAllContainers { id state } } }`)
+      logActivity('unraid', `Docker alle Container aktualisiert — ${row.name}`, 'info', { instanceId: req.params.id })
+      return result
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
+    }
+  })
+
+  // POST /api/unraid/:id/docker/:containerName/pause
+  app.post<{ Params: { id: string; containerName: string } }>('/api/unraid/:id/docker/:containerName/pause', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    const containerId = decodeURIComponent(req.params.containerName)
+    try {
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { pause(id: $id) { id state } } }`, { id: containerId })
+      logActivity('unraid', `Docker ${containerId} pause — ${row.name}`, 'info', { instanceId: req.params.id })
+      return result
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
+    }
+  })
+
+  // POST /api/unraid/:id/docker/:containerName/update
+  app.post<{ Params: { id: string; containerName: string } }>('/api/unraid/:id/docker/:containerName/update', { onRequest: [app.requireAdmin] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    const containerId = decodeURIComponent(req.params.containerName)
+    try {
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { updateContainer(id: $id) { id state } } }`, { id: containerId })
+      logActivity('unraid', `Docker ${containerId} update — ${row.name}`, 'info', { instanceId: req.params.id })
+      return result
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
     }
   })
 
@@ -466,6 +514,110 @@ export async function unraidRoutes(app: FastifyInstance) {
     }
   })
 
+  // POST /api/unraid/:id/vms/:uuid/forcestop
+  app.post<{ Params: { id: string; uuid: string } }>('/api/unraid/:id/vms/:uuid/forcestop', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    const vmId = decodeURIComponent(req.params.uuid)
+    try {
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { forceStop(id: $id) } }`, { id: vmId })
+      logActivity('unraid', `VM ${vmId} forceStop — ${row.name}`, 'info', { instanceId: req.params.id })
+      return result
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
+    }
+  })
+
+  // POST /api/unraid/:id/vms/:uuid/reboot
+  app.post<{ Params: { id: string; uuid: string } }>('/api/unraid/:id/vms/:uuid/reboot', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    const vmId = decodeURIComponent(req.params.uuid)
+    try {
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { reboot(id: $id) } }`, { id: vmId })
+      logActivity('unraid', `VM ${vmId} reboot — ${row.name}`, 'info', { instanceId: req.params.id })
+      return result
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
+    }
+  })
+
+  // POST /api/unraid/:id/vms/:uuid/reset
+  app.post<{ Params: { id: string; uuid: string } }>('/api/unraid/:id/vms/:uuid/reset', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    const vmId = decodeURIComponent(req.params.uuid)
+    try {
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { reset(id: $id) } }`, { id: vmId })
+      logActivity('unraid', `VM ${vmId} reset — ${row.name}`, 'info', { instanceId: req.params.id })
+      return result
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
+    }
+  })
+
+  // GET /api/unraid/:id/physicaldisks
+  app.get<{ Params: { id: string } }>('/api/unraid/:id/physicaldisks', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    try {
+      const data = await unraidGql(row.url, row.api_key, `query {
+        disks {
+          id name vendor device type size serialNum
+          interfaceType smartStatus temperature isSpinning
+          partitions { name fsType size }
+        }
+      }`) as { disks?: unknown[] }
+      return { disks: data.disks ?? [] }
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
+    }
+  })
+
+  // POST /api/unraid/:id/disks/:diskId/mount
+  app.post<{ Params: { id: string; diskId: string } }>('/api/unraid/:id/disks/:diskId/mount', { onRequest: [app.requireAdmin] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    const diskId = decodeURIComponent(req.params.diskId)
+    try {
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { array { mountArrayDisk(id: $id) { id status } } }`, { id: diskId })
+      logActivity('unraid', `Disk ${diskId} mount — ${row.name}`, 'info', { instanceId: req.params.id })
+      return result
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
+    }
+  })
+
+  // POST /api/unraid/:id/disks/:diskId/unmount
+  app.post<{ Params: { id: string; diskId: string } }>('/api/unraid/:id/disks/:diskId/unmount', { onRequest: [app.requireAdmin] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    const diskId = decodeURIComponent(req.params.diskId)
+    try {
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { array { unmountArrayDisk(id: $id) { id status } } }`, { id: diskId })
+      logActivity('unraid', `Disk ${diskId} unmount — ${row.name}`, 'info', { instanceId: req.params.id })
+      return result
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
+    }
+  })
+
+  // GET /api/unraid/:id/notifications/archive — BEFORE /:notifId routes
+  app.get<{ Params: { id: string } }>('/api/unraid/:id/notifications/archive', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    try {
+      const data = await unraidGql(row.url, row.api_key, `query {
+        notifications {
+          list(filter: { type: ARCHIVE, offset: 0, limit: 50 }) { id title subject description importance timestamp }
+        }
+      }`) as NotifGqlResult
+      return { list: data.notifications?.list ?? [] }
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
+    }
+  })
+
   // GET /api/unraid/:id/shares
   app.get<{ Params: { id: string } }>('/api/unraid/:id/shares', { onRequest: [app.authenticate] }, async (req, reply) => {
     const row = await getInstance(req.params.id, reply)
@@ -500,6 +652,7 @@ export async function unraidRoutes(app: FastifyInstance) {
       const data = await unraidGql(row.url, row.api_key, `query {
         notifications {
           overview { unread { info warning alert total } total { info warning alert total } }
+          warningsAndAlerts { id title subject importance timestamp }
           list(filter: { type: UNREAD, offset: 0, limit: 30 }) { id title subject description importance timestamp }
         }
       }`) as NotifGqlResult
@@ -509,6 +662,7 @@ export async function unraidRoutes(app: FastifyInstance) {
             unread: data.notifications?.overview?.unread,
             total:  data.notifications?.overview?.total,
           },
+          warningsAndAlerts: (data.notifications as { warningsAndAlerts?: unknown[] } | undefined)?.warningsAndAlerts ?? [],
           list: data.notifications?.list ?? [],
         },
       }

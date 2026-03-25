@@ -13,8 +13,9 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   Server, Settings2, GripVertical, Plus, RefreshCw, Play, Square, RotateCcw,
   Pause, ChevronUp, ChevronDown, Trash2, Eye, EyeOff, AlertTriangle, Check,
+  ExternalLink, Download, Zap, SkipForward, HardDrive, Cpu,
 } from 'lucide-react'
-import type { UnraidInstance, UnraidContainer, UnraidVm } from '../types/unraid'
+import type { UnraidInstance, UnraidContainer, UnraidVm, UnraidPhysicalDisk } from '../types/unraid'
 import { api } from '../api'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -194,7 +195,7 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
     loadInfo(instanceId)
     loadArray(instanceId)
     loadNotifications(instanceId)
-    const t1 = setInterval(() => loadInfo(instanceId), 30_000)
+    const t1 = setInterval(() => loadInfo(instanceId), 15_000)
     const t2 = setInterval(() => loadArray(instanceId), 30_000)
     return () => { clearInterval(t1); clearInterval(t2) }
   }, [instanceId])
@@ -202,20 +203,33 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
   const os = data?.info?.os
   const cpu = data?.info?.cpu
   const memory = data?.metrics?.memory
+  const cpuMetrics = data?.metrics?.cpu
   const baseboard = data?.info?.baseboard
+  const versions = data?.info?.versions
+  const sysInfo = data?.info?.system
   const arrState = arrData?.array?.state
   const cap = arrData?.array?.capacity?.kilobytes
   const unreadObj = notifData?.notifications?.overview?.unread
   const unread = unreadObj?.total ?? ((unreadObj?.info ?? 0) + (unreadObj?.warning ?? 0) + (unreadObj?.alert ?? 0))
+  const warnings = notifData?.notifications?.warningsAndAlerts ?? []
   const err = errors[`info_${instanceId}`]
+
+  const importanceColor = (imp?: string) => {
+    if (imp === 'ALERT') return 'var(--status-offline)'
+    if (imp === 'WARNING') return 'var(--warning)'
+    return 'var(--accent)'
+  }
 
   const stateColor = (s?: string) => {
     if (!s) return 'var(--text-muted)'
-    if (s === 'started') return 'var(--status-online)'
-    if (s === 'stopped') return 'var(--text-muted)'
-    if (s === 'error') return 'var(--status-offline)'
+    if (s === 'STARTED' || s === 'started') return 'var(--status-online)'
+    if (s === 'STOPPED' || s === 'stopped') return 'var(--text-muted)'
+    if (s === 'ERROR' || s === 'error') return 'var(--status-offline)'
     return 'var(--warning)'
   }
+
+  const cpuPct = cpuMetrics?.percentTotal ?? 0
+  const cpuBarColor = cpuPct < 70 ? 'var(--accent)' : cpuPct < 90 ? 'var(--warning)' : 'var(--status-offline)'
 
   return (
     <div>
@@ -223,28 +237,49 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 'var(--spacing-md)' }}>
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Server</div>
-          <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>{os?.hostname ?? '–'}</h3>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{os?.distro} {os?.release}</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Uptime: {formatUptime(os?.uptime)}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <h3 style={{ margin: 0, fontSize: 16 }}>{os?.hostname ?? '–'}</h3>
+            {sysInfo?.virtual && <span style={{ background: '#8b5cf6', color: '#fff', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 600 }}>VM</span>}
+            {versions?.core?.unraid && <span style={{ background: 'var(--glass-bg)', color: 'var(--text-secondary)', borderRadius: 4, padding: '1px 6px', fontSize: 11 }}>Unraid {versions.core.unraid}</span>}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{sysInfo?.manufacturer} {sysInfo?.model}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Uptime: {formatUptime(os?.uptime)}</div>
         </div>
 
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>CPU</div>
-          <div style={{ fontWeight: 600 }}>{cpu?.manufacturer} {cpu?.brand}</div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{cpu?.cores} Kerne / {cpu?.threads} Threads</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Cpu size={12} /> CPU</div>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>{cpu?.manufacturer} {cpu?.brand}</div>
+          <div style={{ background: 'var(--glass-bg)', borderRadius: 4, height: 6, marginBottom: 4 }}>
+            <div style={{ background: cpuBarColor, height: '100%', borderRadius: 4, width: `${cpuPct.toFixed(0)}%`, transition: 'width 0.5s' }} />
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+            <span>{cpu?.cores} Kerne / {cpu?.threads} Threads</span>
+            <span>{cpuPct.toFixed(1)}%</span>
+          </div>
         </div>
 
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>RAM</div>
           {memory?.total ? (
             <>
-              <div style={{ background: 'var(--glass-bg)', borderRadius: 4, height: 6, marginBottom: 6 }}>
+              <div style={{ background: 'var(--glass-bg)', borderRadius: 4, height: 6, marginBottom: 4 }}>
                 <div style={{ background: 'var(--accent)', height: '100%', borderRadius: 4, width: `${(memory.percentTotal ?? 0).toFixed(0)}%` }} />
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                {formatBytes(memory.used)} / {formatBytes(memory.total)}
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
+                <span>{formatBytes(memory.used)} / {formatBytes(memory.total)}</span>
+                <span style={{ color: 'var(--text-muted)' }}>{(memory.percentTotal ?? 0).toFixed(1)}%</span>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{(memory.percentTotal ?? 0).toFixed(1)}%</div>
+              {(memory.swapTotal ?? 0) > 0 && (
+                <>
+                  <div style={{ background: 'var(--glass-bg)', borderRadius: 4, height: 4, marginTop: 8, marginBottom: 3 }}>
+                    <div style={{ background: '#8b5cf6', height: '100%', borderRadius: 4, width: `${(memory.percentSwapTotal ?? 0).toFixed(0)}%` }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Swap: {formatBytes(memory.swapUsed)} / {formatBytes(memory.swapTotal)}</span>
+                    <span>{(memory.percentSwapTotal ?? 0).toFixed(1)}%</span>
+                  </div>
+                </>
+              )}
             </>
           ) : <div style={{ color: 'var(--text-muted)' }}>–</div>}
         </div>
@@ -257,16 +292,25 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
 
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Array</div>
-          <span style={{ background: stateColor(arrState), color: arrState === 'started' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{arrState ?? '–'}</span>
+          <span style={{ background: stateColor(arrState), color: ['started','STARTED'].includes(arrState ?? '') ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{arrState ?? '–'}</span>
           {cap && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>{formatKilobytes(parseInt(cap.used ?? '0', 10))} / {formatKilobytes(parseInt(cap.total ?? '1', 10))}</div>}
         </div>
 
-        <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)', cursor: 'default' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Benachrichtigungen</div>
+        <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>Benachrichtigungen</div>
           {unread === 0
             ? <span style={{ background: 'var(--status-online)', color: '#000', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>Alles OK</span>
             : <span style={{ background: 'var(--warning)', color: '#000', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{unread} ungelesen</span>
           }
+          {warnings.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {warnings.slice(0, 3).map((w, i) => (
+                <div key={w.id ?? i} style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'flex-start', borderLeft: `3px solid ${importanceColor(w.importance)}`, paddingLeft: 6 }}>
+                  <span style={{ flex: 1, color: 'var(--text-secondary)', lineHeight: 1.3 }}>{w.title ?? w.subject}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -276,7 +320,7 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
 // ── Array Tab ─────────────────────────────────────────────────────────────────
 
 function ArrayTab({ instanceId }: { instanceId: string }) {
-  const { array, parity, loadArray, loadParity, arrayStart, arrayStop, parityStart, parityPause, parityResume, parityCancel, diskSpinUp, diskSpinDown, errors } = useUnraidStore()
+  const { array, parity, physicalDisks, loadArray, loadParity, loadPhysicalDisks, arrayStart, arrayStop, parityStart, parityPause, parityResume, parityCancel, diskSpinUp, diskSpinDown, diskMount, diskUnmount, errors } = useUnraidStore()
   const { isAdmin } = useStore()
   const { toast } = useToast()
   const arrData = array[instanceId]
@@ -287,10 +331,13 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
   const [diskLoading, setDiskLoading] = useState<Record<string, boolean>>({})
   const [showHistory, setShowHistory] = useState(false)
   const [showCaches, setShowCaches] = useState(false)
+  const [showPhysical, setShowPhysical] = useState(false)
+  const pdisks = physicalDisks[instanceId] ?? []
 
   useEffect(() => {
     loadArray(instanceId)
     loadParity(instanceId)
+    loadPhysicalDisks(instanceId)
     const t = setInterval(() => loadArray(instanceId), 15_000)
     return () => clearInterval(t)
   }, [instanceId])
@@ -352,6 +399,28 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
     } finally {
       setDiskLoading(s => ({ ...s, [diskId]: false }))
     }
+  }
+
+  const handleDiskMount = async (diskId: string, action: 'mount' | 'unmount') => {
+    setDiskLoading(s => ({ ...s, [`m_${diskId}`]: true }))
+    try {
+      if (action === 'mount') await diskMount(instanceId, diskId)
+      else await diskUnmount(instanceId, diskId)
+      toast({ message: `Disk ${action === 'mount' ? 'gemountet' : 'unmountet'}`, type: 'success' })
+    } catch (e) {
+      toast({ message: (e as Error).message, type: 'error' })
+    } finally {
+      setDiskLoading(s => ({ ...s, [`m_${diskId}`]: false }))
+    }
+  }
+
+  const diskColorToStatus = (color?: string) => {
+    if (!color) return undefined
+    if (color.startsWith('RED')) return 'var(--status-offline)'
+    if (color.startsWith('YELLOW')) return 'var(--warning)'
+    if (color.startsWith('GREEN')) return 'var(--status-online)'
+    if (color.startsWith('BLUE')) return '#3b82f6'
+    return 'var(--text-muted)'
   }
 
   return (
@@ -416,7 +485,10 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
                     <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)' }}>{disk.device ?? '–'}</td>
                     <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>{formatKilobytes(disk.size)}</td>
                     <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
-                      <span style={{ background: diskStatusColor(disk.status), color: disk.status === 'DISK_OK' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{disk.status ?? '–'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {disk.color && <span style={{ width: 8, height: 8, borderRadius: '50%', background: diskColorToStatus(disk.color), flexShrink: 0, display: 'inline-block' }} />}
+                        <span style={{ background: diskStatusColor(disk.status), color: disk.status === 'DISK_OK' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{disk.status ?? '–'}</span>
+                      </div>
                     </td>
                     <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(disk.temp) }}>{disk.temp != null ? `${disk.temp}°C` : '–'}</td>
                     <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
@@ -438,6 +510,11 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
                           <button className="btn" disabled={diskLoading[disk.id ?? ''] || arrState !== 'started' || disk.status === 'DISK_NP'} onClick={() => handleDiskSpin(disk.id!, 'down')} title="Spin Down" style={{ padding: '2px 6px' }}>
                             <ChevronDown size={14} />
                           </button>
+                          {disk._section === 'data' && arrState === 'started' && disk.status !== 'DISK_NP' && (
+                            <button className="btn" disabled={diskLoading[`m_${disk.id}`] || !disk.id} onClick={() => handleDiskMount(disk.id!, disk.status === 'DISK_OK' ? 'unmount' : 'mount')} title={disk.status === 'DISK_OK' ? 'Unmount' : 'Mount'} style={{ padding: '2px 6px', fontSize: 11 }}>
+                              {diskLoading[`m_${disk.id}`] ? <span className="spinner" style={{ width: 12, height: 12 }} /> : (disk.status === 'DISK_OK' ? 'Unmount' : 'Mount')}
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}
@@ -523,6 +600,44 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
         {showHistory && parityHistory.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8 }}>Keine Parity-Historie vorhanden</div>}
       </div>
 
+      <div className="glass" style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', marginTop: 'var(--spacing-md)' }}>
+        <button className="btn" onClick={() => setShowPhysical(v => !v)} style={{ width: '100%', textAlign: 'left', padding: 'var(--spacing-sm) var(--spacing-md)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>Physische Laufwerke {pdisks.length > 0 ? `(${pdisks.length})` : ''}</span>
+          {showPhysical ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+        {showPhysical && (
+          pdisks.length === 0 ? (
+            <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)', fontSize: 13 }}>Keine physischen Laufwerke gefunden.</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, borderTop: '1px solid var(--border)' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  {['Name', 'Typ', 'Größe', 'Schnittstelle', 'S/N', 'SMART', 'Temp', 'Status'].map(h => (
+                    <th key={h} style={{ padding: 'var(--spacing-sm) var(--spacing-md)', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pdisks.map((d, i) => (
+                  <tr key={d.id ?? i} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', fontWeight: 500 }}>{d.name ?? '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)' }}>{d.type ?? '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>{formatBytes(d.size)}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)' }}>{d.interfaceType ?? '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)', fontSize: 11 }}>{d.serialNum ?? '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
+                      <span style={{ color: d.smartStatus === 'PASSED' ? 'var(--status-online)' : d.smartStatus ? 'var(--status-offline)' : 'var(--text-muted)', fontWeight: 600, fontSize: 11 }}>{d.smartStatus ?? '–'}</span>
+                    </td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(d.temperature) }}>{d.temperature != null ? `${d.temperature}°C` : '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)', fontSize: 11 }}>{d.isSpinning ? 'Aktiv' : 'Standby'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        )}
+      </div>
+
       {confirm && (
         <ConfirmModal
           title="Bestätigen"
@@ -541,18 +656,22 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
 // ── Docker Tab ────────────────────────────────────────────────────────────────
 
 function DockerTab({ instanceId }: { instanceId: string }) {
-  const { docker, loadDocker, dockerControl, errors } = useUnraidStore()
+  const { docker, loadDocker, dockerControl, dockerUpdate, dockerUpdateAll, errors } = useUnraidStore()
+  const { isAdmin } = useStore()
   const { toast } = useToast()
   const containers = docker[instanceId] ?? []
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'running' | 'stopped'>('all')
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
+  const [updatingAll, setUpdatingAll] = useState(false)
 
   useEffect(() => {
     loadDocker(instanceId)
     const t = setInterval(() => loadDocker(instanceId), 15_000)
     return () => clearInterval(t)
   }, [instanceId])
+
+  const updatesAvailable = containers.filter(c => c.isUpdateAvailable).length
 
   const filtered = containers.filter(c => {
     const name = c.names?.[0]?.replace(/^\//, '') ?? ''
@@ -568,7 +687,7 @@ function DockerTab({ instanceId }: { instanceId: string }) {
     return 'var(--text-muted)'
   }
 
-  const handleAction = async (c: UnraidContainer, action: 'start' | 'stop' | 'restart' | 'unpause') => {
+  const handleAction = async (c: UnraidContainer, action: 'start' | 'stop' | 'restart' | 'unpause' | 'pause') => {
     const name = c.names?.[0]?.replace(/^\//, '') ?? ''
     setActionLoading(s => ({ ...s, [name]: true }))
     try {
@@ -581,55 +700,100 @@ function DockerTab({ instanceId }: { instanceId: string }) {
     }
   }
 
+  const handleUpdate = async (c: UnraidContainer) => {
+    const name = c.names?.[0]?.replace(/^\//, '') ?? ''
+    setActionLoading(s => ({ ...s, [`update_${name}`]: true }))
+    try {
+      await dockerUpdate(instanceId, name)
+      toast({ message: `${name} wird aktualisiert`, type: 'success' })
+    } catch (e) {
+      toast({ message: (e as Error).message, type: 'error' })
+    } finally {
+      setActionLoading(s => ({ ...s, [`update_${name}`]: false }))
+    }
+  }
+
+  const handleUpdateAll = async () => {
+    setUpdatingAll(true)
+    try {
+      await dockerUpdateAll(instanceId)
+      toast({ message: 'Alle Container werden aktualisiert', type: 'success' })
+    } catch (e) {
+      toast({ message: (e as Error).message, type: 'error' })
+    } finally {
+      setUpdatingAll(false)
+    }
+  }
+
   const err = errors[`docker_${instanceId}`]
 
   return (
     <div>
       {err && <div className="error-banner" style={{ marginBottom: 'var(--spacing-md)' }}>{err}</div>}
-      <div className="glass" style={{ padding: 'var(--spacing-sm) var(--spacing-md)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)', fontSize: 13 }}>
-        Docker wird hier über die Unraid API gesteuert — unabhängig von der HELDASH Docker-Seite.
-      </div>
-      <div style={{ display: 'flex', gap: 'var(--spacing-sm)', marginBottom: 'var(--spacing-md)', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 'var(--spacing-sm)', marginBottom: 'var(--spacing-md)', flexWrap: 'wrap', alignItems: 'center' }}>
         <input className="input" placeholder="Suchen…" value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 220 }} />
         {(['all', 'running', 'stopped'] as const).map(f => (
           <button key={f} className={`btn${filter === f ? ' btn-primary' : ''}`} onClick={() => setFilter(f)}>
             {f === 'all' ? 'Alle' : f === 'running' ? 'Running' : 'Stopped'}
           </button>
         ))}
+        {isAdmin && updatesAvailable > 0 && (
+          <button className="btn" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }} disabled={updatingAll} onClick={handleUpdateAll}>
+            {updatingAll ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Download size={14} />}
+            Alle aktualisieren ({updatesAvailable})
+          </button>
+        )}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--spacing-md)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 'var(--spacing-md)' }}>
         {filtered.map((c, i) => {
           const name = c.names?.[0]?.replace(/^\//, '') ?? 'Unbekannt'
           const image = c.image?.split('@')[0]?.split(':')[0] ?? '–'
           const isLoading = actionLoading[name]
+          const isUpdating = actionLoading[`update_${name}`]
           const isRunning = c.state === 'RUNNING'
           const isExited = c.state === 'EXITED'
           const isPaused = c.state === 'PAUSED'
+          const ports = (c.ports ?? []).filter(p => p.publicPort)
           return (
             <div key={c.id ?? i} className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{image}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {c.iconUrl && <img src={c.iconUrl} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{image}</div>
+                  </div>
                 </div>
-                <span style={{ background: stateColor(c.state), width: 8, height: 8, borderRadius: '50%', marginTop: 4, animation: isRunning ? 'pulse 2s infinite' : 'none', flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                  <span style={{ background: stateColor(c.state), width: 8, height: 8, borderRadius: '50%', animation: isRunning ? 'pulse 2s infinite' : 'none' }} />
+                  {c.isUpdateAvailable && <span style={{ background: 'var(--warning)', color: '#000', borderRadius: 3, padding: '1px 5px', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>Update</span>}
+                </div>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{c.status ?? ''}</div>
-              <div style={{ display: 'flex', gap: 4, fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+              {ports.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                  {ports.slice(0, 4).map((p, pi) => (
+                    <span key={pi} style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      {p.publicPort}:{p.privatePort}/{p.type}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 4, fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, alignItems: 'center' }}>
                 {c.hostConfig?.networkMode && <span>{c.hostConfig.networkMode}</span>}
-                {c.autoStart && <span title="Auto Start"><RotateCcw size={12} /></span>}
+                {c.autoStart && <RotateCcw size={11} title="Auto Start" />}
+                {c.isOrphaned && <span style={{ color: 'var(--warning)' }}>orphaned</span>}
               </div>
-              <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 <button className="btn" disabled={isLoading || !isExited} onClick={() => handleAction(c, 'start')} style={{ padding: '3px 8px', fontSize: 12 }}>
                   {isLoading ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Play size={12} />}
                 </button>
-                <button className="btn" disabled={isLoading || !(isRunning || isPaused)} onClick={() => handleAction(c, 'stop')} style={{ padding: '3px 8px', fontSize: 12 }}>
-                  <Square size={12} />
-                </button>
-                <button className="btn" disabled={isLoading || !isRunning} onClick={() => handleAction(c, 'restart')} style={{ padding: '3px 8px', fontSize: 12 }}>
-                  <RotateCcw size={12} />
-                </button>
+                <button className="btn" disabled={isLoading || !(isRunning || isPaused)} onClick={() => handleAction(c, 'stop')} style={{ padding: '3px 8px', fontSize: 12 }}><Square size={12} /></button>
+                <button className="btn" disabled={isLoading || !isRunning} onClick={() => handleAction(c, 'restart')} style={{ padding: '3px 8px', fontSize: 12 }}><RotateCcw size={12} /></button>
+                {isRunning && <button className="btn" disabled={isLoading} onClick={() => handleAction(c, 'pause')} style={{ padding: '3px 8px', fontSize: 12 }} title="Pause"><Pause size={12} /></button>}
                 {isPaused && <button className="btn btn-primary" disabled={isLoading} onClick={() => handleAction(c, 'unpause')} style={{ padding: '3px 8px', fontSize: 12 }}><Play size={12} /></button>}
+                {c.webUiUrl && <a href={c.webUiUrl} target="_blank" rel="noopener noreferrer" className="btn" style={{ padding: '3px 8px', fontSize: 12 }} title="WebUI öffnen"><ExternalLink size={12} /></a>}
+                {isAdmin && c.isUpdateAvailable && <button className="btn" disabled={isUpdating} onClick={() => handleUpdate(c)} style={{ padding: '3px 8px', fontSize: 12 }} title="Aktualisieren">{isUpdating ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Download size={12} />}</button>}
               </div>
             </div>
           )
@@ -647,7 +811,7 @@ function VmsTab({ instanceId }: { instanceId: string }) {
   const { toast } = useToast()
   const domains = vms[instanceId] ?? []
   const [vmLoading, setVmLoading] = useState<Record<string, boolean>>({})
-  const [confirm, setConfirm] = useState<{ vm: UnraidVm; action: 'stop' | 'pause' } | null>(null)
+  const [confirm, setConfirm] = useState<{ vm: UnraidVm; action: 'stop' | 'pause' | 'forcestop' | 'reset' } | null>(null)
 
   useEffect(() => {
     loadVms(instanceId)
@@ -666,7 +830,7 @@ function VmsTab({ instanceId }: { instanceId: string }) {
     return 'var(--text-muted)'
   }
 
-  const handleVmAction = async (vm: UnraidVm, action: 'start' | 'stop' | 'pause' | 'resume') => {
+  const handleVmAction = async (vm: UnraidVm, action: 'start' | 'stop' | 'pause' | 'resume' | 'forcestop' | 'reboot' | 'reset') => {
     const vmId = vm.id ?? ''
     setVmLoading(s => ({ ...s, [vmId]: true }))
     try {
@@ -692,7 +856,8 @@ function VmsTab({ instanceId }: { instanceId: string }) {
         {domains.map((vm, i) => {
           const vmId = vm.id ?? String(i)
           const isLoading = vmLoading[vmId]
-          const isShutoff = vm.state === 'SHUTOFF' || vm.state === 'SHUTDOWN' || vm.state === 'CRASHED' || vm.state === 'NOSTATE'
+          const isCrashed = vm.state === 'CRASHED'
+          const isShutoff = vm.state === 'SHUTOFF' || vm.state === 'SHUTDOWN' || vm.state === 'NOSTATE'
           const isRunning = vm.state === 'RUNNING' || vm.state === 'IDLE'
           const isPaused = vm.state === 'PAUSED'
           return (
@@ -701,12 +866,14 @@ function VmsTab({ instanceId }: { instanceId: string }) {
                 <h3 style={{ margin: 0, fontSize: 15 }}>{vm.name ?? '–'}</h3>
                 <span style={{ background: stateColor(vm.state), color: vm.state === 'RUNNING' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{vm.state ?? '–'}</span>
               </div>
-              <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                {isShutoff && <button className="btn btn-primary" disabled={isLoading} onClick={() => handleVmAction(vm, 'start')} style={{ fontSize: 12, padding: '3px 8px' }}>{isLoading ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Play size={12} />}</button>}
-                {isRunning && <button className="btn btn-danger" disabled={isLoading} onClick={() => setConfirm({ vm, action: 'stop' })} style={{ fontSize: 12, padding: '3px 8px' }}><Square size={12} /></button>}
-                {isRunning && <button className="btn" disabled={isLoading} onClick={() => setConfirm({ vm, action: 'pause' })} style={{ fontSize: 12, padding: '3px 8px' }}><Pause size={12} /></button>}
-                {isPaused && <button className="btn btn-primary" disabled={isLoading} onClick={() => handleVmAction(vm, 'resume')} style={{ fontSize: 12, padding: '3px 8px' }}><Play size={12} /></button>}
-                {isPaused && <button className="btn btn-danger" disabled={isLoading} onClick={() => setConfirm({ vm, action: 'stop' })} style={{ fontSize: 12, padding: '3px 8px' }}><Square size={12} /></button>}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+                {(isShutoff || isCrashed) && <button className="btn btn-primary" disabled={isLoading} onClick={() => handleVmAction(vm, 'start')} style={{ fontSize: 12, padding: '3px 8px' }} title="Start">{isLoading ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Play size={12} />}</button>}
+                {(isRunning || isPaused) && <button className="btn btn-danger" disabled={isLoading} onClick={() => setConfirm({ vm, action: 'stop' })} style={{ fontSize: 12, padding: '3px 8px' }} title="Stop"><Square size={12} /></button>}
+                {(isRunning || isCrashed) && <button className="btn btn-danger" disabled={isLoading} onClick={() => setConfirm({ vm, action: 'forcestop' })} style={{ fontSize: 12, padding: '3px 8px' }} title="Force Stop"><Zap size={12} /></button>}
+                {isRunning && <button className="btn" disabled={isLoading} onClick={() => setConfirm({ vm, action: 'pause' })} style={{ fontSize: 12, padding: '3px 8px' }} title="Pause"><Pause size={12} /></button>}
+                {isRunning && <button className="btn" disabled={isLoading} onClick={() => handleVmAction(vm, 'reboot')} style={{ fontSize: 12, padding: '3px 8px' }} title="Neustart"><RotateCcw size={12} /></button>}
+                {(isRunning || isCrashed) && <button className="btn" disabled={isLoading} onClick={() => setConfirm({ vm, action: 'reset' })} style={{ fontSize: 12, padding: '3px 8px' }} title="Reset (hard)"><SkipForward size={12} /></button>}
+                {isPaused && <button className="btn btn-primary" disabled={isLoading} onClick={() => handleVmAction(vm, 'resume')} style={{ fontSize: 12, padding: '3px 8px' }} title="Fortsetzen"><Play size={12} /></button>}
               </div>
             </div>
           )
@@ -715,7 +882,7 @@ function VmsTab({ instanceId }: { instanceId: string }) {
       {confirm && (
         <ConfirmModal
           title="Bestätigen"
-          message="Ungespeicherte Daten in der VM können verloren gehen."
+          message={confirm.action === 'forcestop' ? 'VM sofort beenden — Datenverlust möglich!' : confirm.action === 'reset' ? 'Hard Reset — Datenverlust möglich!' : 'Ungespeicherte Daten in der VM können verloren gehen.'}
           onConfirm={() => { handleVmAction(confirm.vm, confirm.action); setConfirm(null) }}
           onCancel={() => setConfirm(null)}
           danger
@@ -786,10 +953,11 @@ function SharesTab({ instanceId }: { instanceId: string }) {
 // ── Notifications Tab ─────────────────────────────────────────────────────────
 
 function NotificationsTab({ instanceId }: { instanceId: string }) {
-  const { notifications, loadNotifications, dismissNotification, errors } = useUnraidStore()
+  const { notifications, loadNotifications, loadNotificationsArchive, dismissNotification, errors } = useUnraidStore()
   const { toast } = useToast()
   const data = notifications[instanceId]
-  const list = data?.notifications?.list ?? []
+  const [view, setView] = useState<'unread' | 'archive'>('unread')
+  const list = view === 'archive' ? (data?.notifications?.archive ?? []) : (data?.notifications?.list ?? [])
   const unreadObj = data?.notifications?.overview?.unread
   const unread = unreadObj?.total ?? ((unreadObj?.info ?? 0) + (unreadObj?.warning ?? 0) + (unreadObj?.alert ?? 0))
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -802,6 +970,10 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
     return () => clearInterval(t)
   }, [instanceId])
 
+  useEffect(() => {
+    if (view === 'archive') loadNotificationsArchive(instanceId)
+  }, [view, instanceId])
+
   const importanceColor = (imp?: string) => {
     if (imp === 'ALERT') return 'var(--status-offline)'
     if (imp === 'WARNING') return 'var(--warning)'
@@ -810,9 +982,10 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
   }
 
   const handleDismissAll = async () => {
+    const unreadList = data?.notifications?.list ?? []
     setDismissingAll(true)
     let hadError = false
-    for (const n of list) {
+    for (const n of unreadList) {
       if (!n.id) continue
       try { await dismissNotification(instanceId, n.id) } catch { hadError = true }
     }
@@ -821,56 +994,65 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
     if (hadError) toast({ message: 'Einige Benachrichtigungen konnten nicht gelöscht werden', type: 'error' })
   }
 
+  const renderList = (items: typeof list, showDismiss: boolean) => (
+    items.length === 0 ? (
+      <div style={{ textAlign: 'center', padding: 'var(--spacing-2xl)', color: 'var(--text-muted)' }}>
+        <Check size={20} color="var(--status-online)" style={{ marginBottom: 8 }} />
+        <div>{view === 'archive' ? 'Kein Archiv vorhanden' : 'Keine ungelesenen Benachrichtigungen'}</div>
+      </div>
+    ) : (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+        {items.map((n, i) => {
+          const isLong = (n.description?.length ?? 0) > 120
+          const isExpanded = expanded[n.id ?? String(i)]
+          return (
+            <div key={n.id ?? i} className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', borderLeft: `4px solid ${importanceColor(n.importance)}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 2 }}>{n.title ?? '–'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{n.subject ?? ''}</div>
+                  {n.description && (
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {isLong && !isExpanded ? n.description.slice(0, 120) + '…' : n.description}
+                      {isLong && (
+                        <button className="btn" onClick={() => setExpanded(s => ({ ...s, [n.id ?? String(i)]: !s[n.id ?? String(i)] }))} style={{ marginLeft: 6, padding: '0 4px', fontSize: 11 }}>
+                          {isExpanded ? 'weniger' : 'mehr anzeigen'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{formatRelative(n.timestamp)}</div>
+                </div>
+                {showDismiss && n.id && (
+                  <button className="btn" onClick={() => dismissNotification(instanceId, n.id!)} style={{ padding: '2px 8px', fontSize: 12, flexShrink: 0 }}>
+                    Gelesen
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  )
+
   return (
     <div>
       {err && <div className="error-banner" style={{ marginBottom: 'var(--spacing-md)' }}>{err}</div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-        <span style={{ background: unread > 0 ? 'var(--warning)' : 'var(--status-online)', color: '#000', borderRadius: 4, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>
-          {unread > 0 ? `${unread} ungelesen` : 'Alles OK'}
-        </span>
-        {unread > 0 && (
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button className={`btn${view === 'unread' ? ' btn-primary' : ''}`} onClick={() => setView('unread')} style={{ fontSize: 13 }}>
+            Ungelesen {unread > 0 && <span style={{ background: 'var(--warning)', color: '#000', borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 700, marginLeft: 4 }}>{unread}</span>}
+          </button>
+          <button className={`btn${view === 'archive' ? ' btn-primary' : ''}`} onClick={() => setView('archive')} style={{ fontSize: 13 }}>Archiv</button>
+        </div>
+        {view === 'unread' && unread > 0 && (
           <button className="btn" disabled={dismissingAll} onClick={handleDismissAll}>
             {dismissingAll ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Alle als gelesen markieren'}
           </button>
         )}
       </div>
-      {list.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 'var(--spacing-2xl)', color: 'var(--text-muted)' }}>
-          <Check size={20} color="var(--status-online)" style={{ marginBottom: 8 }} />
-          <div>Keine ungelesenen Benachrichtigungen</div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
-          {list.map((n, i) => {
-            const isLong = (n.description?.length ?? 0) > 120
-            const isExpanded = expanded[n.id ?? String(i)]
-            return (
-              <div key={n.id ?? i} className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', borderLeft: `4px solid ${importanceColor(n.importance)}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 2 }}>{n.title ?? '–'}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{n.subject ?? ''}</div>
-                    {n.description && (
-                      <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                        {isLong && !isExpanded ? n.description.slice(0, 120) + '…' : n.description}
-                        {isLong && (
-                          <button className="btn" onClick={() => setExpanded(s => ({ ...s, [n.id ?? String(i)]: !s[n.id ?? String(i)] }))} style={{ marginLeft: 6, padding: '0 4px', fontSize: 11 }}>
-                            {isExpanded ? 'weniger' : 'mehr anzeigen'}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{formatRelative(n.timestamp)}</div>
-                  </div>
-                  <button className="btn" onClick={() => dismissNotification(instanceId, n.id!)} style={{ padding: '2px 8px', fontSize: 12, flexShrink: 0 }}>
-                    Gelesen
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+      {renderList(list, view === 'unread')}
     </div>
   )
 }
@@ -895,6 +1077,9 @@ function SystemTab({ instanceId }: { instanceId: string }) {
   const cpu = data?.info?.cpu
   const memory = data?.metrics?.memory
   const baseboard = data?.info?.baseboard
+  const sysInfo = data?.info?.system
+  const versions = data?.info?.versions
+  const memLayout = data?.info?.memory?.layout ?? []
   const cfg = cfgData?.config
   const err = errors[`info_${instanceId}`] ?? errors[`config_${instanceId}`]
 
@@ -908,16 +1093,39 @@ function SystemTab({ instanceId }: { instanceId: string }) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+
+        {versions?.core?.unraid && (
+          <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 'var(--spacing-sm)' }}>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Unraid {versions.core.unraid}</span>
+              {sysInfo?.virtual && <span style={{ background: '#8b5cf6', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>Virtualisiert</span>}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: 13 }}>
+              {([
+                ['API', versions.core.api],
+                ['Kernel', versions.core.kernel],
+                ['Docker', versions.packages?.docker],
+              ] as [string, string | undefined][]).filter(([, v]) => v).map(([label, val]) => (
+                <React.Fragment key={label}>
+                  <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{val}</span>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ fontWeight: 600, marginBottom: 'var(--spacing-sm)' }}>Hardware</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: 13 }}>
             {([
+              ['Hersteller', `${sysInfo?.manufacturer ?? ''} ${sysInfo?.model ?? ''}`.trim() || undefined],
               ['Platform', os?.platform],
               ['OS', `${os?.distro ?? ''} ${os?.release ?? ''}`.trim() || '–'],
               ['Uptime', formatUptime(os?.uptime)],
               ['CPU', `${cpu?.manufacturer ?? ''} ${cpu?.brand ?? ''}`.trim() || '–'],
               ['Kerne / Threads', `${cpu?.cores ?? '–'} / ${cpu?.threads ?? '–'}`],
-              ['RAM', memory?.total != null ? formatBytes(memory.total) : '–'],
+              ['RAM gesamt', memory?.total != null ? formatBytes(memory.total) : '–'],
               ['Mainboard', `${baseboard?.manufacturer ?? ''} ${baseboard?.model ?? ''}`.trim() || '–'],
             ] as [string, string | undefined][]).map(([label, val]) => (
               <React.Fragment key={label}>
@@ -927,6 +1135,33 @@ function SystemTab({ instanceId }: { instanceId: string }) {
             ))}
           </div>
         </div>
+
+        {memLayout.length > 0 && (
+          <div className="glass" style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+            <div style={{ padding: 'var(--spacing-md)', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>RAM-Module ({memLayout.length})</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  {['Slot', 'Größe', 'Typ', 'Speed', 'Hersteller', 'Part-Nr.'].map(h => (
+                    <th key={h} style={{ padding: 'var(--spacing-sm) var(--spacing-md)', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {memLayout.map((slot, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)' }}>{i + 1}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', fontWeight: 500 }}>{slot.size ? formatBytes(slot.size) : '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>{slot.type ?? '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{slot.clockSpeed ? `${slot.clockSpeed} MHz` : '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)' }}>{slot.manufacturer ?? '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{slot.partNum ?? '–'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {cfg && (
           <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>

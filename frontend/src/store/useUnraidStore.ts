@@ -1,22 +1,23 @@
 import { create } from 'zustand'
 import { api } from '../api'
-import type { UnraidInstance, UnraidInfo, UnraidArray, UnraidParityHistory, UnraidContainer, UnraidVm, UnraidShare, UnraidUser, UnraidNotifications, UnraidConfig } from '../types/unraid'
+import type { UnraidInstance, UnraidInfo, UnraidArray, UnraidParityHistory, UnraidContainer, UnraidVm, UnraidShare, UnraidUser, UnraidNotifications, UnraidConfig, UnraidPhysicalDisk } from '../types/unraid'
 
 interface UnraidState {
-  instances:     UnraidInstance[]
-  selectedId:    string | null
-  online:        Record<string, boolean>
-  info:          Record<string, UnraidInfo>
-  array:         Record<string, UnraidArray>
-  parity:        Record<string, UnraidParityHistory[]>
-  docker:        Record<string, UnraidContainer[]>
-  vms:           Record<string, UnraidVm[]>
-  shares:        Record<string, UnraidShare[]>
-  users:         Record<string, UnraidUser[]>
-  notifications: Record<string, UnraidNotifications>
-  config:        Record<string, UnraidConfig>
-  loading:       Record<string, boolean>
-  errors:        Record<string, string | null>
+  instances:      UnraidInstance[]
+  selectedId:     string | null
+  online:         Record<string, boolean>
+  info:           Record<string, UnraidInfo>
+  array:          Record<string, UnraidArray>
+  parity:         Record<string, UnraidParityHistory[]>
+  docker:         Record<string, UnraidContainer[]>
+  vms:            Record<string, UnraidVm[]>
+  shares:         Record<string, UnraidShare[]>
+  users:          Record<string, UnraidUser[]>
+  notifications:  Record<string, UnraidNotifications>
+  config:         Record<string, UnraidConfig>
+  physicalDisks:  Record<string, UnraidPhysicalDisk[]>
+  loading:        Record<string, boolean>
+  errors:         Record<string, string | null>
 
   loadInstances:       () => Promise<void>
   setSelected:         (id: string) => void
@@ -39,9 +40,15 @@ interface UnraidState {
   parityCancel:        (id: string) => Promise<void>
   diskSpinUp:          (id: string, diskId: string) => Promise<void>
   diskSpinDown:        (id: string, diskId: string) => Promise<void>
-  dockerControl:       (id: string, name: string, action: 'start' | 'stop' | 'restart' | 'unpause') => Promise<void>
-  vmControl:           (id: string, uuid: string, action: 'start' | 'stop' | 'pause' | 'resume') => Promise<void>
-  dismissNotification: (id: string, nId: string) => Promise<void>
+  dockerControl:        (id: string, name: string, action: 'start' | 'stop' | 'restart' | 'unpause' | 'pause') => Promise<void>
+  dockerUpdate:         (id: string, name: string) => Promise<void>
+  dockerUpdateAll:      (id: string) => Promise<void>
+  vmControl:            (id: string, uuid: string, action: 'start' | 'stop' | 'pause' | 'resume' | 'forcestop' | 'reboot' | 'reset') => Promise<void>
+  loadPhysicalDisks:    (id: string) => Promise<void>
+  diskMount:            (id: string, diskId: string) => Promise<void>
+  diskUnmount:          (id: string, diskId: string) => Promise<void>
+  dismissNotification:  (id: string, nId: string) => Promise<void>
+  loadNotificationsArchive: (id: string) => Promise<void>
   createInstance:      (data: { name: string; url: string; api_key: string }) => Promise<void>
   updateInstance:      (id: string, data: object) => Promise<void>
   deleteInstance:      (id: string) => Promise<void>
@@ -61,6 +68,7 @@ export const useUnraidStore = create<UnraidState>((set, get) => ({
   users:         {},
   notifications: {},
   config:        {},
+  physicalDisks: {},
   loading:       {},
   errors:        {},
 
@@ -244,9 +252,65 @@ export const useUnraidStore = create<UnraidState>((set, get) => ({
     await get().loadDocker(id)
   },
 
+  dockerUpdate: async (id, name) => {
+    await api.unraid.dockerUpdate(id, name)
+    await get().loadDocker(id)
+  },
+
+  dockerUpdateAll: async (id) => {
+    await api.unraid.dockerUpdateAll(id)
+    await get().loadDocker(id)
+  },
+
   vmControl: async (id, uuid, action) => {
     await api.unraid.vmControl(id, uuid, action)
     await get().loadVms(id)
+  },
+
+  loadPhysicalDisks: async (id) => {
+    set(s => ({ loading: { ...s.loading, [`pdisks_${id}`]: true } }))
+    try {
+      const data = await api.unraid.physicalDisks(id)
+      set(s => ({ physicalDisks: { ...s.physicalDisks, [id]: data.disks ?? [] }, errors: { ...s.errors, [`pdisks_${id}`]: null } }))
+    } catch (e) {
+      set(s => ({ errors: { ...s.errors, [`pdisks_${id}`]: (e as Error).message } }))
+    } finally {
+      set(s => ({ loading: { ...s.loading, [`pdisks_${id}`]: false } }))
+    }
+  },
+
+  diskMount: async (id, diskId) => {
+    await api.unraid.diskMount(id, diskId)
+    await get().loadArray(id)
+  },
+
+  diskUnmount: async (id, diskId) => {
+    await api.unraid.diskUnmount(id, diskId)
+    await get().loadArray(id)
+  },
+
+  loadNotificationsArchive: async (id) => {
+    set(s => ({ loading: { ...s.loading, [`notif_archive_${id}`]: true } }))
+    try {
+      const data = await api.unraid.notificationsArchive(id)
+      set(s => ({
+        notifications: {
+          ...s.notifications,
+          [id]: {
+            ...s.notifications[id],
+            notifications: {
+              ...s.notifications[id]?.notifications,
+              archive: data.list ?? [],
+            },
+          },
+        },
+        errors: { ...s.errors, [`notif_archive_${id}`]: null },
+      }))
+    } catch (e) {
+      set(s => ({ errors: { ...s.errors, [`notif_archive_${id}`]: (e as Error).message } }))
+    } finally {
+      set(s => ({ loading: { ...s.loading, [`notif_archive_${id}`]: false } }))
+    }
   },
 
   dismissNotification: async (id, nId) => {
