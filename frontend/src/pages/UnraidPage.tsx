@@ -15,7 +15,7 @@ import {
   Pause, ChevronUp, ChevronDown, Trash2, Eye, EyeOff, AlertTriangle, Check,
   Download, Zap, SkipForward, HardDrive, Cpu,
 } from 'lucide-react'
-import type { UnraidInstance, UnraidContainer, UnraidVm, UnraidPhysicalDisk } from '../types/unraid'
+import type { UnraidInstance, UnraidContainer, UnraidVm, UnraidPhysicalDisk, UnraidNotification } from '../types/unraid'
 import { api } from '../api'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -63,6 +63,24 @@ function formatRelative(ts?: string): string {
   const h = Math.floor(m / 60)
   if (h < 24) return `vor ${h} Std`
   return `vor ${Math.floor(h / 24)} Tagen`
+}
+
+function arrayStateBadgeStyle(state?: string): { color: string; background: string } {
+  switch (state) {
+    case 'STARTED':
+    case 'started':
+      return { color: 'var(--status-online)', background: 'rgba(34,197,94,0.12)' }
+    case 'STOPPED':
+    case 'stopped':
+      return { color: 'var(--text-muted)', background: 'rgba(128,128,128,0.12)' }
+    case 'RECON_DISK':
+    case 'DISABLE_DISK':
+    case 'SWAP_DSBL':
+    case 'NEW_ARRAY':
+      return { color: 'var(--warning)', background: 'rgba(234,179,8,0.12)' }
+    default:
+      return { color: 'var(--status-offline)', background: 'rgba(239,68,68,0.12)' }
+  }
 }
 
 // ── ConfirmModal ──────────────────────────────────────────────────────────────
@@ -220,14 +238,6 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
     return 'var(--accent)'
   }
 
-  const stateColor = (s?: string) => {
-    if (!s) return 'var(--text-muted)'
-    if (s === 'STARTED' || s === 'started') return 'var(--status-online)'
-    if (s === 'STOPPED' || s === 'stopped') return 'var(--text-muted)'
-    if (s === 'ERROR' || s === 'error') return 'var(--status-offline)'
-    return 'var(--warning)'
-  }
-
   const cpuPct = cpuMetrics?.percentTotal ?? 0
   const cpuBarColor = cpuPct < 70 ? 'var(--accent)' : cpuPct < 90 ? 'var(--warning)' : 'var(--status-offline)'
 
@@ -292,15 +302,15 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
 
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Array</div>
-          <span style={{ background: stateColor(arrState), color: ['started','STARTED'].includes(arrState ?? '') ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{arrState ?? '–'}</span>
+          <span style={{ ...arrayStateBadgeStyle(arrState), borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{arrState ?? '–'}</span>
           {cap && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>{formatKilobytes(parseInt(cap.used ?? '0', 10))} / {formatKilobytes(parseInt(cap.total ?? '1', 10))}</div>}
         </div>
 
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>Benachrichtigungen</div>
           {unread === 0
-            ? <span style={{ background: 'var(--status-online)', color: '#000', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>Alles OK</span>
-            : <span style={{ background: 'var(--warning)', color: '#000', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{unread} ungelesen</span>
+            ? <span style={{ color: 'var(--status-online)', background: 'rgba(34,197,94,0.12)', borderRadius: 'var(--radius-sm)', padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>Alles OK</span>
+            : <span style={{ color: 'var(--warning)', background: 'rgba(234,179,8,0.12)', borderRadius: 'var(--radius-sm)', padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{unread} ungelesen</span>
           }
           {warnings.length > 0 && (
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -351,13 +361,6 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
   const isParityRunning = /resyncing|syncing|check/.test(arrState)
   const isParityPaused = /paused/.test(arrState)
   const err = errors[`array_${instanceId}`]
-
-  const stateColor = (s: string) => {
-    if (s === 'started') return '#16a34a'
-    if (s === 'stopped') return '#dc2626'
-    if (s === 'error') return '#dc2626'
-    return '#d97706'
-  }
 
   const diskStatusColor = (s?: string) => {
     if (s === 'DISK_OK') return 'var(--status-online)'
@@ -430,7 +433,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
 
       {isAdmin && (
         <div className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
-          <span style={{ background: stateColor(arrState), color: '#fff', borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, marginRight: 'var(--spacing-sm)', letterSpacing: '0.03em', boxShadow: arrState === 'started' ? '0 0 8px rgba(22,163,74,0.55)' : arrState === 'stopped' ? '0 0 6px rgba(220,38,38,0.45)' : undefined }}>{arrState || '–'}</span>
+          <span style={{ ...arrayStateBadgeStyle(arrState), borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, marginRight: 'var(--spacing-sm)', letterSpacing: '0.03em' }}>{arrState || '–'}</span>
           {arrState === 'stopped' && <button className="btn btn-primary" onClick={() => setConfirm({ action: 'arrayStart', msg: 'Array starten?' })}><Play size={14} /> Array starten</button>}
           {arrState === 'started' && <button className="btn btn-danger" onClick={() => setConfirm({ action: 'arrayStop', msg: 'Alle laufenden Zugriffe werden unterbrochen.' })}><Square size={14} /> Array stoppen</button>}
           {arrState === 'started' && !isParityRunning && !isParityPaused && (
@@ -689,7 +692,12 @@ function DockerTab({ instanceId }: { instanceId: string }) {
     return () => clearInterval(t)
   }, [instanceId])
 
-  const filtered = containers.filter(c => {
+  const sorted = [...containers].sort((a, b) => {
+    const nameA = (a.names?.[0] ?? '').replace(/^\//, '').toLowerCase()
+    const nameB = (b.names?.[0] ?? '').replace(/^\//, '').toLowerCase()
+    return nameA.localeCompare(nameB)
+  })
+  const filtered = sorted.filter(c => {
     const name = c.names?.[0]?.replace(/^\//, '') ?? ''
     const image = c.image?.split('@')[0] ?? ''
     const matchSearch = !search || name.toLowerCase().includes(search.toLowerCase()) || image.toLowerCase().includes(search.toLowerCase())
@@ -807,7 +815,7 @@ function DockerTab({ instanceId }: { instanceId: string }) {
 function VmsTab({ instanceId }: { instanceId: string }) {
   const { vms, loadVms, vmControl, errors } = useUnraidStore()
   const { toast } = useToast()
-  const domains = vms[instanceId] ?? []
+  const domains = [...(vms[instanceId] ?? [])].sort((a, b) => (a.name ?? '').toLowerCase().localeCompare((b.name ?? '').toLowerCase()))
   const [vmLoading, setVmLoading] = useState<Record<string, boolean>>({})
   const [confirm, setConfirm] = useState<{ vm: UnraidVm; action: 'stop' | 'pause' | 'forcestop' | 'reset' } | null>(null)
 
@@ -959,15 +967,16 @@ function SharesTab({ instanceId }: { instanceId: string }) {
 // ── Notifications Tab ─────────────────────────────────────────────────────────
 
 function NotificationsTab({ instanceId }: { instanceId: string }) {
-  const { notifications, loadNotifications, loadNotificationsArchive, dismissNotification, errors } = useUnraidStore()
+  const { notifications, loadNotifications, loadNotificationsArchive, archiveNotification, archiveAllNotifications, errors } = useUnraidStore()
   const { toast } = useToast()
   const data = notifications[instanceId]
   const [view, setView] = useState<'unread' | 'archive'>('unread')
-  const list = view === 'archive' ? (data?.notifications?.archive ?? []) : (data?.notifications?.list ?? [])
   const unreadObj = data?.notifications?.overview?.unread
   const unread = unreadObj?.total ?? ((unreadObj?.info ?? 0) + (unreadObj?.warning ?? 0) + (unreadObj?.alert ?? 0))
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [dismissingAll, setDismissingAll] = useState(false)
+  const [archivingAll, setArchivingAll] = useState(false)
+  const [selectedNotification, setSelectedNotification] = useState<UnraidNotification | null>(null)
+  const [localList, setLocalList] = useState<UnraidNotification[]>([])
   const err = errors[`notif_${instanceId}`]
 
   useEffect(() => {
@@ -980,6 +989,10 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
     if (view === 'archive') loadNotificationsArchive(instanceId)
   }, [view, instanceId])
 
+  useEffect(() => {
+    setLocalList(data?.notifications?.list ?? [])
+  }, [data])
+
   const importanceColor = (imp?: string) => {
     if (imp === 'ALERT') return 'var(--status-offline)'
     if (imp === 'WARNING') return 'var(--warning)'
@@ -987,20 +1000,33 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
     return 'var(--border)'
   }
 
-  const handleDismissAll = async () => {
-    const unreadList = data?.notifications?.list ?? []
-    setDismissingAll(true)
-    let hadError = false
-    for (const n of unreadList) {
-      if (!n.id) continue
-      try { await dismissNotification(instanceId, n.id) } catch { hadError = true }
+  const handleArchive = async (notifId: string) => {
+    setLocalList(prev => prev.filter(n => n.id !== notifId))
+    try {
+      await archiveNotification(instanceId, notifId)
+    } catch {
+      toast({ message: 'Fehler beim Archivieren', type: 'error' })
+      setLocalList(data?.notifications?.list ?? [])
     }
-    await loadNotifications(instanceId)
-    setDismissingAll(false)
-    if (hadError) toast({ message: 'Einige Benachrichtigungen konnten nicht gelöscht werden', type: 'error' })
   }
 
-  const renderList = (items: typeof list, showDismiss: boolean) => (
+  const handleArchiveAll = async () => {
+    setLocalList([])
+    setArchivingAll(true)
+    try {
+      await archiveAllNotifications(instanceId)
+    } catch {
+      toast({ message: 'Fehler beim Archivieren aller Benachrichtigungen', type: 'error' })
+      setLocalList(data?.notifications?.list ?? [])
+    } finally {
+      setArchivingAll(false)
+    }
+  }
+
+  const archiveList = data?.notifications?.archive ?? []
+  const displayList = view === 'archive' ? archiveList : localList
+
+  const renderList = (items: typeof displayList, showArchive: boolean) => (
     items.length === 0 ? (
       <div style={{ textAlign: 'center', padding: 'var(--spacing-2xl)', color: 'var(--text-muted)' }}>
         <Check size={20} color="var(--status-online)" style={{ marginBottom: 8 }} />
@@ -1030,10 +1056,14 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{n.formattedTimestamp ?? formatRelative(n.timestamp)}</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-                  {n.link && <a href={n.link} target="_blank" rel="noopener noreferrer" className="btn" style={{ padding: '2px 8px', fontSize: 12 }}>Details</a>}
-                  {showDismiss && n.id && (
-                    <button className="btn" onClick={() => dismissNotification(instanceId, n.id!)} style={{ padding: '2px 8px', fontSize: 12 }}>
-                      Gelesen
+                  {n.link && (
+                    <button className="btn" style={{ fontSize: 12, padding: '2px 8px' }} onClick={() => setSelectedNotification(n)}>
+                      Details
+                    </button>
+                  )}
+                  {showArchive && n.id && (
+                    <button className="btn" onClick={() => handleArchive(n.id!)} style={{ padding: '2px 8px', fontSize: 12 }}>
+                      Als gelesen markieren
                     </button>
                   )}
                 </div>
@@ -1051,17 +1081,65 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
         <div style={{ display: 'flex', gap: 4 }}>
           <button className={`btn${view === 'unread' ? ' btn-primary' : ''}`} onClick={() => setView('unread')} style={{ fontSize: 13 }}>
-            Ungelesen {unread > 0 && <span style={{ background: 'var(--warning)', color: '#000', borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 700, marginLeft: 4 }}>{unread}</span>}
+            Ungelesen {unread > 0 && <span style={{ color: 'var(--warning)', background: 'rgba(234,179,8,0.12)', borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 700, marginLeft: 4 }}>{unread}</span>}
           </button>
           <button className={`btn${view === 'archive' ? ' btn-primary' : ''}`} onClick={() => setView('archive')} style={{ fontSize: 13 }}>Archiv</button>
         </div>
-        {view === 'unread' && unread > 0 && (
-          <button className="btn" disabled={dismissingAll} onClick={handleDismissAll}>
-            {dismissingAll ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Alle als gelesen markieren'}
+        {view === 'unread' && localList.length > 0 && (
+          <button className="btn btn-primary" disabled={archivingAll} onClick={handleArchiveAll}>
+            {archivingAll ? <><div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> Wird archiviert…</> : 'Alle als gelesen markieren'}
           </button>
         )}
       </div>
-      {renderList(list, view === 'unread')}
+      {renderList(displayList, view === 'unread')}
+
+      {selectedNotification && (
+        <div className="modal-overlay" onClick={() => setSelectedNotification(null)}>
+          <div className="modal-content glass" onClick={e => e.stopPropagation()} style={{ maxWidth: 560, width: '100%' }}>
+            <div className="modal-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  display: 'inline-block', width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                  background: selectedNotification.importance === 'ALERT'
+                    ? 'var(--status-offline)'
+                    : selectedNotification.importance === 'WARNING'
+                      ? 'var(--warning)'
+                      : 'var(--accent)',
+                }} />
+                <h3 className="modal-title" style={{ margin: 0 }}>{selectedNotification.title}</h3>
+              </div>
+              <button className="btn" style={{ flexShrink: 0 }} onClick={() => setSelectedNotification(null)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {selectedNotification.subject && (
+                <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-primary)' }}>{selectedNotification.subject}</p>
+              )}
+              {selectedNotification.description && (
+                <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {selectedNotification.description}
+                </p>
+              )}
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+                {selectedNotification.formattedTimestamp ?? formatRelative(selectedNotification.timestamp)}
+              </p>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setSelectedNotification(null)}>Schließen</button>
+              {selectedNotification.id && (
+                <button
+                  className="btn btn-primary"
+                  onClick={async () => {
+                    await handleArchive(selectedNotification.id!)
+                    setSelectedNotification(null)
+                  }}
+                >
+                  Als gelesen markieren
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

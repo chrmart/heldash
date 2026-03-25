@@ -668,13 +668,24 @@ export async function unraidRoutes(app: FastifyInstance) {
     }
   })
 
-  // POST /api/unraid/:id/notifications/:notifId/dismiss
-  app.post<{ Params: { id: string; notifId: string } }>('/api/unraid/:id/notifications/:notifId/dismiss', { onRequest: [app.authenticate] }, async (req, reply) => {
+  // POST /api/unraid/:id/notifications/archive-all — BEFORE /:notifId route
+  app.post<{ Params: { id: string } }>('/api/unraid/:id/notifications/archive-all', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const row = await getInstance(req.params.id, reply)
+    if (!row) return
+    try {
+      return await unraidGql(row.url, row.api_key, `mutation { archiveAllNotifications { id type } }`)
+    } catch (e) {
+      return reply.status(502).send({ error: (e as Error).message })
+    }
+  })
+
+  // POST /api/unraid/:id/notifications/:notifId/archive
+  app.post<{ Params: { id: string; notifId: string } }>('/api/unraid/:id/notifications/:notifId/archive', { onRequest: [app.authenticate] }, async (req, reply) => {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
     const notifId = decodeURIComponent(req.params.notifId)
     try {
-      return await unraidGql(row.url, row.api_key, `mutation($id: String!) { notifications { dismiss(id: $id) } }`, { id: notifId })
+      return await unraidGql(row.url, row.api_key, `mutation($id: String!) { archiveNotification(id: $id) { id type } }`, { id: notifId })
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })
     }

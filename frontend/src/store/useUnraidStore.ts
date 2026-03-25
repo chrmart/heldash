@@ -47,7 +47,8 @@ interface UnraidState {
   loadPhysicalDisks:    (id: string) => Promise<void>
   diskMount:            (id: string, diskId: string) => Promise<void>
   diskUnmount:          (id: string, diskId: string) => Promise<void>
-  dismissNotification:  (id: string, nId: string) => Promise<void>
+  archiveNotification:     (id: string, nId: string) => Promise<void>
+  archiveAllNotifications: (id: string) => Promise<void>
   loadNotificationsArchive: (id: string) => Promise<void>
   createInstance:      (data: { name: string; url: string; api_key: string }) => Promise<void>
   updateInstance:      (id: string, data: object) => Promise<void>
@@ -313,9 +314,24 @@ export const useUnraidStore = create<UnraidState>((set, get) => ({
     }
   },
 
-  dismissNotification: async (id, nId) => {
-    await api.unraid.dismissNotification(id, nId)
-    await get().loadNotifications(id)
+  archiveNotification: async (id, nId) => {
+    try {
+      await api.unraid.archiveNotification(id, nId)
+      await get().loadNotifications(id)
+    } catch (e) {
+      set(s => ({ errors: { ...s.errors, [id]: (e as Error).message } }))
+      throw e
+    }
+  },
+
+  archiveAllNotifications: async (id) => {
+    try {
+      await api.unraid.archiveAllNotifications(id)
+      await get().loadNotifications(id)
+    } catch (e) {
+      set(s => ({ errors: { ...s.errors, [id]: (e as Error).message } }))
+      throw e
+    }
   },
 
   createInstance: async (data) => {
