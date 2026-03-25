@@ -624,7 +624,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     try {
       return await unraidGql(row.url, row.api_key, `query {
-        shares { id name comment free used size cache nameOrig color luksStatus }
+        shares { id name comment free used size security cacheEnabled color luksStatus }
       }`)
     } catch (e) {
       return reply.status(502).send({ error: (e as Error).message })

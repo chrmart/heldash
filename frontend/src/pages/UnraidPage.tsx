@@ -344,6 +344,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
 
   const arrState = arrData?.array?.state ?? ''
   const cap = arrData?.array?.capacity?.kilobytes
+  const pcs = arrData?.array?.parityCheckStatus
   const parities = arrData?.array?.parities ?? []
   const disks = arrData?.array?.disks ?? []
   const caches = arrData?.array?.caches ?? []
@@ -459,6 +460,23 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
           </div>
           <div style={{ background: 'var(--glass-bg)', borderRadius: 4, height: 8 }}>
             <div style={{ background: barColor, height: '100%', borderRadius: 4, width: `${usedPct.toFixed(1)}%`, transition: 'width 0.3s' }} />
+          </div>
+        </div>
+      )}
+
+      {(isParityRunning || isParityPaused) && pcs && (
+        <div className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', borderLeft: `4px solid ${isParityPaused ? 'var(--warning)' : 'var(--accent)'}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>Parity Check {isParityPaused ? '(pausiert)' : 'läuft…'}</span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{(pcs.progress ?? 0).toFixed(1)}%</span>
+          </div>
+          <div style={{ background: 'var(--glass-bg)', borderRadius: 4, height: 6, marginBottom: 8 }}>
+            <div style={{ background: isParityPaused ? 'var(--warning)' : 'var(--accent)', height: '100%', borderRadius: 4, width: `${pcs.progress ?? 0}%`, transition: 'width 0.5s' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+            {pcs.speed && <span>Speed: {pcs.speed}</span>}
+            {pcs.errors != null && <span style={{ color: pcs.errors > 0 ? 'var(--status-offline)' : 'var(--text-muted)' }}>Fehler: {pcs.errors}</span>}
+            {pcs.correcting && <span style={{ color: 'var(--warning)' }}>Korrigierend</span>}
           </div>
         </div>
       )}
