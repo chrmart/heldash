@@ -691,11 +691,11 @@ export async function unraidRoutes(app: FastifyInstance) {
     }
   })
 
-  // POST /api/unraid/:id/notifications/:notifId/archive
-  app.post<{ Params: { id: string; notifId: string } }>('/api/unraid/:id/notifications/:notifId/archive', { onRequest: [app.authenticate] }, async (req, reply) => {
+  // POST /api/unraid/:id/notifications/archive/* — wildcard allows colons in notifId
+  app.post<{ Params: { id: string; '*': string } }>('/api/unraid/:id/notifications/archive/*', { onRequest: [app.authenticate] }, async (req, reply) => {
     const row = await getInstance(req.params.id, reply)
     if (!row) return
-    const notifId = decodeURIComponent(req.params.notifId)
+    const notifId = decodeURIComponent(req.params['*'])
     try {
       const data = await unraidGql(row.url, row.api_key, `mutation($id: String!) { archiveNotification(id: $id) { id } }`, { id: notifId })
       return { ok: true, data }
