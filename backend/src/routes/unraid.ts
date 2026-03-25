@@ -358,7 +358,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const containerId = decodeURIComponent(req.params.containerName)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { start(id: $id) { id state } } }`, { id: containerId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { docker { start(id: $id) { id state } } }`, { id: containerId })
       logActivity('unraid', `Docker ${containerId} start — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -372,7 +372,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const containerId = decodeURIComponent(req.params.containerName)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { stop(id: $id) { id state } } }`, { id: containerId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { docker { stop(id: $id) { id state } } }`, { id: containerId })
       logActivity('unraid', `Docker ${containerId} stop — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -386,12 +386,12 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const containerId = decodeURIComponent(req.params.containerName)
     try {
-      await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { stop(id: $id) { id state } } }`, { id: containerId })
+      await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { docker { stop(id: $id) { id state } } }`, { id: containerId })
     } catch (e) {
       return reply.status(502).send({ error: `Stop fehlgeschlagen: ${(e as Error).message}` })
     }
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { start(id: $id) { id state } } }`, { id: containerId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { docker { start(id: $id) { id state } } }`, { id: containerId })
       logActivity('unraid', `Docker ${containerId} restart — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -418,7 +418,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const containerId = decodeURIComponent(req.params.containerName)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { pause(id: $id) { id state } } }`, { id: containerId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { docker { pause(id: $id) { id state } } }`, { id: containerId })
       logActivity('unraid', `Docker ${containerId} pause — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -432,7 +432,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const containerId = decodeURIComponent(req.params.containerName)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { updateContainer(id: $id) { id state } } }`, { id: containerId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { docker { updateContainer(id: $id) { id state } } }`, { id: containerId })
       logActivity('unraid', `Docker ${containerId} update — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -446,7 +446,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const containerId = decodeURIComponent(req.params.containerName)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { docker { unpause(id: $id) { id state } } }`, { id: containerId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { docker { unpause(id: $id) { id state } } }`, { id: containerId })
       logActivity('unraid', `Docker ${containerId} unpause — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -473,7 +473,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { start(id: $id) } }`, { id: vmId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { vms { start(id: $id) } }`, { id: vmId })
       logActivity('unraid', `VM ${vmId} start — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -487,7 +487,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { stop(id: $id) } }`, { id: vmId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { vms { stop(id: $id) } }`, { id: vmId })
       logActivity('unraid', `VM ${vmId} stop — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -501,7 +501,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { pause(id: $id) } }`, { id: vmId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { vms { pause(id: $id) } }`, { id: vmId })
       logActivity('unraid', `VM ${vmId} pause — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -515,7 +515,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { resume(id: $id) } }`, { id: vmId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { vms { resume(id: $id) } }`, { id: vmId })
       logActivity('unraid', `VM ${vmId} resume — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -529,7 +529,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { forceStop(id: $id) } }`, { id: vmId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { vms { forceStop(id: $id) } }`, { id: vmId })
       logActivity('unraid', `VM ${vmId} forceStop — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -543,7 +543,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { reboot(id: $id) } }`, { id: vmId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { vms { reboot(id: $id) } }`, { id: vmId })
       logActivity('unraid', `VM ${vmId} reboot — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -557,7 +557,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const vmId = decodeURIComponent(req.params.uuid)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { vms { reset(id: $id) } }`, { id: vmId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { vms { reset(id: $id) } }`, { id: vmId })
       logActivity('unraid', `VM ${vmId} reset — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -589,7 +589,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const diskId = decodeURIComponent(req.params.diskId)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { array { mountArrayDisk(id: $id) { id status } } }`, { id: diskId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { array { mountArrayDisk(id: $id) { id status } } }`, { id: diskId })
       logActivity('unraid', `Disk ${diskId} mount — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -603,7 +603,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const diskId = decodeURIComponent(req.params.diskId)
     try {
-      const result = await unraidGql(row.url, row.api_key, `mutation($id: String!) { array { unmountArrayDisk(id: $id) { id status } } }`, { id: diskId })
+      const result = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { array { unmountArrayDisk(id: $id) { id status } } }`, { id: diskId })
       logActivity('unraid', `Disk ${diskId} unmount — ${row.name}`, 'info', { instanceId: req.params.id })
       return result
     } catch (e) {
@@ -697,7 +697,7 @@ export async function unraidRoutes(app: FastifyInstance) {
     if (!row) return
     const notifId = decodeURIComponent(req.params['*'])
     try {
-      const data = await unraidGql(row.url, row.api_key, `mutation($id: String!) { archiveNotification(id: $id) { id } }`, { id: notifId })
+      const data = await unraidGql(row.url, row.api_key, `mutation($id: PrefixedID!) { archiveNotification(id: $id) { id } }`, { id: notifId })
       return { ok: true, data }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error'
