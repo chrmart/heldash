@@ -130,6 +130,13 @@ Home Assistant und mehr — alles in einer Oberfläche.
 - 📖 Integrierter Leitfaden: Unraid vollständig sichern (3-2-1 Regel,
     CA Backup, Duplicati, Kopia, Datenbanken, Disaster Recovery)
 
+**Unraid Integration**
+- 💽 Array & Disk-Übersicht — Status, Auslastung, SMART-Daten pro Disk
+- 🐳 Docker Container Management — Start/Stop/Restart direkt aus HELDASH
+- 🖥️ VM Management — Status, Start/Stop/Force-Stop
+- 🔔 Unraid Notifications — System-Benachrichtigungen direkt im Dashboard
+- 📊 System-Metriken — RAM-Auslastung, Uptime, Parity-Status
+
 **Home Assistant**
 - 🏠 Multi-Instanz-Support (hinzufügen/bearbeiten/löschen/testen)
 - 🔍 Entity-Browser — Domain-Filter-Tabs + Suche
@@ -199,7 +206,18 @@ Home Assistant und mehr — alles in einer Oberfläche.
 
 ---
 
-## Quick Start
+## Installation
+
+### Unraid Community Store (Empfohlen)
+
+HELDASH ist direkt über den **Unraid Community Applications Store** verfügbar.
+Im CA App Store nach **„HELDASH"** suchen und mit einem Klick installieren.
+
+Dann **http://server-ip:8282** öffnen.
+Beim ersten Start erscheint automatisch die Admin-Einrichtungsseite.
+
+### Docker (Alternativ)
+
 ```bash
 docker run -d \
   --name heldash \
@@ -276,71 +294,6 @@ Community Applications Template: **`heldash.xml`** im Repository-Root.
 ## Dokumentation
 
 Vollständige Dokumentation direkt im Dashboard unter **About**.
-
----
-
-## Roadmap
-
-### Abgeschlossen ✓
-- [x] App-Verwaltung + Status-Checks
-- [x] Gruppen / Kategorien
-- [x] Hell/Dunkel + Akzentfarben + Auto-Theme
-- [x] Drag & Drop
-- [x] Lokale Nutzer-Authentifizierung
-- [x] Nutzergruppen (Admin, Gast, eigene)
-- [x] Per-Gruppe Sichtbarkeit für Apps, Media, Widgets
-- [x] Radarr / Sonarr / Prowlarr Integration
-- [x] SABnzbd Integration
-- [x] Seerr / Discover mit TMDB
-- [x] Modulares Dashboard mit Gruppen, Edit-Modus, Platzhalter
-- [x] Per-User Dashboards
-- [x] Widget-System (Server Status, AdGuard, Pi-hole, Docker Overview,
-        Nginx PM, HA, HA Energy, Kalender)
-- [x] Topbar Widget-Stats + Live-Polling
-- [x] Docker-Seite — Stats, Logs, Start/Stop/Restart
-- [x] Per-Gruppe Docker-Berechtigungen
-- [x] Hintergrundbilder pro Nutzergruppe
-- [x] Responsives Dashboard + Mobile Navigation
-- [x] Widget-Streifen auf Dashboard
-- [x] Admin Design Settings
-- [x] Home Assistant — Multi-Instanz, Entity-Browser, Panel-Grid,
-        domain-aware Karten, Dimmer, Klima, Media Player, Cover, Sensoren
-- [x] HA Energie-Dashboard + Widget
-- [x] HA Räume/Areas — Panels nach HA-Bereichen gruppieren
-- [x] CF-Manager — Import/Export, Vorlagen, Cross-Service Copy
-- [x] Recyclarr — CF Groups, Profil-Vergleich, Score-Heatmap, Sync-Verlauf, Config-Backup
-- [x] Service Uptime-History + Uptime-Übersicht Tab
-- [x] Aktivitäten-Feed (HA, Docker, Recyclarr, System)
-- [x] Quick-Actions Topbar
-- [x] Onboarding-Wizard
-- [x] Gast-Sichtbarkeits-Overlay
-- [x] Import/Export Services
-- [x] About-Seite als integriertes Doku-Center
-- [x] Logbuch — Health Score, Ereignis-Kalender, Anomalie-Erkennung
-- [x] Aktivitäten-Feed mit Echtzeit-Updates (kein Page Reload)
-- [x] Service Status Echtzeit-Updates
-- [x] Docker Events stream (kein Polling)
-- [x] Recyclarr Zeitplan hot-reload (kein Container-Neustart)
-- [x] Unraid Community Applications Template
-- [x] HA Grundriss — Multi-Etagen, Entity-Placement, Live-State
-- [x] HA Lock + Alarm Cards mit PIN-Bestätigung
-- [x] HA Alerts — Entity-basierte Toast-Benachrichtigungen
-- [x] HA Szenarien Tab — Szenen + Scripts ausführen
-- [x] HA Entity-Verlauf — Recharts Graph für alle Domains
-- [x] HA Presence Tracking + GPS Mini-Map
-- [x] Netzwerk-Monitor — TCP-Ping, IP-Scanner, WoL
-- [x] Backup Center — CA Backup, Duplicati, Kopia, Docker Export
-- [x] Backup Leitfaden — Unraid Disaster Recovery
-- [x] Changelog / What's New Modal
-- [x] Ressourcen-Verlauf im Logbuch (CPU/RAM/Netzwerk)
-
-### Geplant
-- [ ] Unraid API Integration (Logbuch-Tab)
-- [ ] Paperless-NGX Integration
-- [ ] OIDC / SSO via Authentik oder voidauth
-- [ ] Torrent-Client Integration (qBittorrent, Transmission, Deluge)
-- [ ] Webhook-Benachrichtigungen (ntfy / Gotify)
-- [ ] Weitere Integrationen (Immich, Jellyfin, Emby, etc.)
 
 ---
 
