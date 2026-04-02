@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Tag, ExternalLink } from 'lucide-react'
 import { api } from '../api'
+import { useStore } from '../store/useStore'
 import type { ChangelogRelease } from '../types'
 
 interface Props {
@@ -52,6 +54,9 @@ function parseMarkdown(text: string): React.ReactNode[] {
 }
 
 export function ChangelogModal({ onClose }: Props) {
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
   const [releases, setReleases] = useState<ChangelogRelease[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -66,7 +71,7 @@ export function ChangelogModal({ onClose }: Props) {
           setExpanded(new Set([data[0].tag_name]))
         }
       })
-      .catch(e => setError(e instanceof Error ? e.message : 'Fehler beim Laden'))
+      .catch(e => setError(e instanceof Error ? e.message : t('changelog.load_error')))
       .finally(() => setLoading(false))
   }, [])
 
@@ -81,7 +86,7 @@ export function ChangelogModal({ onClose }: Props) {
 
   const fmtDate = (iso: string) => {
     try {
-      return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' })
+      return new Date(iso).toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' })
     } catch { return iso }
   }
 

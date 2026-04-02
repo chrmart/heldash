@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
+import { formatTemperature } from '../utils'
 import { useStore } from '../store/useStore'
 import { useUnraidStore } from '../store/useUnraidStore'
 import { useToast } from '../components/Toast'
@@ -228,6 +230,7 @@ function ConfirmModal({ title, message, onConfirm, onCancel, danger = false, chi
   onConfirm: () => void; onCancel: () => void
   danger?: boolean; children?: React.ReactNode
 }) {
+  const { t } = useTranslation()
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal-content glass" onClick={e => e.stopPropagation()}>
@@ -239,8 +242,8 @@ function ConfirmModal({ title, message, onConfirm, onCancel, danger = false, chi
           {children}
         </div>
         <div className="modal-footer" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="btn" onClick={onCancel}>Abbrechen</button>
-          <button className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm}>Bestätigen</button>
+          <button className="btn" onClick={onCancel}>{t('common.cancel')}</button>
+          <button className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm}>{t('unraid_confirm.confirm')}</button>
         </div>
       </div>
     </div>
@@ -342,6 +345,7 @@ function SetupScreen() {
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 
 function OverviewTab({ instanceId }: { instanceId: string }) {
+  const { t } = useTranslation()
   const { info, array, notifications, loadInfo, loadArray, loadNotifications, errors } = useUnraidStore()
   const data = info[instanceId]
   const arrData = array[instanceId]
@@ -401,7 +405,7 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
             <div style={{ background: cpuBarColor, height: '100%', borderRadius: 4, width: `${cpuPct.toFixed(0)}%`, transition: 'width 0.5s' }} />
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-            <span>{cpu?.cores} Kerne / {cpu?.threads} Threads</span>
+            <span>{cpu?.cores} {t('unraid.system.cores_threads').split(' / ')[0]} / {cpu?.threads} {t('unraid.system.cores_threads').split(' / ')[1]}</span>
             <span>{cpuPct.toFixed(1)}%</span>
           </div>
         </div>
@@ -433,7 +437,7 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
         </div>
 
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Mainboard</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('unraid.system.motherboard')}</div>
           <div style={{ fontWeight: 600 }}>{baseboard?.manufacturer ?? '–'}</div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{baseboard?.model ?? ''}</div>
         </div>
@@ -445,7 +449,7 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
         </div>
 
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>Benachrichtigungen</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{t('logbuch.notifications.label')}</div>
           {unread === 0
             ? <span style={{ color: 'var(--status-online)', background: 'rgba(34,197,94,0.12)', borderRadius: 'var(--radius-sm)', padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>Alles OK</span>
             : <span style={{ color: 'var(--warning)', background: 'rgba(234,179,8,0.12)', borderRadius: 'var(--radius-sm)', padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{unread} ungelesen</span>
@@ -468,6 +472,9 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
 // ── Array Tab ─────────────────────────────────────────────────────────────────
 
 function ArrayTab({ instanceId }: { instanceId: string }) {
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const tempUnit = settings?.temp_unit ?? 'celsius'
   const { array, parity, physicalDisks, loadArray, loadParity, loadPhysicalDisks, arrayStart, arrayStop, parityStart, parityPause, parityResume, parityCancel, diskSpinUp, diskSpinDown, diskMount, diskUnmount, errors } = useUnraidStore()
   const { isAdmin } = useStore()
   const { toast } = useToast()
@@ -486,8 +493,8 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
     loadArray(instanceId)
     loadParity(instanceId)
     loadPhysicalDisks(instanceId)
-    const t = setInterval(() => loadArray(instanceId), 15_000)
-    return () => clearInterval(t)
+    const _poll = setInterval(() => loadArray(instanceId), 15_000)
+    return () => clearInterval(_poll)
   }, [instanceId])
 
   const arrState = arrData?.array?.state ?? ''
@@ -521,10 +528,10 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
   const runConfirm = useCallback(async (action: string) => {
     setConfirm(null)
     try {
-      if (action === 'arrayStart') { await arrayStart(instanceId); toast({ message: 'Array gestartet', type: 'success' }) }
-      else if (action === 'arrayStop') { await arrayStop(instanceId); toast({ message: 'Array gestoppt', type: 'success' }) }
-      else if (action === 'parityStart') { await parityStart(instanceId, parityCorrect); toast({ message: 'Parity Check gestartet', type: 'success' }) }
-      else if (action === 'parityCancel') { await parityCancel(instanceId); toast({ message: 'Parity Check abgebrochen', type: 'success' }) }
+      if (action === 'arrayStart') { await arrayStart(instanceId); toast({ message: t('unraid.array.started'), type: 'success' }) }
+      else if (action === 'arrayStop') { await arrayStop(instanceId); toast({ message: t('unraid.array.stopped'), type: 'success' }) }
+      else if (action === 'parityStart') { await parityStart(instanceId, parityCorrect); toast({ message: t('unraid.array.parity_started'), type: 'success' }) }
+      else if (action === 'parityCancel') { await parityCancel(instanceId); toast({ message: t('unraid.array.parity_cancelled'), type: 'success' }) }
     } catch (e) {
       toast({ message: (e as Error).message, type: 'error' })
     }
@@ -578,17 +585,17 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
             <button className="btn btn-primary" onClick={() => setConfirm({ action: 'parityStart', msg: 'Parity Check starten?', extra: (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, cursor: 'pointer' }}>
                 <input type="checkbox" checked={parityCorrect} onChange={e => setParityCorrect(e.target.checked)} />
-                Fehler automatisch korrigieren
+                Auto-correct errors
               </label>
             ) })}>Parity Check starten</button>
           )}
           {isParityRunning && <>
             <button className="btn" onClick={() => parityPause(instanceId).then(() => toast({ message: 'Parity pausiert', type: 'success' })).catch(e => toast({ message: (e as Error).message, type: 'error' }))}><Pause size={14} /> Pausieren</button>
-            <button className="btn btn-danger" onClick={() => setConfirm({ action: 'parityCancel', msg: 'Parity Check abbrechen?' })}>Abbrechen</button>
+            <button className="btn btn-danger" onClick={() => setConfirm({ action: 'parityCancel', msg: 'Parity Check abbrechen?' })}>{t('common.cancel')}</button>
           </>}
           {isParityPaused && <>
             <button className="btn btn-primary" onClick={() => parityResume(instanceId).then(() => toast({ message: 'Parity fortgesetzt', type: 'success' })).catch(e => toast({ message: (e as Error).message, type: 'error' }))}><Play size={14} /> Fortsetzen</button>
-            <button className="btn btn-danger" onClick={() => setConfirm({ action: 'parityCancel', msg: 'Parity Check abbrechen?' })}>Abbrechen</button>
+            <button className="btn btn-danger" onClick={() => setConfirm({ action: 'parityCancel', msg: 'Parity Check abbrechen?' })}>{t('common.cancel')}</button>
           </>}
         </div>
       )}
@@ -608,7 +615,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
       {(isParityRunning || isParityPaused) && pcs && (
         <div className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--spacing-md)', borderLeft: `4px solid ${isParityPaused ? 'var(--warning)' : 'var(--accent)'}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>Parity Check {isParityPaused ? '(pausiert)' : 'läuft…'}</span>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>{isParityPaused ? t('unraid.parity_paused') : t('unraid.parity_running')}</span>
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{(pcs.progress ?? 0).toFixed(1)}%</span>
           </div>
           <div style={{ background: 'var(--glass-bg)', borderRadius: 4, height: 6, marginBottom: 8 }}>
@@ -616,7 +623,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
           </div>
           <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
             {pcs.speed && <span>Speed: {pcs.speed}</span>}
-            {pcs.errors != null && <span style={{ color: pcs.errors > 0 ? 'var(--status-offline)' : 'var(--text-muted)' }}>Fehler: {pcs.errors}</span>}
+            {pcs.errors != null && <span style={{ color: pcs.errors > 0 ? 'var(--status-offline)' : 'var(--text-muted)' }}>Errors: {pcs.errors}</span>}
             {pcs.correcting && <span style={{ color: 'var(--warning)' }}>Korrigierend</span>}
           </div>
         </div>
@@ -629,7 +636,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Typ', 'Name', 'Gerät', 'Größe', 'Status', 'Temp', 'Belegung', ...(isAdmin ? ['Aktionen'] : [])].map(h => (
+                  {[t('unraid.array.headers.type'), t('unraid.array.headers.name'), t('unraid.array.headers.device'), t('unraid.array.headers.size'), t('unraid.array.headers.status'), t('unraid.array.headers.temp'), t('unraid.array.headers.usage'), ...(isAdmin ? [t('unraid.array.headers.actions')] : [])].map(h => (
                     <th key={h} style={{ padding: 'var(--spacing-sm) var(--spacing-md)', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
                   ))}
                 </tr>
@@ -649,7 +656,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
                         <span style={{ background: diskStatusColor(disk.status), color: disk.status === 'DISK_OK' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{disk.status ?? '–'}</span>
                       </div>
                     </td>
-                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(disk.temp) }}>{disk.temp != null ? `${disk.temp}°C` : '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(disk.temp) }}>{disk.temp != null ? (() => { const f = formatTemperature(disk.temp as number, '°C', tempUnit); return `${f.value}${f.unit}` })() : '–'}</td>
                     <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
                       {disk.fsSize && disk.fsSize > 0 ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -692,12 +699,12 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
         </button>
         {showCaches && (
           caches.length === 0 ? (
-            <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)', fontSize: 13 }}>Keine Cache-Pools konfiguriert.</div>
+            <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)', fontSize: 13 }}>{t('unraid.array.no_caches')}</div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, borderTop: '1px solid var(--border)' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Name', 'Gerät', 'Größe', 'Status', 'Temp', 'Belegung'].map(h => (
+                  {[t('unraid.array.headers.name'), t('unraid.array.headers.device'), t('unraid.array.headers.size'), t('unraid.array.headers.status'), t('unraid.array.headers.temp'), t('unraid.array.headers.usage')].map(h => (
                     <th key={h} style={{ padding: 'var(--spacing-sm) var(--spacing-md)', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
                   ))}
                 </tr>
@@ -711,7 +718,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
                     <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
                       <span style={{ background: diskStatusColor(disk.status), color: disk.status === 'DISK_OK' ? '#000' : 'var(--text-primary)', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{disk.status ?? '–'}</span>
                     </td>
-                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(disk.temp) }}>{disk.temp != null ? `${disk.temp}°C` : '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(disk.temp) }}>{disk.temp != null ? (() => { const f = formatTemperature(disk.temp as number, '°C', tempUnit); return `${f.value}${f.unit}` })() : '–'}</td>
                     <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
                       {disk.fsSize && disk.fsSize > 0 ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -738,7 +745,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 8 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Datum', 'Dauer', 'Speed', 'Status', 'Fehler'].map(h => (
+                {['Date', 'Duration', 'Speed', t('common.status'), t('common.error')].map(h => (
                   <th key={h} style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
                 ))}
               </tr>
@@ -756,12 +763,12 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
             </tbody>
           </table>
         )}
-        {showHistory && parityHistory.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8 }}>Keine Parity-Historie vorhanden</div>}
+        {showHistory && parityHistory.length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8 }}>{t('unraid.array.no_parity_history')}</div>}
       </div>
 
       <div className="glass" style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', marginTop: 'var(--spacing-md)' }}>
         <button className="btn" onClick={() => setShowPhysical(v => !v)} style={{ width: '100%', textAlign: 'left', padding: 'var(--spacing-sm) var(--spacing-md)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontWeight: 600, fontSize: 13 }}>Physische Laufwerke {pdisks.length > 0 ? `(${pdisks.length})` : ''}</span>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>{t('unraid.array.physical_drives')} {pdisks.length > 0 ? `(${pdisks.length})` : ''}</span>
           {showPhysical ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
         {showPhysical && (
@@ -771,7 +778,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, borderTop: '1px solid var(--border)' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Name', 'Typ', 'Größe', 'Schnittstelle', 'S/N', 'SMART', 'Temp', 'Status'].map(h => (
+                  {[t('unraid.array.headers.name'), t('unraid.array.headers.type'), t('unraid.array.headers.size'), t('unraid.array.headers.interface'), 'S/N', 'SMART', t('unraid.array.headers.temp'), t('unraid.array.headers.status')].map(h => (
                     <th key={h} style={{ padding: 'var(--spacing-sm) var(--spacing-md)', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
                   ))}
                 </tr>
@@ -789,8 +796,8 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
                     <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)' }}>
                       {(() => { const s = smartStatusStyle(d.smartStatus); return <span style={{ color: s.color, fontWeight: 600, fontSize: 12 }}>{s.label}</span> })()}
                     </td>
-                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(d.temperature) }}>{d.temperature != null ? `${d.temperature}°C` : '–'}</td>
-                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)', fontSize: 11 }}>{d.isSpinning ? 'Aktiv' : 'Standby'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: tempColor(d.temperature) }}>{d.temperature != null ? (() => { const f = formatTemperature(d.temperature as number, '°C', tempUnit); return `${f.value}${f.unit}` })() : '–'}</td>
+                    <td style={{ padding: 'var(--spacing-sm) var(--spacing-md)', color: 'var(--text-muted)', fontSize: 11 }}>{d.isSpinning ? t('unraid.array.spinning') : t('unraid.array.standby')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -801,7 +808,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
 
       {confirm && (
         <ConfirmModal
-          title="Bestätigen"
+          title={t('unraid_confirm.confirm')}
           message={confirm.msg}
           onConfirm={() => runConfirm(confirm.action)}
           onCancel={() => setConfirm(null)}
@@ -817,6 +824,7 @@ function ArrayTab({ instanceId }: { instanceId: string }) {
 // ── Docker Tab ────────────────────────────────────────────────────────────────
 
 function DockerTab({ instanceId }: { instanceId: string }) {
+  const { t } = useTranslation()
   const { docker, loadDocker, dockerControl, dockerUpdateAll, errors } = useUnraidStore()
   const { isAdmin } = useStore()
   const { toast } = useToast()
@@ -828,8 +836,8 @@ function DockerTab({ instanceId }: { instanceId: string }) {
 
   useEffect(() => {
     loadDocker(instanceId)
-    const t = setInterval(() => loadDocker(instanceId), 15_000)
-    return () => clearInterval(t)
+    const _poll = setInterval(() => loadDocker(instanceId), 15_000)
+    return () => clearInterval(_poll)
   }, [instanceId])
 
   const sorted = [...containers].sort((a, b) => {
@@ -862,7 +870,7 @@ function DockerTab({ instanceId }: { instanceId: string }) {
     setUpdatingAll(true)
     try {
       await dockerUpdateAll(instanceId)
-      toast({ message: 'Alle Container werden aktualisiert', type: 'success' })
+      toast({ message: 'All containers are being updated', type: 'success' })
     } catch (e) {
       toast({ message: (e as Error).message, type: 'error' })
     } finally {
@@ -945,7 +953,7 @@ function DockerTab({ instanceId }: { instanceId: string }) {
           )
         })}
       </div>
-      {filtered.length === 0 && <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--spacing-2xl)' }}>Keine Container gefunden</div>}
+      {filtered.length === 0 && <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--spacing-2xl)' }}>{t('unraid.docker.no_containers')}</div>}
     </div>
   )
 }
@@ -953,6 +961,7 @@ function DockerTab({ instanceId }: { instanceId: string }) {
 // ── VMs Tab ───────────────────────────────────────────────────────────────────
 
 function VmsTab({ instanceId }: { instanceId: string }) {
+  const { t } = useTranslation()
   const { vms, loadVms, vmControl, errors } = useUnraidStore()
   const { toast } = useToast()
   const domains = [...(vms[instanceId] ?? [])].sort((a, b) => (a.name ?? '').toLowerCase().localeCompare((b.name ?? '').toLowerCase()))
@@ -961,8 +970,8 @@ function VmsTab({ instanceId }: { instanceId: string }) {
 
   useEffect(() => {
     loadVms(instanceId)
-    const t = setInterval(() => loadVms(instanceId), 30_000)
-    return () => clearInterval(t)
+    const _poll = setInterval(() => loadVms(instanceId), 30_000)
+    return () => clearInterval(_poll)
   }, [instanceId])
 
   const handleVmAction = async (vm: UnraidVm, action: 'start' | 'stop' | 'pause' | 'resume' | 'forcestop' | 'reboot' | 'reset') => {
@@ -981,7 +990,7 @@ function VmsTab({ instanceId }: { instanceId: string }) {
   const err = errors[`vms_${instanceId}`]
 
   if (!err && domains.length === 0) {
-    return <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--spacing-2xl)' }}>Keine VMs konfiguriert auf diesem Server.</div>
+    return <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--spacing-2xl)' }}>{t('unraid.vms.no_vms')}</div>
   }
 
   return (
@@ -1031,8 +1040,8 @@ function VmsTab({ instanceId }: { instanceId: string }) {
       </div>
       {confirm && (
         <ConfirmModal
-          title="Bestätigen"
-          message={confirm.action === 'forcestop' ? 'VM sofort beenden — Datenverlust möglich!' : confirm.action === 'reset' ? 'Hard Reset — Datenverlust möglich!' : 'Ungespeicherte Daten in der VM können verloren gehen.'}
+          title={t('unraid_confirm.confirm')}
+          message={confirm.action === 'forcestop' ? t('unraid_confirm.vm_forcestop') : confirm.action === 'reset' ? t('unraid_confirm.vm_reset') : t('unraid_confirm.vm_stop')}
           onConfirm={() => { handleVmAction(confirm.vm, confirm.action); setConfirm(null) }}
           onCancel={() => setConfirm(null)}
           danger
@@ -1045,6 +1054,7 @@ function VmsTab({ instanceId }: { instanceId: string }) {
 // ── Shares Tab ────────────────────────────────────────────────────────────────
 
 function SharesTab({ instanceId }: { instanceId: string }) {
+  const { t } = useTranslation()
   const { shares, loadShares, errors } = useUnraidStore()
   const shareList = shares[instanceId] ?? []
   const err = errors[`shares_${instanceId}`]
@@ -1102,7 +1112,7 @@ function SharesTab({ instanceId }: { instanceId: string }) {
             ))}
           </tbody>
         </table>
-        {shareList.length === 0 && <div style={{ padding: 'var(--spacing-xl)', color: 'var(--text-muted)', textAlign: 'center' }}>Keine Freigaben gefunden</div>}
+        {shareList.length === 0 && <div style={{ padding: 'var(--spacing-xl)', color: 'var(--text-muted)', textAlign: 'center' }}>{t('unraid.shares.no_shares')}</div>}
       </div>
     </div>
   )
@@ -1111,6 +1121,7 @@ function SharesTab({ instanceId }: { instanceId: string }) {
 // ── Notifications Tab ─────────────────────────────────────────────────────────
 
 function NotificationsTab({ instanceId }: { instanceId: string }) {
+  const { t } = useTranslation()
   const { notifications, loadNotifications, loadNotificationsArchive, archiveNotification, archiveAllNotifications, errors } = useUnraidStore()
   const { toast } = useToast()
   const data = notifications[instanceId]
@@ -1125,8 +1136,8 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
 
   useEffect(() => {
     loadNotifications(instanceId)
-    const t = setInterval(() => loadNotifications(instanceId), 60_000)
-    return () => clearInterval(t)
+    const _poll = setInterval(() => loadNotifications(instanceId), 60_000)
+    return () => clearInterval(_poll)
   }, [instanceId])
 
   useEffect(() => {
@@ -1149,7 +1160,7 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
     try {
       await archiveNotification(instanceId, notifId)
     } catch {
-      toast({ message: 'Fehler beim Archivieren', type: 'error' })
+      toast({ message: t('unraid.notifications.archive_error'), type: 'error' })
       setLocalList(data?.notifications?.list ?? [])
     }
   }
@@ -1160,7 +1171,7 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
     try {
       await archiveAllNotifications(instanceId)
     } catch {
-      toast({ message: 'Fehler beim Archivieren aller Benachrichtigungen', type: 'error' })
+      toast({ message: t('unraid.notifications.archive_all_error'), type: 'error' })
       setLocalList(data?.notifications?.list ?? [])
     } finally {
       setArchivingAll(false)
@@ -1174,7 +1185,7 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
     items.length === 0 ? (
       <div style={{ textAlign: 'center', padding: 'var(--spacing-2xl)', color: 'var(--text-muted)' }}>
         <Check size={20} color="var(--status-online)" style={{ marginBottom: 8 }} />
-        <div>{view === 'archive' ? 'Kein Archiv vorhanden' : 'Keine ungelesenen Benachrichtigungen'}</div>
+        <div>{view === 'archive' ? t('unraid.notifications.no_archive') : t('unraid.notifications.no_unread')}</div>
       </div>
     ) : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
@@ -1227,11 +1238,11 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
           <button className={`btn${view === 'unread' ? ' btn-primary' : ''}`} onClick={() => setView('unread')} style={{ fontSize: 13 }}>
             Ungelesen {unread > 0 && <span style={{ color: 'var(--warning)', background: 'rgba(234,179,8,0.12)', borderRadius: 10, padding: '0 5px', fontSize: 10, fontWeight: 700, marginLeft: 4 }}>{unread}</span>}
           </button>
-          <button className={`btn${view === 'archive' ? ' btn-primary' : ''}`} onClick={() => setView('archive')} style={{ fontSize: 13 }}>Archiv</button>
+          <button className={`btn${view === 'archive' ? ' btn-primary' : ''}`} onClick={() => setView('archive')} style={{ fontSize: 13 }}>{t('unraid.notifications.archive')}</button>
         </div>
         {view === 'unread' && localList.length > 0 && (
           <button className="btn btn-primary" disabled={archivingAll} onClick={handleArchiveAll}>
-            {archivingAll ? <><div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> Wird archiviert…</> : 'Alle als gelesen markieren'}
+            {archivingAll ? <><div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> Wird archiviert…</> : t('unraid.notifications.mark_all_read')}
           </button>
         )}
       </div>
@@ -1268,7 +1279,7 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
               </p>
             </div>
             <div className="modal-footer" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => setSelectedNotification(null)}>Schließen</button>
+              <button className="btn" onClick={() => setSelectedNotification(null)}>{t('unraid.close')}</button>
               {selectedNotification.id && (
                 <button
                   className="btn btn-primary"
@@ -1291,6 +1302,7 @@ function NotificationsTab({ instanceId }: { instanceId: string }) {
 // ── System Tab ────────────────────────────────────────────────────────────────
 
 function SystemTab({ instanceId }: { instanceId: string }) {
+  const { t } = useTranslation()
   const { info, config, users, loadInfo, loadConfig, loadUsers, errors } = useUnraidStore()
   const data = info[instanceId]
   const cfgData = config[instanceId]
@@ -1342,14 +1354,14 @@ function SystemTab({ instanceId }: { instanceId: string }) {
         <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ fontWeight: 600, marginBottom: 'var(--spacing-sm)' }}>Hardware</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <InfoRow icon={<Server size={14} />}    label="Hersteller"       value={`${sysInfo?.manufacturer ?? ''} ${sysInfo?.model ?? ''}`.trim() || '–'} />
-            <InfoRow icon={<Globe size={14} />}     label="Plattform"        value={os?.platform} />
-            <InfoRow icon={<Monitor size={14} />}   label="Betriebssystem"   value={`${os?.distro ?? ''} ${os?.release ?? ''}`.trim() || '–'} />
+            <InfoRow icon={<Server size={14} />}    label={t('unraid.system.manufacturer')}       value={`${sysInfo?.manufacturer ?? ''} ${sysInfo?.model ?? ''}`.trim() || '–'} />
+            <InfoRow icon={<Globe size={14} />}     label={t('unraid.system.platform')}        value={os?.platform} />
+            <InfoRow icon={<Monitor size={14} />}   label={t('unraid.system.os')}   value={`${os?.distro ?? ''} ${os?.release ?? ''}`.trim() || '–'} />
             <InfoRow icon={<Clock size={14} />}     label="Uptime"           value={formatUptime(os?.uptime)} />
             <InfoRow icon={<Cpu size={14} />}       label="CPU"              value={`${cpu?.manufacturer ?? ''} ${cpu?.brand ?? ''}`.trim() || '–'} />
-            <InfoRow icon={<Layers size={14} />}    label="Kerne / Threads"  value={`${cpu?.cores ?? '–'} / ${cpu?.threads ?? '–'}`} />
-            <InfoRow icon={<Activity size={14} />}  label="RAM gesamt"       value={memory?.total != null ? formatBytes(memory.total) : '–'} />
-            <InfoRow icon={<HardDrive size={14} />} label="Mainboard"        value={`${baseboard?.manufacturer ?? ''} ${baseboard?.model ?? ''}`.trim() || '–'} />
+            <InfoRow icon={<Layers size={14} />}    label={t('unraid.system.cores_threads')}  value={`${cpu?.cores ?? '–'} / ${cpu?.threads ?? '–'}`} />
+            <InfoRow icon={<Activity size={14} />}  label={t('unraid.system.total_ram')}       value={memory?.total != null ? formatBytes(memory.total) : '–'} />
+            <InfoRow icon={<HardDrive size={14} />} label={t('unraid.system.motherboard')}        value={`${baseboard?.manufacturer ?? ''} ${baseboard?.model ?? ''}`.trim() || '–'} />
           </div>
         </div>
 
@@ -1359,7 +1371,7 @@ function SystemTab({ instanceId }: { instanceId: string }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Slot', 'Größe', 'Typ', 'Speed', 'Hersteller', 'Part-Nr.'].map(h => (
+                  {[t('unraid.system.ram_table.slot'), t('unraid.system.ram_table.size'), t('unraid.system.ram_table.type'), 'Speed', t('unraid.system.ram_table.manufacturer'), t('unraid.system.ram_table.part')].map(h => (
                     <th key={h} style={{ padding: 'var(--spacing-sm) var(--spacing-md)', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>{h}</th>
                   ))}
                 </tr>
@@ -1382,15 +1394,15 @@ function SystemTab({ instanceId }: { instanceId: string }) {
 
         {cfg && (
           <div className="glass" style={{ padding: 'var(--spacing-lg)', borderRadius: 'var(--radius-md)' }}>
-            <div style={{ fontWeight: 600, marginBottom: 'var(--spacing-sm)' }}>Lizenz</div>
+            <div style={{ fontWeight: 600, marginBottom: 'var(--spacing-sm)' }}>{t('unraid.system.license')}</div>
             {cfg.error && <div className="error-banner" style={{ marginBottom: 8 }}>{cfg.error}</div>}
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <InfoRow icon={<Key size={14} />}    label="Registriert für" value={cfg.registrationTo} />
-              <InfoRow icon={<Tag size={14} />}    label="Lizenztyp"       value={cfg.registrationType} />
+              <InfoRow icon={<Key size={14} />}    label={t('unraid.system.registered_for')} value={cfg.registrationTo} />
+              <InfoRow icon={<Tag size={14} />}    label={t('unraid.system.license_type')}       value={cfg.registrationType} />
               <InfoRow icon={<Shield size={14} />} label="Status"          value={
                 cfg.valid
-                  ? <span style={{ color: 'var(--status-online)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={12} /> Aktiv</span>
-                  : <span style={{ color: 'var(--status-offline)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12} /> Ungültig</span>
+                  ? <span style={{ color: 'var(--status-online)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={12} /> {t('unraid.system.active')}</span>
+                  : <span style={{ color: 'var(--status-offline)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12} /> {t('unraid.system.invalid')}</span>
               } />
             </div>
           </div>
@@ -1433,6 +1445,7 @@ function SortableInstanceCard({ instance, onUpdate, onDelete }: {
   onUpdate: (id: string, data: object) => Promise<void>
   onDelete: (id: string) => Promise<void>
 }) {
+  const { t } = useTranslation()
   const { online } = useUnraidStore()
   const { toast } = useToast()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: instance.id })
@@ -1506,7 +1519,7 @@ function SortableInstanceCard({ instance, onUpdate, onDelete }: {
             </button>
             <button
               className="btn"
-              onClick={() => onUpdate(instance.id, { enabled: !instance.enabled }).then(() => toast({ message: instance.enabled ? 'Deaktiviert' : 'Aktiviert', type: 'success' })).catch(e => toast({ message: (e as Error).message, type: 'error' }))}
+              onClick={() => onUpdate(instance.id, { enabled: !instance.enabled }).then(() => toast({ message: instance.enabled ? t('unraid.toast.disable') : t('unraid.toast.enable'), type: 'success' })).catch(e => toast({ message: (e as Error).message, type: 'error' }))}
               style={{ padding: '3px 8px', fontSize: 12, opacity: instance.enabled ? 1 : 0.5 }}
             >
               {instance.enabled ? <Eye size={12} /> : <EyeOff size={12} />}
@@ -1522,13 +1535,13 @@ function SortableInstanceCard({ instance, onUpdate, onDelete }: {
             <input className="input" value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name" />
             <input className="input" value={editUrl} onChange={e => setEditUrl(e.target.value)} placeholder="URL" />
             <div style={{ position: 'relative' }}>
-              <input className="input" type={showKey ? 'text' : 'password'} value={editKey} onChange={e => setEditKey(e.target.value)} placeholder="Neuer API Key (leer = unverändert)" style={{ paddingRight: 40 }} />
+              <input className="input" type={showKey ? 'text' : 'password'} value={editKey} onChange={e => setEditKey(e.target.value)} placeholder={t('unraid_confirm.new_api_key')} style={{ paddingRight: 40 }} />
               <button className="btn" onClick={() => setShowKey(v => !v)} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', padding: '2px 6px', minHeight: 'unset' }}>
                 {showKey ? <EyeOff size={12} /> : <Eye size={12} />}
               </button>
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => setEditing(false)}>Abbrechen</button>
+              <button className="btn" onClick={() => setEditing(false)}>{t('common.cancel')}</button>
               <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
                 {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Speichern'}
               </button>
@@ -1540,8 +1553,8 @@ function SortableInstanceCard({ instance, onUpdate, onDelete }: {
       {confirmDelete && (
         <ConfirmModal
           title="Instanz entfernen"
-          message="Instanz entfernen? Alle gespeicherten Daten werden gelöscht."
-          onConfirm={() => { onDelete(instance.id).then(() => toast({ message: 'Instanz gelöscht', type: 'success' })).catch(e => toast({ message: (e as Error).message, type: 'error' })); setConfirmDelete(false) }}
+          message={t('unraid.remove_instance')}
+          onConfirm={() => { onDelete(instance.id).then(() => toast({ message: t('unraid.instance_deleted'), type: 'success' })).catch(e => toast({ message: (e as Error).message, type: 'error' })); setConfirmDelete(false) }}
           onCancel={() => setConfirmDelete(false)}
           danger
         />
@@ -1554,6 +1567,7 @@ function SortableInstanceCard({ instance, onUpdate, onDelete }: {
 
 function ManagementTab() {
   const { instances, reorderInstances, updateInstance, deleteInstance, createInstance } = useUnraidStore()
+  const { t } = useTranslation()
   const { isAdmin } = useStore()
   const { toast } = useToast()
   const [showAdd, setShowAdd] = useState(false)
@@ -1599,7 +1613,7 @@ function ManagementTab() {
       setShowAdd(false)
       setAddName(''); setAddUrl(''); setAddKey('')
       setTestOk(null)
-      toast({ message: 'Server hinzugefügt', type: 'success' })
+      toast({ message: t('unraid.server_added'), type: 'success' })
     } catch (e) {
       toast({ message: (e as Error).message, type: 'error' })
     } finally {
@@ -1647,7 +1661,7 @@ function ManagementTab() {
               {testOk === true && <div style={{ color: 'var(--status-online)', fontSize: 13 }}><Check size={12} /> Verbindung erfolgreich</div>}
               {testOk === false && <div style={{ color: 'var(--status-offline)', fontSize: 13 }}><AlertTriangle size={12} /> {testError}</div>}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button className="btn" onClick={() => { setShowAdd(false); setTestOk(null) }}>Abbrechen</button>
+                <button className="btn" onClick={() => { setShowAdd(false); setTestOk(null) }}>{t('common.cancel')}</button>
                 <button className="btn btn-primary" onClick={handleAdd} disabled={!testOk || saving || !addName}>
                   {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Hinzufügen'}
                 </button>
@@ -1662,17 +1676,21 @@ function ManagementTab() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-const CONTENT_TABS = [
-  { key: 'overview',      label: 'Übersicht' },
-  { key: 'array',         label: 'HDD' },
-  { key: 'docker',        label: 'Docker' },
-  { key: 'vms',           label: 'VMs' },
-  { key: 'shares',        label: 'Freigaben' },
-  { key: 'notifications', label: 'Benachrichtigungen' },
-  { key: 'system',        label: 'System' },
-]
+function useContentTabs() {
+  const { t } = useTranslation()
+  return [
+    { key: 'overview',      label: t('unraid.tabs.overview') },
+    { key: 'array',         label: 'HDD' },
+    { key: 'docker',        label: 'Docker' },
+    { key: 'vms',           label: 'VMs' },
+    { key: 'shares',        label: t('unraid.tabs.shares') },
+    { key: 'notifications', label: t('unraid.tabs.notifications') },
+    { key: 'system',        label: 'System' },
+  ]
+}
 
 export function UnraidPage() {
+  const contentTabs = useContentTabs()
   const { instances, selectedId, online, loadInstances, setSelected, pingAll } = useUnraidStore()
   const [instTab, setInstTab] = useState<string>('') // selected instance id or 'management'
   const [contentTab, setContentTab] = useState('overview')
@@ -1746,7 +1764,7 @@ export function UnraidPage() {
         <div>
           {/* Content tab bar */}
           <div style={{ display: 'flex', overflowX: 'auto', borderBottom: '1px solid var(--border)', marginBottom: 'var(--spacing-lg)', gap: 4 }}>
-            {CONTENT_TABS.map(t => (
+            {contentTabs.map(t => (
               <button key={t.key} style={tabStyle(contentTab === t.key)} onClick={() => setContentTab(t.key)}>
                 {t.label}
               </button>

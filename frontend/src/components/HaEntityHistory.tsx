@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useStore } from '../store/useStore'
+import { formatTemperature } from '../utils'
 import { X, Clock } from 'lucide-react'
 import { api } from '../api'
 import type { HaEntityFull, HaHistoryEntry } from '../types'
@@ -10,35 +13,27 @@ interface Props {
 }
 
 const HOUR_OPTIONS = [
-  { label: '6h', value: 6 },
-  { label: '24h', value: 24 },
-  { label: '7T', value: 168 },
-  { label: '30T', value: 720 },
+  { labelKey: 'ha.history.hours.6h',  value: 6 },
+  { labelKey: 'ha.history.hours.24h', value: 24 },
+  { labelKey: 'ha.history.hours.7d',  value: 168 },
+  { labelKey: 'ha.history.hours.30d', value: 720 },
 ]
 
 function isNumeric(value: string): boolean {
   return value !== '' && !isNaN(parseFloat(value)) && isFinite(Number(value))
 }
 
-function formatTime(iso: string): string {
-  if (!iso) return ''
-  try {
-    return new Date(iso).toLocaleString('de-DE', {
-      month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
-    })
-  } catch {
-    return iso
-  }
-}
-
 // Simple SVG line chart for numeric history
-function NumericChart({ entries }: { entries: HaHistoryEntry[] }) {
+function NumericChart({ entries, rawUnit, tempUnit }: { entries: HaHistoryEntry[]; rawUnit: string; tempUnit: 'celsius'|'fahrenheit' }) {
   if (entries.length < 2) return null
 
-  const values = entries.map(e => parseFloat(e.state)).filter(v => !isNaN(v))
+  const rawValues = entries.map(e => parseFloat(e.state)).filter(v => !isNaN(v))
+  const isTempSensor = rawUnit === '°C' || rawUnit.toLowerCase() === 'c'
+  const values = isTempSensor && tempUnit === 'fahrenheit'
+    ? rawValues.map(v => parseFloat(formatTemperature(v, rawUnit, tempUnit).value))
+    : rawValues
   if (values.length < 2) return null
-
+  const displayUnit = isTempSensor ? (tempUnit === 'fahrenheit' ? '°F' : '°C') : rawUnit
   const minVal = Math.min(...values)
   const maxVal = Math.max(...values)
   const range = maxVal - minVal || 1
@@ -84,16 +79,16 @@ function NumericChart({ entries }: { entries: HaHistoryEntry[] }) {
         />
       </svg>
       <div style={{ display: 'flex', gap: 20, fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-        <span>Min: <strong style={{ color: 'var(--text-primary)' }}>{Math.min(...values).toFixed(1)}</strong></span>
-        <span>Max: <strong style={{ color: 'var(--text-primary)' }}>{Math.max(...values).toFixed(1)}</strong></span>
-        <span>Ø: <strong style={{ color: 'var(--text-primary)' }}>{avg.toFixed(1)}</strong></span>
+        <span>Min: <strong style={{ color: 'var(--text-primary)' }}>{minVal.toFixed(1)}{displayUnit}</strong></span>
+        <span>Max: <strong style={{ color: 'var(--text-primary)' }}>{maxVal.toFixed(1)}{displayUnit}</strong></span>
+        <span>Avg: <strong style={{ color: 'var(--text-primary)' }}>{avg.toFixed(1)}{displayUnit}</strong></span>
       </div>
     </div>
   )
 }
 
 // Color bands chart for state history
-function StateChart({ entries }: { entries: HaHistoryEntry[] }) {
+function StateChart({ entries, fmtTime }: { entries: HaHistoryEntry[]; fmtTime: (iso: string) => string }) {
   if (entries.length === 0) return null
 
   const W = 560
@@ -131,7 +126,7 @@ function StateChart({ entries }: { entries: HaHistoryEntry[] }) {
           const color = stateColors[entry.state] ?? 'var(--accent)'
           return (
             <rect key={i} x={x} y={0} width={w} height={H} fill={color} opacity={0.75}>
-              <title>{entry.state} – {formatTime(entry.last_changed)}</title>
+              <title>{entry.state} – {fmtTime(entry.last_changed)}</title>
             </rect>
           )
         })}
@@ -141,10 +136,26 @@ function StateChart({ entries }: { entries: HaHistoryEntry[] }) {
 }
 
 export function HaEntityHistory({ entity, instanceId, onClose }: Props) {
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
+  const use12h = settings?.time_format === '12h'
+  const tempUnit = settings?.temp_unit ?? 'celsius'
   const [hours, setHours] = useState(24)
   const [entries, setEntries] = useState<HaHistoryEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const fmtTime = (iso: string): string => {
+    if (!iso) return ''
+    try {
+      return new Date(iso).toLocaleString(locale, {
+        month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+        hour12: use12h,
+      })
+    } catch { return iso }
+  }
 
   const loadHistory = async (h: number) => {
     setLoading(true)
@@ -153,7 +164,7 @@ export function HaEntityHistory({ entity, instanceId, onClose }: Props) {
       const data = await api.ha.history(instanceId, entity.entity_id, h)
       setEntries(data)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Fehler beim Laden')
+      setError(e instanceof Error ? e.message : t('ha.history.load_error'))
     } finally {
       setLoading(false)
     }
@@ -170,7 +181,9 @@ export function HaEntityHistory({ entity, instanceId, onClose }: Props) {
 
   const numeric = entries.length > 0 && isNumeric(entries[0]?.state ?? '')
   const name = (entity.attributes.friendly_name as string | undefined) ?? entity.entity_id
-  const unit = (entity.attributes.unit_of_measurement as string | undefined) ?? ''
+  const rawUnit = (entity.attributes.unit_of_measurement as string | undefined) ?? ''
+  const isTempSensor = entity.attributes.device_class === 'temperature' || rawUnit === '°C'
+  const displayUnit = isTempSensor ? (tempUnit === 'fahrenheit' ? '°F' : '°C') : rawUnit
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -194,7 +207,7 @@ export function HaEntityHistory({ entity, instanceId, onClose }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <Clock size={16} style={{ color: 'var(--accent)' }} />
           <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>
-            Verlauf: {name}
+            {t('ha.history.title')}: {name}
           </h2>
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 20 }}>
@@ -210,7 +223,7 @@ export function HaEntityHistory({ entity, instanceId, onClose }: Props) {
               style={{ fontSize: 12, padding: '4px 12px' }}
               onClick={() => handleHoursChange(opt.value)}
             >
-              {opt.label}
+              {t(opt.labelKey)}
             </button>
           ))}
           {loading && <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2, alignSelf: 'center', marginLeft: 8 }} />}
@@ -221,32 +234,32 @@ export function HaEntityHistory({ entity, instanceId, onClose }: Props) {
         {!loading && !error && (
           <>
             {numeric
-              ? <NumericChart entries={entries} />
-              : <StateChart entries={entries} />
+              ? <NumericChart entries={entries} rawUnit={rawUnit} tempUnit={tempUnit} />
+              : <StateChart entries={entries} fmtTime={fmtTime} />
             }
 
             {/* State changes table */}
             <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               {entries.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>
-                  Keine Verlaufsdaten verfügbar.
+                  {t('ha.history.no_data')}
                 </p>
               ) : (
                 <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ color: 'var(--text-muted)', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>
-                      <th style={{ padding: '4px 8px', fontWeight: 600 }}>Zeit</th>
-                      <th style={{ padding: '4px 8px', fontWeight: 600 }}>Status{unit ? ` (${unit})` : ''}</th>
+                      <th style={{ padding: '4px 8px', fontWeight: 600 }}>{t('ha.history.time_header')}</th>
+                      <th style={{ padding: '4px 8px', fontWeight: 600 }}>{t('ha.history.state_header')}{displayUnit ? ` (${displayUnit})` : ''}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {entries.slice().reverse().map((entry, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid var(--glass-border)', opacity: 0.85 }}>
                         <td style={{ padding: '4px 8px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-                          {formatTime(entry.last_changed)}
+                          {fmtTime(entry.last_changed)}
                         </td>
                         <td style={{ padding: '4px 8px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                          {entry.state}
+                          {isTempSensor && !isNaN(parseFloat(entry.state)) ? formatTemperature(entry.state, rawUnit, tempUnit).value : entry.state}
                         </td>
                       </tr>
                     ))}

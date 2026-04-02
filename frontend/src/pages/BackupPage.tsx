@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Plus, RefreshCw, Download, Trash2, Edit2, CheckCircle, XCircle, AlertTriangle, Clock, ChevronDown, ChevronRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { useStore } from '../store/useStore'
 import { useToast } from '../components/Toast'
@@ -7,12 +8,12 @@ import type { BackupSource, BackupStatusResult } from '../types'
 
 // ── Backup type definitions ───────────────────────────────────────────────────
 
-const BACKUP_TYPES: { value: string; label: string; description: string }[] = [
-  { value: 'ca_backup', label: 'CA Backup (Unraid)', description: 'Liest das CA Backup Plugin Log von Unraid' },
-  { value: 'duplicati', label: 'Duplicati', description: 'Verbindet sich mit der Duplicati Web-UI' },
-  { value: 'kopia', label: 'Kopia', description: 'Verbindet sich mit dem Kopia-Server' },
-  { value: 'docker', label: 'Docker (Export)', description: 'Exportiert Container-Konfigurationen als JSON' },
-  { value: 'vm', label: 'VM Backups', description: 'Prüft Backup-Dateien in einem lokalen Pfad' },
+const BACKUP_TYPE_KEYS: { value: string; label: string; descKey: string }[] = [
+  { value: 'ca_backup', label: 'CA Backup (Unraid)', descKey: 'backup.types.ca_backup' },
+  { value: 'duplicati', label: 'Duplicati',          descKey: 'backup.types.duplicati' },
+  { value: 'kopia',     label: 'Kopia',              descKey: 'backup.types.kopia' },
+  { value: 'docker',    label: 'Docker (Export)',     descKey: 'backup.types.docker' },
+  { value: 'vm',        label: 'VM Backups',          descKey: 'backup.types.vm' },
 ]
 
 // ── Add/Edit Source Modal ─────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ interface SourceModalProps {
 }
 
 function SourceModal({ source, onClose, onSave }: SourceModalProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState(source?.name ?? '')
   const [type, setType] = useState(source?.type ?? 'ca_backup')
   const [enabled, setEnabled] = useState(source?.enabled ?? true)
@@ -32,14 +34,14 @@ function SourceModal({ source, onClose, onSave }: SourceModalProps) {
   const [error, setError] = useState<string | null>(null)
 
   const handleSave = async () => {
-    if (!name.trim() || !type) { setError('Name und Typ sind erforderlich'); return }
+    if (!name.trim() || !type) { setError(t('backup.modal.name_required')); return }
     setSaving(true)
     setError(null)
     try {
       await onSave({ name: name.trim(), type, config, enabled })
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
+      setError(e instanceof Error ? e.message : t('backup.modal.save_error'))
     } finally {
       setSaving(false)
     }
@@ -52,31 +54,31 @@ function SourceModal({ source, onClose, onSave }: SourceModalProps) {
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="glass modal" style={{ width: '100%', maxWidth: 520, padding: 24, borderRadius: 'var(--radius-xl)' }}>
-        <h3 style={{ margin: '0 0 20px', fontFamily: 'var(--font-display)' }}>{source ? 'Quelle bearbeiten' : 'Backup-Quelle hinzufügen'}</h3>
+        <h3 style={{ margin: '0 0 20px', fontFamily: 'var(--font-display)' }}>{source ? t('backup.modal.edit_title') : t('backup.modal.add_title')}</h3>
 
         {error && <div className="error-banner" style={{ marginBottom: 16 }}>{error}</div>}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label className="field-label">Name *</label>
-            <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Mein Backup" />
+            <input className="input" value={name} onChange={e => setName(e.target.value)} {...{placeholder: t('backup.modal.name_placeholder')}} />
           </div>
 
           <div>
             <label className="field-label">Typ *</label>
             <select className="input" value={type} onChange={e => { setType(e.target.value); setConfig({}) }}>
-              {BACKUP_TYPES.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+              {BACKUP_TYPE_KEYS.map(bt => (
+                <option key={bt.value} value={bt.value}>{bt.label}</option>
               ))}
             </select>
             <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-              {BACKUP_TYPES.find(t => t.value === type)?.description}
+              {t(BACKUP_TYPE_KEYS.find(bt => bt.value === type)?.descKey ?? '')}
             </span>
           </div>
 
           {type === 'ca_backup' && (
             <div>
-              <label className="field-label">Log-Pfad</label>
+              <label className="field-label">t('backup.modal.log_path')</label>
               <input className="input" value={(config.logPath as string) ?? ''} onChange={e => updateConfig('logPath', e.target.value)} placeholder="/boot/logs/CA_backup.log" />
             </div>
           )}
@@ -102,12 +104,12 @@ function SourceModal({ source, onClose, onSave }: SourceModalProps) {
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <label className="field-label">Benutzer</label>
+                  <label className="field-label">t('backup.modal.username')</label>
                   <input className="input" value={(config.user as string) ?? 'kopia'} onChange={e => updateConfig('user', e.target.value)} placeholder="kopia" />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label className="field-label">Passwort</label>
-                  <input className="input" type="password" value={(config.pass as string) ?? ''} onChange={e => updateConfig('pass', e.target.value)} placeholder="Passwort" />
+                  <label className="field-label">t('backup.modal.password')</label>
+                  <input className="input" type="password" value={(config.pass as string) ?? ''} onChange={e => updateConfig('pass', e.target.value)} placeholder="t('backup.modal.password')" />
                 </div>
               </div>
             </>
@@ -115,13 +117,13 @@ function SourceModal({ source, onClose, onSave }: SourceModalProps) {
 
           {type === 'vm' && (
             <div>
-              <label className="field-label">Backup-Pfad</label>
+              <label className="field-label">t('backup.modal.backup_path')</label>
               <input className="input" value={(config.backupPath as string) ?? ''} onChange={e => updateConfig('backupPath', e.target.value)} placeholder="/mnt/user/backups/vms" />
             </div>
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <label className="field-label" style={{ margin: 0 }}>Aktiviert</label>
+            <label className="field-label" style={{ margin: 0 }}>t('backup.modal.enabled')</label>
             <button
               onClick={() => setEnabled(v => !v)}
               style={{ width: 40, height: 22, borderRadius: 11, background: enabled ? 'var(--accent)' : 'var(--glass-border)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 200ms' }}
@@ -132,9 +134,9 @@ function SourceModal({ source, onClose, onSave }: SourceModalProps) {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-          <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Speichern...' : 'Speichern'}
+            {saving ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </div>
@@ -146,6 +148,10 @@ function SourceModal({ source, onClose, onSave }: SourceModalProps) {
 
 function StatusCard({ result }: { result: BackupStatusResult }) {
   const [expanded, setExpanded] = useState(false)
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
+  const use12h = settings?.time_format === '12h'
 
   const StatusIcon = result.error
     ? () => <XCircle size={16} style={{ color: 'var(--status-offline)' }} />
@@ -155,15 +161,15 @@ function StatusCard({ result }: { result: BackupStatusResult }) {
         ? () => <CheckCircle size={16} style={{ color: 'var(--status-online)' }} />
         : () => <Clock size={16} style={{ color: 'var(--text-muted)' }} />
 
-  const statusText = result.error ? 'Fehler' : result.success === false ? 'Veraltet' : result.success === true ? 'OK' : 'Unbekannt'
+  const statusText = result.error ? t('backup.status.error') : result.success === false ? t('backup.status.stale') : result.success === true ? t('backup.status.ok') : t('backup.status.unknown')
   const statusColor = result.error ? 'var(--status-offline)' : result.success === false ? '#f59e0b' : result.success === true ? 'var(--status-online)' : 'var(--text-muted)'
 
-  const typeLabel = BACKUP_TYPES.find(t => t.value === result.type)?.label ?? result.type
+  const typeLabel = BACKUP_TYPE_KEYS.find(bt => bt.value === result.type)?.label ?? result.type
 
   const fmtDate = (iso: string | null) => {
     if (!iso) return '—'
     try {
-      return new Date(iso).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      return new Date(iso).toLocaleString(locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: use12h })
     } catch { return iso }
   }
 
@@ -180,8 +186,8 @@ function StatusCard({ result }: { result: BackupStatusResult }) {
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: statusColor }}>{statusText}</div>
-          {result.lastRun && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Zuletzt: {fmtDate(result.lastRun)}</div>}
-          {result.size && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Größe: {result.size}</div>}
+          {result.lastRun && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('backup.status.last_run')}: {fmtDate(result.lastRun)}</div>}
+          {result.size && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('backup.status.size')}: {result.size}</div>}
         </div>
         {expanded ? <ChevronDown size={14} style={{ flexShrink: 0, color: 'var(--text-muted)' }} /> : <ChevronRight size={14} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />}
       </div>
@@ -290,11 +296,11 @@ function GuideTab() {
           <li>Container starten (Befehl oben)</li>
           <li><code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>http://server-ip:8200</code> öffnen</li>
           <li>"Neue Sicherung" → Name vergeben</li>
-          <li>Verschlüsselung: Passwort setzen (<strong>IMMER!</strong>)</li>
+          <li>Verschlüsselung: t('backup.modal.password') setzen (<strong>IMMER!</strong>)</li>
           <li>Ziel: "Lokaler Ordner oder Laufwerk" → <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>/backup</code></li>
           <li>Quelle: <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>/source/appdata</code> (oder einzelne Ordner)</li>
           <li>Zeitplan: täglich 02:00 Uhr</li>
-          <li>Speichern + ersten Backup starten</li>
+          <li>t('common.save') + ersten Backup starten</li>
           <li>HELDASH: URL <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>http://server-ip:8200</code> + API-Key eintragen</li>
         </ol>
         <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -322,7 +328,7 @@ function GuideTab() {
           <li>
             <strong>USB Backup einspielen</strong> (falls CA USB Backup vorhanden)<br />
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>config/</code> Ordner vom Backup auf neuen USB kopieren — Netzwerk, Shares, Benutzer wiederhergestellt
+              <code style={{ background: 'var(--glass-bg)', padding: '1px 4px', borderRadius: 4 }}>config/</code> Ordner vom Backup auf neuen USB kopieren — Netzwerk, Shares, t('backup.modal.username') wiederhergestellt
             </span>
           </li>
           <li>
@@ -367,6 +373,7 @@ function GuideTab() {
 
 export function BackupPage() {
   const { isAdmin } = useStore()
+  const { t } = useTranslation()
   const [tab, setTab] = useState<'overview' | 'guide'>('overview')
   const [sources, setSources] = useState<BackupSource[]>([])
   const [statusResults, setStatusResults] = useState<BackupStatusResult[]>([])
@@ -412,9 +419,9 @@ export function BackupPage() {
     try {
       await api.backup.sources.delete(source.id)
       await loadSources()
-      toast({ message: `${source.name} entfernt`, type: 'info' })
+      toast({ message: t('backup.toast.removed', { name: source.name }), type: 'info' })
     } catch (e) {
-      toast({ message: e instanceof Error ? e.message : 'Fehler', type: 'error' })
+      toast({ message: e instanceof Error ? e.message : t('backup.status.error'), type: 'error' })
     }
   }
 
@@ -428,9 +435,9 @@ export function BackupPage() {
       a.download = `heldash-docker-export-${new Date().toISOString().split('T')[0]}.json`
       a.click()
       URL.revokeObjectURL(url)
-      toast({ message: 'Docker-Export heruntergeladen', type: 'success' })
+      toast({ message: t('backup.toast.docker_downloaded'), type: 'success' })
     } catch (e) {
-      toast({ message: e instanceof Error ? e.message : 'Export fehlgeschlagen', type: 'error' })
+      toast({ message: e instanceof Error ? e.message : t('backup.toast.export_failed'), type: 'error' })
     } finally {
       setExportLoading(false)
     }
@@ -445,10 +452,10 @@ export function BackupPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ margin: 0, fontFamily: 'var(--font-display)' }}>Backup Center</h2>
+        <h2 style={{ margin: 0, fontFamily: 'var(--font-display)' }}>t('backup.title')</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-ghost" onClick={handleDockerExport} disabled={exportLoading} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Download size={14} /> Docker exportieren
+            <Download size={14} /> t('backup.export_docker')
           </button>
           {isAdmin && (
             <button
@@ -456,7 +463,7 @@ export function BackupPage() {
               onClick={() => { setEditSource(null); setShowAddModal(true) }}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
-              <Plus size={14} /> Quelle hinzufügen
+              <Plus size={14} /> t('backup.add_source')
             </button>
           )}
         </div>
@@ -464,19 +471,19 @@ export function BackupPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--glass-border)', paddingBottom: 0 }}>
-        {[{ key: 'overview', label: 'Übersicht' }, { key: 'guide', label: 'Leitfaden' }].map(t => (
+        {[{ key: 'overview', label: t('backup.tabs.overview') }, { key: 'guide', label: t('backup.tabs.guide') }].map(tabItem => (
           <button
-            key={t.key}
-            onClick={() => setTab(t.key as 'overview' | 'guide')}
+            key={tabItem.key}
+            onClick={() => setTab(tabItem.key as 'overview' | 'guide')}
             style={{
               padding: '8px 16px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer',
-              borderBottom: tab === t.key ? '2px solid var(--accent)' : '2px solid transparent',
-              color: tab === t.key ? 'var(--accent)' : 'var(--text-secondary)',
-              fontWeight: tab === t.key ? 600 : 400,
+              borderBottom: tab === tabItem.key ? '2px solid var(--accent)' : '2px solid transparent',
+              color: tab === tabItem.key ? 'var(--accent)' : 'var(--text-secondary)',
+              fontWeight: tab === tabItem.key ? 600 : 400,
               marginBottom: -1,
             }}
           >
-            {t.label}
+            {tabItem.label}
           </button>
         ))}
       </div>
@@ -488,8 +495,8 @@ export function BackupPage() {
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {[
                 { label: `${okCount} OK`, color: 'var(--status-online)' },
-                { label: `${warnCount} Veraltet`, color: '#f59e0b' },
-                { label: `${errCount} Fehler`, color: 'var(--status-offline)' },
+                { label: `${warnCount} t('backup.status.stale')`, color: '#f59e0b' },
+                { label: `${errCount} t('backup.status.error')`, color: 'var(--status-offline)' },
               ].map(s => (
                 <div key={s.label} className="glass" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 'var(--radius-md)', color: s.color, fontSize: 13, fontWeight: 500 }}>
                   {s.label}
@@ -502,7 +509,7 @@ export function BackupPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}
               >
                 <RefreshCw size={13} style={{ animation: statusLoading ? 'spin 1s linear infinite' : 'none' }} />
-                Aktualisieren
+                t('backup.refresh')
               </button>
             </div>
           )}
@@ -511,10 +518,10 @@ export function BackupPage() {
           {sources.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>💾</div>
-              <h3 style={{ fontFamily: 'var(--font-display)', marginBottom: 8 }}>Keine Backup-Quellen</h3>
-              <p style={{ marginBottom: 20 }}>Füge Backup-Quellen hinzu um ihren Status zu überwachen</p>
+              <h3 style={{ fontFamily: 'var(--font-display)', marginBottom: 8 }}>t('backup.no_sources_title')</h3>
+              <p style={{ marginBottom: 20 }}>t('backup.no_sources_hint')</p>
               {isAdmin && (
-                <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>Erste Quelle hinzufügen</button>
+                <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>Erste t('backup.add_source')</button>
               )}
             </div>
           ) : (
@@ -532,7 +539,7 @@ export function BackupPage() {
                             const src = sources.find(s => s.id === result.id)
                             if (src) { setEditSource(src); setShowAddModal(true) }
                           }}
-                          title="Bearbeiten"
+                          title={t('common.edit')}
                         >
                           <Edit2 size={13} />
                         </button>
@@ -542,7 +549,7 @@ export function BackupPage() {
                             const src = sources.find(s => s.id === result.id)
                             if (src) handleDelete(src)
                           }}
-                          title="Löschen"
+                          title={t('common.delete')}
                           style={{ color: 'var(--status-offline)' }}
                         >
                           <Trash2 size={13} />
@@ -557,13 +564,13 @@ export function BackupPage() {
                   <div key={source.id} className="glass" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 'var(--radius-md)' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{source.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{BACKUP_TYPES.find(t => t.value === source.type)?.label ?? source.type}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{BACKUP_TYPE_KEYS.find(bt => bt.value === source.type)?.label ?? source.type}</div>
                     </div>
-                    {!source.enabled && <span style={{ fontSize: 11, color: 'var(--text-muted)', padding: '2px 8px', border: '1px solid var(--glass-border)', borderRadius: 'var(--radius-sm)' }}>Deaktiviert</span>}
+                    {!source.enabled && <span style={{ fontSize: 11, color: 'var(--text-muted)', padding: '2px 8px', border: '1px solid var(--glass-border)', borderRadius: 'var(--radius-sm)' }}>{t('backup.disabled')}</span>}
                     {isAdmin && (
                       <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn-icon" onClick={() => { setEditSource(source); setShowAddModal(true) }} title="Bearbeiten"><Edit2 size={13} /></button>
-                        <button className="btn-icon" onClick={() => handleDelete(source)} title="Löschen" style={{ color: 'var(--status-offline)' }}><Trash2 size={13} /></button>
+                        <button className="btn-icon" onClick={() => { setEditSource(source); setShowAddModal(true) }} title={t('common.edit')}><Edit2 size={13} /></button>
+                        <button className="btn-icon" onClick={() => handleDelete(source)} title={t('common.delete')} style={{ color: 'var(--status-offline)' }}><Trash2 size={13} /></button>
                       </div>
                     )}
                   </div>

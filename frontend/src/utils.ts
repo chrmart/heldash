@@ -22,3 +22,30 @@ export function containerCounts(containers: { state: string }[]) {
   }
   return { running, stopped, restarting }
 }
+
+/** Convert Celsius to Fahrenheit, rounded to one decimal. */
+export function celsiusToFahrenheit(c: number): number {
+  return Math.round((c * 9 / 5 + 32) * 10) / 10
+}
+
+/**
+ * Format a temperature value for display, converting units if needed.
+ * @param raw       - numeric value or string (e.g. entity.state)
+ * @param rawUnit   - unit from the data source ("°C", "°F", or undefined)
+ * @param prefUnit  - user preference from settings.temp_unit
+ */
+export function formatTemperature(
+  raw: number | string,
+  rawUnit: string | null | undefined,
+  prefUnit: 'celsius' | 'fahrenheit' = 'celsius',
+): { value: string; unit: string } {
+  const num = typeof raw === 'number' ? raw : parseFloat(raw)
+  if (isNaN(num)) return { value: String(raw), unit: rawUnit ?? '' }
+  const sourceIsCelsius = !rawUnit || rawUnit === '°C' || rawUnit.toLowerCase() === 'c'
+  if (prefUnit === 'fahrenheit' && sourceIsCelsius) {
+    const converted = celsiusToFahrenheit(num)
+    return { value: Number.isInteger(converted) ? String(converted) : converted.toFixed(1), unit: '°F' }
+  }
+  const display = Number.isInteger(num) ? String(num) : num.toFixed(1).replace(/\.0$/, '')
+  return { value: display, unit: rawUnit ?? '°C' }
+}

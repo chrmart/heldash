@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Sun, Moon, RefreshCw, Plus, LogIn, LogOut, Pencil, LayoutGrid, LayoutList, Minus, Users } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { useWidgetStore } from '../store/useWidgetStore'
@@ -28,6 +29,9 @@ const ACCENTS: { value: ThemeAccent; label: string; color: string }[] = [
 
 export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheckAll, checking, onLogin, onAddHaInstance, onAddHaPanel }: Props) {
   const { settings, setThemeMode, setThemeAccent, isAuthenticated, isAdmin, authUser, logout, loadAll } = useStore()
+  const { t } = useTranslation()
+  const locale = settings?.language ?? 'de'
+  const use12h = settings?.time_format === '12h'
   const { loadDashboard, editMode, setEditMode, addPlaceholder, guestMode, setGuestMode } = useDashboardStore()
   const { widgets, stats, loadWidgets, loadStats, startPolling, stopPolling } = useWidgetStore()
   const { containers, loadContainers } = useDockerStore()
@@ -59,7 +63,7 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
   // Re-load widgets whenever auth state changes so backend permission filtering is applied
   useEffect(() => {
     loadWidgets().catch(() => {})
-  }, [isAuthenticated, authUser?.id])
+  }, [isAuthenticated, authUser?.sub])
 
   // Poll stats for topbar widgets
   useEffect(() => {
@@ -80,9 +84,9 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
   return (
     <header className="topbar">
       <div className="topbar-title">
-        <span>{serverNow.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+        <span>{serverNow.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
         <span style={{ marginLeft: 10, fontVariantNumeric: 'tabular-nums' }}>
-          {serverNow.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          {serverNow.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: use12h })}
         </span>
       </div>
 
@@ -287,7 +291,7 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
 
         <button
           className="btn btn-ghost btn-icon"
-          data-tooltip={mode === 'dark' ? 'Light mode' : 'Dark mode'}
+          data-tooltip={mode === 'dark' ? t('topbar.light_mode') : t('topbar.dark_mode')}
           onClick={() => setThemeMode(mode === 'dark' ? 'light' : 'dark')}
         >
           {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
@@ -295,7 +299,7 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
 
         <button
           className="btn btn-ghost btn-icon topbar-mobile-hide"
-          data-tooltip="Check all apps"
+          data-tooltip={t('topbar.check_apps')}
           onClick={onCheckAll}
           disabled={checking}
         >
@@ -308,35 +312,33 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
         {/* Dashboard controls */}
         {page === 'dashboard' && (
           <>
-            {/* Guest Mode toggle — admin only, always visible even when in guest mode */}
             {isAdmin && (
               <button
                 className={`${guestMode ? 'btn btn-primary' : 'btn btn-ghost'} topbar-mobile-hide`}
-                data-tooltip={guestMode ? 'Exit guest mode' : 'Edit guest dashboard'}
+                data-tooltip={guestMode ? t('topbar.exit_guest_mode') : t('topbar.guest_mode')}
                 onClick={() => setGuestMode(!guestMode)}
                 style={{ gap: 6 }}
               >
                 <Users size={15} />
-                Guest Mode
+                {t('topbar.guest_mode')}
               </button>
             )}
 
-            {/* Edit Dashboard — all authenticated non-guest users */}
             {canEditDashboard && (
               <>
                 {editMode && (
                   <>
                     <button className="btn btn-ghost topbar-mobile-hide" onClick={() => addPlaceholder('app')} style={{ gap: 6 }}>
                       <LayoutGrid size={15} />
-                      App
+                      {t('topbar.add_app')}
                     </button>
                     <button className="btn btn-ghost topbar-mobile-hide" onClick={() => addPlaceholder('widget')} style={{ gap: 6 }}>
                       <LayoutList size={15} />
-                      Widget
+                      {t('topbar.add_widget')}
                     </button>
                     <button className="btn btn-ghost topbar-mobile-hide" onClick={() => addPlaceholder('row')} style={{ gap: 6 }}>
                       <Minus size={15} />
-                      Row
+                      {t('topbar.add_row')}
                     </button>
                   </>
                 )}
@@ -346,7 +348,7 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
                   style={{ gap: 6 }}
                 >
                   <Pencil size={15} />
-                  {editMode ? 'Done' : 'Edit Dashboard'}
+                  {editMode ? t('topbar.done_editing') : t('topbar.edit_dashboard')}
                 </button>
               </>
             )}
@@ -356,19 +358,19 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
         {isAdmin && page === 'media' && (
           <button className="btn btn-primary topbar-mobile-hide" onClick={onAddInstance} style={{ gap: 6 }}>
             <Plus size={16} />
-            Add Instance
+            {t('topbar.add_instance')}
           </button>
         )}
         {isAdmin && page === 'widgets' && (
           <button className="btn btn-primary topbar-mobile-hide" onClick={onAddWidget} style={{ gap: 6 }}>
             <Plus size={16} />
-            Add Widget
+            {t('topbar.add_widget_btn')}
           </button>
         )}
         {isAdmin && page === 'services' && (
           <button className="btn btn-primary topbar-mobile-hide" onClick={onAddService} style={{ gap: 6 }}>
             <Plus size={16} />
-            Add App
+            {t('topbar.add_app_btn')}
           </button>
         )}
         {isAdmin && page === 'home_assistant' && (
@@ -376,13 +378,13 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
             {onAddHaInstance && (
               <button className="btn btn-ghost topbar-mobile-hide" onClick={onAddHaInstance} style={{ gap: 6 }}>
                 <Plus size={16} />
-                HA Instance
+                {t('topbar.add_ha_instance')}
               </button>
             )}
             {onAddHaPanel && (
               <button className="btn btn-primary topbar-mobile-hide" onClick={onAddHaPanel} style={{ gap: 6 }}>
                 <Plus size={16} />
-                Panel
+                {t('topbar.add_panel')}
               </button>
             )}
           </>
@@ -395,7 +397,7 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
             </span>
             <button
               className="btn btn-ghost btn-icon"
-              data-tooltip="Logout"
+              data-tooltip={t('topbar.logout')}
               onClick={async () => {
                 if (guestMode) await setGuestMode(false)
                 await logout()
@@ -408,7 +410,7 @@ export function Topbar({ page, onAddService, onAddInstance, onAddWidget, onCheck
         ) : (
           <button className="btn btn-ghost" onClick={onLogin} style={{ gap: 6 }}>
             <LogIn size={16} />
-            Login
+            {t('topbar.login')}
           </button>
         )}
       </div>

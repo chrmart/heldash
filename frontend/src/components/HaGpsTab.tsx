@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronRight, MapPin } from 'lucide-react'
 import { api } from '../api'
@@ -38,6 +39,7 @@ interface GpsFullMapProps {
 
 function GpsFullMap({ persons }: GpsFullMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
+  const { t } = useTranslation()
   const mapInstanceRef = useRef<unknown>(null)
   const markersRef = useRef<unknown[]>([])
 
@@ -108,7 +110,7 @@ function GpsFullMap({ persons }: GpsFullMapProps) {
           })
 
           const batteryLine = p.battery_level !== null
-            ? `<div style="font-size:12px;color:#888;margin-top:2px">🔋 Akku: ${p.battery_level}%</div>`
+            ? `<div style="font-size:12px;color:#888;margin-top:2px">🔋 ${t('gps.battery')}: ${p.battery_level}%</div>`
             : ''
           const sourceLine = p.source
             ? `<div style="font-size:12px;color:#888;margin-top:2px">📡 ${p.source}</div>`
@@ -167,7 +169,7 @@ function GpsFullMap({ persons }: GpsFullMapProps) {
         border: '1px solid var(--glass-border)',
       }}>
         <MapPin size={18} style={{ opacity: 0.4 }} />
-        Keine GPS-Daten für die ausgewählten Personen verfügbar
+        {t('gps.no_data')}
       </div>
     )
   }
@@ -179,7 +181,7 @@ function GpsFullMap({ persons }: GpsFullMapProps) {
         style={{ height: 'calc(100vh - 340px)', minHeight: 360, width: '100%', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}
       />
       <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6, textAlign: 'center' }}>
-        GPS-Daten werden nur lokal angezeigt — keine Übertragung an Dritte
+        {t('gps.privacy_note')}
       </p>
     </div>
   )
@@ -192,6 +194,7 @@ interface HaGpsTabProps {
 }
 
 export function HaGpsTab({ instanceId }: HaGpsTabProps) {
+  const { t } = useTranslation()
   const [persons, setPersons] = useState<HaPersonEnriched[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -223,7 +226,7 @@ export function HaGpsTab({ instanceId }: HaGpsTabProps) {
   if (!instanceId) {
     return (
       <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
-        <p style={{ fontSize: 14 }}>Keine HA-Instanz ausgewählt.</p>
+        <p style={{ fontSize: 14 }}>{t('gps.no_instance')}</p>
       </div>
     )
   }
@@ -240,7 +243,7 @@ export function HaGpsTab({ instanceId }: HaGpsTabProps) {
     return (
       <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
         <MapPin size={32} style={{ opacity: 0.2, marginBottom: 12 }} />
-        <p style={{ fontSize: 14 }}>Keine person.*-Entitäten in Home Assistant gefunden.</p>
+        <p style={{ fontSize: 14 }}>{t('gps.no_persons')}</p>
       </div>
     )
   }
@@ -259,7 +262,7 @@ export function HaGpsTab({ instanceId }: HaGpsTabProps) {
         >
           {selectorOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           <span style={{ fontSize: 13, fontWeight: 600 }}>
-            Personen ({selectedIds.size}/{persons.length} ausgewählt)
+            {t('gps.persons_selected', { selected: selectedIds.size, total: persons.length })}
           </span>
         </button>
 

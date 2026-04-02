@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors,
@@ -1022,6 +1023,7 @@ interface HaPageProps {
 }
 
 export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAddPanelClose }: HaPageProps = {}) {
+  const { t } = useTranslation()
   const {
     instances, panels, stateMap, areas,
     loadInstances, loadPanels, loadStates, updateEntityState, loadAreas,
@@ -1270,7 +1272,7 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
           )}
           {activeTab === 'panels' && enabledInstances.length > 0 && viewMode === 'grouped' && areasLoaded && activeAreas.length === 0 && (
             <span className="badge badge-neutral" style={{ fontSize: 11 }}>
-              Räume in Home Assistant nicht konfiguriert
+              {t('ha_page.rooms_not_configured')}
             </span>
           )}
           {enabledInstances.length > 0 && (
@@ -1320,10 +1322,10 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
               }}
             >
               {tab === 'panels' ? 'Panels'
-                : tab === 'hausübersicht' ? '🗺 Hausübersicht'
-                : tab === 'gps' ? '📍 GPS'
-                : tab === 'szenarien' ? '🎭 Szenarien'
-                : '⚡ Automationen'}
+                : tab === 'hausübersicht' ? t('ha_page.tab_floorplan')
+                : tab === 'gps' ? t('ha_page.tab_gps')
+                : tab === 'szenarien' ? t('ha_page.tab_scenes')
+                : t('ha_page.tab_automations')}
             </button>
           ))}
         </div>
@@ -1351,7 +1353,7 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
             <input
               className="form-input"
               style={{ paddingLeft: 34, fontSize: 13 }}
-              placeholder="Szenarien suchen…"
+              placeholder={t('ha_page.search_scenes')}
               value={scenesSearch}
               onChange={e => setScenesSearch(e.target.value)}
             />
@@ -1400,14 +1402,14 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
                         }}
                       >
                         {isRunning ? <Loader size={12} className="spin" /> : <Play size={12} />}
-                        {isRunning ? 'Ausgeführt!' : 'Ausführen'}
+                        {isRunning ? t('ha_page.running') : t('ha_page.run')}
                       </button>
                     </div>
                   )
                 })}
               {scenes.length === 0 && !scenesLoading && (
                 <p style={{ color: 'var(--text-muted)', fontSize: 13, gridColumn: '1/-1' }}>
-                  Keine Szenarien oder Scripts gefunden.
+                  {t('ha_page.no_scenes')}
                 </p>
               )}
             </div>
@@ -1423,7 +1425,7 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
             <input
               className="form-input"
               style={{ paddingLeft: 34, fontSize: 13 }}
-              placeholder="Automationen suchen…"
+              placeholder={t('ha_page.search_automations')}
               value={automationsSearch}
               onChange={e => setAutomationsSearch(e.target.value)}
             />
@@ -1468,7 +1470,7 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
                         className="btn btn-ghost"
                         style={{ gap: 6, fontSize: 12, padding: '4px 10px', flexShrink: 0 }}
                         disabled={isTriggering || isToggling}
-                        title="Auslösen"
+                        title={t('ha_page.trigger')}
                         onClick={async () => {
                           setAutomationBusy(prev => ({ ...prev, [automation.entity_id]: 'trigger' }))
                           try {
@@ -1479,7 +1481,7 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
                         }}
                       >
                         {isTriggering ? <Loader size={12} className="spin" /> : <Play size={12} />}
-                        Auslösen
+                        {t('ha_page.trigger')}
                       </button>
                       <button
                         className="btn btn-ghost"
@@ -1510,7 +1512,7 @@ export function HaPage({ showAddInstance, onAddInstanceClose, showAddPanel, onAd
                 })}
               {automations.length === 0 && !automationsLoading && (
                 <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                  Keine Automationen gefunden.
+                  {t('ha_page.no_automations')}
                 </p>
               )}
             </div>

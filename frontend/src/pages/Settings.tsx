@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
 import { useWidgetStore } from '../store/useWidgetStore'
@@ -334,6 +335,7 @@ export function SettingsPage({ onStartOnboarding }: { onStartOnboarding?: () => 
   const { widgets, loadWidgets } = useWidgetStore()
   const { toast } = useToast()
   const { confirm: confirmDlg } = useConfirm()
+  const { t } = useTranslation()
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
 
@@ -644,15 +646,81 @@ export function SettingsPage({ onStartOnboarding }: { onStartOnboarding?: () => 
             )}
           </section>
 
+          {/* Localization */}
+          <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
+            <h3 style={{ marginBottom: 4, fontSize: 15, fontWeight: 600 }}>{t('settings.localization.title')}</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
+              {t('settings.localization.hint')}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Language */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">{t('settings.localization.language')}</label>
+                <select
+                  className="form-input"
+                  value={settings?.language ?? 'de'}
+                  onChange={async e => {
+                    try { await updateSettings({ language: e.target.value }); toast({ message: t('common.success'), type: 'success', duration: 1500 }) }
+                    catch { /* ignore */ }
+                  }}
+                  style={{ fontSize: 13 }}
+                >
+                  <option value="de">🇩🇪 Deutsch</option>
+                  <option value="en">🇺🇸 English</option>
+                </select>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                  {t('settings.localization.language_hint')}
+                </p>
+              </div>
+
+              {/* Time format */}
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{t('settings.localization.time_format')}</div>
+                <ToggleGroup
+                  options={[
+                    { value: '24h' as const, label: '24h', sub: t('settings.localization.time_format_24h_sub') },
+                    { value: '12h' as const, label: '12h', sub: t('settings.localization.time_format_12h_sub') },
+                  ]}
+                  value={settings?.time_format ?? '24h'}
+                  onChange={async v => {
+                    try { await updateSettings({ time_format: v }); toast({ message: t('common.success'), type: 'success', duration: 1500 }) }
+                    catch { /* ignore */ }
+                  }}
+                />
+              </div>
+
+              {/* Temperature unit */}
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{t('settings.localization.temp_unit')}</div>
+                <ToggleGroup
+                  options={[
+                    { value: 'celsius' as const, label: 'Celsius', sub: '°C' },
+                    { value: 'fahrenheit' as const, label: 'Fahrenheit', sub: '°F' },
+                  ]}
+                  value={settings?.temp_unit ?? 'celsius'}
+                  onChange={async v => {
+                    try { await updateSettings({ temp_unit: v }); toast({ message: t('common.success'), type: 'success', duration: 1500 }) }
+                    catch { /* ignore */ }
+                  }}
+                />
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                  {t('settings.localization.temp_unit_hint')}
+                </p>
+              </div>
+
+            </div>
+          </section>
+
           {/* Onboarding */}
           {isAdmin && onStartOnboarding && (
             <section className="glass" style={{ borderRadius: 'var(--radius-xl)', padding: 24 }}>
-              <h3 style={{ marginBottom: 8, fontSize: 15, fontWeight: 600 }}>Setup Wizard</h3>
+              <h3 style={{ marginBottom: 8, fontSize: 15, fontWeight: 600 }}>{t('settings.general.setup_wizard')}</h3>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-                Re-launch the setup wizard to review initial configuration steps.
+                {t('settings.general.setup_wizard_hint')}
               </p>
               <button className="btn btn-ghost" onClick={onStartOnboarding} style={{ gap: 6, fontSize: 13 }}>
-                Einrichtungsassistent starten
+                {t('settings.general.launch_wizard')}
               </button>
             </section>
           )}
@@ -843,7 +911,7 @@ export function SettingsPage({ onStartOnboarding }: { onStartOnboarding?: () => 
                       <span style={{ color: isAdminGroup(u.user_group_id) ? 'var(--accent)' : 'inherit' }}>
                         {groupName(u.user_group_id)}
                       </span>
-                      {u.last_login && <span>Last login: {new Date(u.last_login).toLocaleDateString('de-DE')}</span>}
+                      {u.last_login && <span>Last login: {new Date(u.last_login).toLocaleDateString(settings?.language ?? 'de')}</span>}
                     </div>
                   </div>
                   <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setEditingUserId(editingUserId === u.id ? null : u.id)} data-tooltip="Edit" style={{ padding: '4px', width: 28, height: 28, flexShrink: 0 }}>

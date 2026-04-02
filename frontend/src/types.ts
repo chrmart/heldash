@@ -47,6 +47,10 @@ export interface Settings {
   tmdb_api_key?: string
   recyclarr_container_name?: string
   recyclarr_config_path?: string
+  // Localization
+  language?: string              // i18next language code: 'de' | 'en' | …
+  time_format?: '12h' | '24h'   // clock display in topbar
+  temp_unit?: 'celsius' | 'fahrenheit'
 }
 
 export interface AuthUser {

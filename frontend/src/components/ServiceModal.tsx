@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Service } from '../types'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
@@ -22,6 +23,7 @@ const defaultForm = {
 }
 
 export function ServiceModal({ service, onClose }: Props) {
+  const { t } = useTranslation()
   const { createService, updateService, uploadServiceIcon, groups } = useStore()
   const { isOnDashboard, getDashboardItemId, addService, removeItem, removeByRef } = useDashboardStore()
   const [form, setForm] = useState(defaultForm)
@@ -63,7 +65,7 @@ export function ServiceModal({ service, onClose }: Props) {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 512 * 1024) {
-      setError('Das Bild darf maximal 512 KB groß sein.')
+      setError(t('service_modal.image_too_large'))
       return
     }
     setError('')
@@ -172,7 +174,7 @@ export function ServiceModal({ service, onClose }: Props) {
 
         {/* Icon image upload */}
         <div className="form-group">
-          <label className="form-label">Icon Bild (PNG, JPG, SVG · max. 512 KB)</label>
+          <label className="form-label">{t('service_modal.icon_image_label')}</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {hasIcon && (
               <img
@@ -190,7 +192,7 @@ export function ServiceModal({ service, onClose }: Props) {
             )}
             <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Upload size={13} />
-              {hasIcon ? 'Ersetzen' : 'Bild hochladen'}
+              {hasIcon ? t('service_modal.replace') : t('service_modal.upload')}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -206,7 +208,7 @@ export function ServiceModal({ service, onClose }: Props) {
             )}
           </div>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-            Bild hat Vorrang vor dem Emoji-Icon.
+            {t('service_modal.image_priority')}
           </span>
         </div>
 

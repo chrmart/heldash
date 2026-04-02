@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useToast } from './Toast'
 import {
   Plus, Edit2, Check, Download, Upload, Grid, Image as ImageIcon,
@@ -22,6 +23,7 @@ interface AddFloorplanModalProps {
 }
 
 function AddFloorplanModal({ onClose, onSaved }: AddFloorplanModalProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState('')
   const [type, setType] = useState<'indoor' | 'outdoor'>('indoor')
   const [icon, setIcon] = useState('🏠')
@@ -39,7 +41,7 @@ function AddFloorplanModal({ onClose, onSaved }: AddFloorplanModalProps) {
       await api.ha.floorplans.create({ name: name.trim(), type, level, icon, orientation: 'landscape' })
       await onSaved()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler beim Speichern')
+      setError(e instanceof Error ? e.message : t('floorplan.save_error'))
     } finally {
       setSaving(false)
     }
@@ -57,7 +59,7 @@ function AddFloorplanModal({ onClose, onSaved }: AddFloorplanModalProps) {
         border: '1px solid var(--glass-border)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontFamily: 'var(--font-display)' }}>Neue Etage</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontFamily: 'var(--font-display)' }}>{t('floorplan.new_floor')}</h3>
           <button className="btn btn-ghost" onClick={onClose} style={{ padding: 6 }}><X size={16} /></button>
         </div>
 
@@ -141,9 +143,9 @@ function AddFloorplanModal({ onClose, onSaved }: AddFloorplanModalProps) {
         )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ gap: 6 }}>
-            {saving ? 'Speichern…' : 'Anlegen'}
+            {saving ? t('floorplan.saving') : t('floorplan.create')}
           </button>
         </div>
       </div>
@@ -177,6 +179,7 @@ function domainToTab(domain: string): DomainTab {
 
 function EntityBrowserPanel({ entityStates, activeEntities, placingEntity, onSelect }: EntityBrowserPanelProps) {
   const [search, setSearch] = useState('')
+  const { t } = useTranslation()
   const [tab, setTab] = useState<DomainTab>('Alle')
   const placedEntityIds = new Set(activeEntities.map(e => e.entity_id))
 
@@ -237,7 +240,7 @@ function EntityBrowserPanel({ entityStates, activeEntities, placingEntity, onSel
       {/* Entity list */}
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
         {entities.length === 0 && (
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>Keine Entities</p>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>{t('floorplan.no_entities')}</p>
         )}
         {entities.map(entity => {
           const isPlaced = placedEntityIds.has(entity.entity_id)
@@ -301,6 +304,7 @@ interface FloorplanSettingsProps {
 
 function FloorplanSettingsPopover({ floorplan, anchorRef, onClose, onUpdated, onDeleted, onRemoveAllEntities, onExportThis }: FloorplanSettingsProps) {
   const popRef = useRef<HTMLDivElement>(null)
+  const { t } = useTranslation()
   const [name, setName] = useState(floorplan.name)
   const [icon, setIcon] = useState(floorplan.icon)
   const [type, setType] = useState<'indoor' | 'outdoor'>(floorplan.type as 'indoor' | 'outdoor')
@@ -376,7 +380,7 @@ function FloorplanSettingsPopover({ floorplan, anchorRef, onClose, onUpdated, on
       </div>
 
       <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ width: '100%', justifyContent: 'center', marginBottom: 12, fontSize: 12 }}>
-        {saving ? 'Speichern…' : 'Speichern'}
+        {saving ? t('floorplan.saving') : t('floorplan.save')}
       </button>
 
       <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -397,7 +401,7 @@ function FloorplanSettingsPopover({ floorplan, anchorRef, onClose, onUpdated, on
               Ja, entfernen
             </button>
             <button className="btn btn-ghost" style={{ flex: 1, fontSize: 10, justifyContent: 'center' }} onClick={() => setConfirmClear(false)}>
-              Abbrechen
+              {t('common.cancel')}
             </button>
           </div>
         )}
@@ -406,7 +410,7 @@ function FloorplanSettingsPopover({ floorplan, anchorRef, onClose, onUpdated, on
           onClick={() => setConfirmDelete(true)}
           style={{ gap: 6, fontSize: 11, justifyContent: 'flex-start', color: 'var(--status-offline)' }}
         >
-          <Trash2 size={11} /> Etage löschen
+          <Trash2 size={11} /> {t('floorplan.delete_floor')}
         </button>
         {confirmDelete && (
           <div style={{ display: 'flex', gap: 6 }}>
@@ -415,7 +419,7 @@ function FloorplanSettingsPopover({ floorplan, anchorRef, onClose, onUpdated, on
               Ja, löschen
             </button>
             <button className="btn btn-ghost" style={{ flex: 1, fontSize: 10, justifyContent: 'center' }} onClick={() => setConfirmDelete(false)}>
-              Abbrechen
+              {t('common.cancel')}
             </button>
           </div>
         )}
@@ -433,6 +437,7 @@ interface HaFloorplanProps {
 }
 
 export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorplanProps) {
+  const { t } = useTranslation()
   const { toast } = useToast()
   const [floorplans, setFloorplans] = useState<HaFloorplan[]>([])
   const [entities, setEntities] = useState<Record<string, HaFloorplanEntity[]>>({})
@@ -656,7 +661,7 @@ export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorp
       const data = JSON.parse(text) as { floorplans: HaFloorplan[]; entities: Record<string, HaFloorplanEntity[]> }
       const result = await api.ha.floorplans.import(data)
       await loadFloorplans()
-      toast({ message: `${result.imported} Etagen importiert, ${result.skipped} übersprungen. Bilder müssen erneut hochgeladen werden.`, type: 'success', duration: 6000 })
+      toast({ message: t('unraid.import_result', { imported: result.imported, skipped: result.skipped }), type: 'success', duration: 6000 })
     } catch { /* ignore */ }
   }
 
@@ -699,7 +704,7 @@ export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorp
   if (instances.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
-        <p style={{ fontSize: 14 }}>Keine Home Assistant Instanz konfiguriert.</p>
+        <p style={{ fontSize: 14 }}>{t('floorplan.no_instance')}</p>
       </div>
     )
   }
@@ -738,7 +743,7 @@ export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorp
             display: 'flex', alignItems: 'center', gap: 4,
           }}
         >
-          <Plus size={12} /> Etage
+          <Plus size={12} /> {t('floorplan.add_floor')}
         </button>
 
         {/* Import button (always visible) */}
@@ -818,7 +823,7 @@ export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorp
                   disabled={undoStack.length === 0}
                   style={{ gap: 6, fontSize: 12 }}
                 >
-                  <Undo size={12} /> Rückgängig
+                  <Undo size={12} /> {t('floorplan.undo')}
                 </button>
                 <div style={{ flex: 1 }} />
                 {/* Image upload */}
@@ -828,7 +833,7 @@ export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorp
                   borderRadius: 'var(--radius-sm)', border: '1px solid var(--glass-border)',
                 }}>
                   <ImageIcon size={12} />
-                  {activeFloorplan.image_url ? 'Bild ändern' : 'Bild hochladen'}
+                  {activeFloorplan.image_url ? t('floorplan.change_image') : t('floorplan.upload_image')}
                   <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
                     const file = e.target.files?.[0]
                     if (file) handleImageUpload(file).catch(() => {})
@@ -915,7 +920,7 @@ export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorp
                 onKeyDown={e => { if (e.key === 'Escape') setShowLightsOffConfirm(false) }}
                 role="button"
                 tabIndex={-1}
-                aria-label="Abbrechen"
+                aria-label={t('common.cancel')}
               />
               <div className="glass" style={{
                 position: 'absolute', bottom: 'calc(100% + 10px)', right: 0,
@@ -924,7 +929,7 @@ export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorp
                 minWidth: 240, display: 'flex', flexDirection: 'column', gap: 10,
               }}>
                 <span style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.4 }}>
-                  Alle Lichter in &ldquo;{activeFloorplan?.name ?? 'dieser Etage'}&rdquo; ausschalten?
+                  Alle Lichter in &ldquo;{activeFloorplan?.name ?? 'dieser Etage'}&rdquo; {t('floorplan.lights_off_confirm')}
                 </span>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button
@@ -932,7 +937,7 @@ export function HaFloorplan({ instances, entityStates, onShowHistory }: HaFloorp
                     style={{ fontSize: 12, padding: '5px 12px' }}
                     onClick={() => setShowLightsOffConfirm(false)}
                   >
-                    Abbrechen
+                    {t('common.cancel')}
                   </button>
                   <button
                     className="btn btn-danger"

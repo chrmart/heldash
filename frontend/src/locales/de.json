@@ -32,7 +32,8 @@
     "name": "Name",
     "type": "Typ",
     "status": "Status",
-    "today": "Heute"
+    "today": "Heute",
+    "yes_remove": "Ja, entfernen"
   },
   "topbar": {
     "light_mode": "Hell",
@@ -372,7 +373,14 @@
     "toast": {
       "enable": "Aktiviert",
       "disable": "Deaktiviert"
-    }
+    },
+    "parity_running": "Parity Check läuft…",
+    "parity_paused": "Parity Check (pausiert)",
+    "close": "Schließen",
+    "remove_instance": "Instanz entfernen? Alle gespeicherten Daten werden gelöscht.",
+    "instance_deleted": "Instanz gelöscht",
+    "server_added": "Server hinzugefügt",
+    "import_result": "{{imported}} Etagen importiert, {{skipped}} übersprungen. Bilder müssen erneut hochgeladen werden."
   },
   "ha": {
     "history": {
@@ -453,5 +461,89 @@
     "back": "Zurück",
     "next": "Weiter",
     "finish": "Dashboard öffnen"
+  },
+  "service_modal": {
+    "icon_image_label": "Icon Bild (PNG, JPG, SVG · max. 512 KB)",
+    "image_too_large": "Das Bild darf maximal 512 KB groß sein.",
+    "upload": "Bild hochladen",
+    "replace": "Ersetzen",
+    "image_priority": "Bild hat Vorrang vor dem Emoji-Icon."
+  },
+  "ha_alerts": {
+    "condition_state_equals": "Status gleich",
+    "condition_state_above": "Wert über",
+    "condition_state_below": "Wert unter",
+    "condition_state_changes": "Status ändert sich",
+    "delete": "Löschen",
+    "add": "Benachrichtigung hinzufügen"
+  },
+  "floorplan": {
+    "new_floor": "Neue Etage",
+    "add_floor": "+ Etage",
+    "delete_floor": "Etage löschen",
+    "confirm_delete": "Ja, löschen",
+    "upload_image": "Bild hochladen",
+    "change_image": "Bild ändern",
+    "undo": "Rückgängig",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "saving": "Speichern…",
+    "create": "Anlegen",
+    "no_entities": "Keine Entities",
+    "no_instance": "Keine Home Assistant Instanz konfiguriert.",
+    "save_error": "Fehler beim Speichern",
+    "lights_off_confirm": "Alle Lichter in dieser Etage ausschalten?"
+  },
+  "gps": {
+    "battery": "Akku",
+    "no_data": "Keine GPS-Daten für die ausgewählten Personen verfügbar",
+    "privacy_note": "GPS-Daten werden nur lokal angezeigt — keine Übertragung an Dritte",
+    "no_instance": "Keine HA-Instanz ausgewählt.",
+    "no_persons": "Keine person.*-Entitäten in Home Assistant gefunden.",
+    "persons_selected": "Personen ({{selected}}/{{total}} ausgewählt)",
+    "no_map": "GPS-Karte nicht verfügbar",
+    "no_gps": "Keine GPS-Daten verfügbar",
+    "show_map": "GPS-Karte anzeigen",
+    "hide_map": "GPS-Karte ausblenden",
+    "btn_off": "GPS aus",
+    "btn_on": "GPS-Karte"
+  },
+  "ha_page": {
+    "tab_panels": "Panels",
+    "tab_floorplan": "🗺 Hausübersicht",
+    "tab_gps": "📍 GPS",
+    "tab_scenes": "🎭 Szenarien",
+    "tab_automations": "⚡ Automationen",
+    "rooms_not_configured": "Räume in Home Assistant nicht konfiguriert",
+    "search_scenes": "Szenarien suchen…",
+    "search_automations": "Automationen suchen…",
+    "run": "Ausführen",
+    "running": "Ausgeführt!",
+    "trigger": "Auslösen",
+    "no_scenes": "Keine Szenarien oder Scripts gefunden.",
+    "no_automations": "Keine Automationen gefunden."
+  },
+  "unraid_confirm": {
+    "confirm": "Bestätigen",
+    "vm_forcestop": "VM sofort beenden — Datenverlust möglich!",
+    "vm_reset": "Hard Reset — Datenverlust möglich!",
+    "vm_stop": "Ungespeicherte Daten in der VM können verloren gehen.",
+    "new_api_key": "Neuer API Key (leer = unverändert)"
+  },
+  "network_form": {
+    "group": "Gruppe",
+    "subnet": "Subnetz (für Scanner-Vorausfüllung)",
+    "check_method": "Prüfmethode",
+    "subnet_required": "Subnetz eingeben",
+    "no_group": "Ohne Gruppe",
+    "empty_hint": "Füge Netzwerkgeräte hinzu oder scanne dein Subnetz",
+    "add_device": "Gerät hinzufügen",
+    "edit_device": "Gerät bearbeiten",
+    "subnet_hint": "Unterstützt /20–/32 (max. 4096 Hosts)",
+    "devices_found_one": "{{count}} Gerät gefunden",
+    "devices_found_other": "{{count}} Geräte gefunden",
+    "already_exists": "✓ Vorhanden",
+    "add": "Hinzufügen",
+    "never_checked": "Nie geprüft"
   }
 }

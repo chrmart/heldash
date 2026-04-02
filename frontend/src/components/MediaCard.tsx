@@ -97,6 +97,8 @@ export function QueueList({ items }: { items: ArrQueueItem[] }) {
 }
 
 export function CalendarList({ items, type }: { items: ArrCalendarItem[]; type: string }) {
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
   if (items.length === 0) return <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>Nothing upcoming this week.</p>
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -112,7 +114,7 @@ export function CalendarList({ items, type }: { items: ArrCalendarItem[]; type: 
           <div key={item.id} className="glass" style={{ padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 12, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
             <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
-              {date ? new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : '—'}
+              {date ? new Date(date).toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }) : '—'}
             </span>
           </div>
         )

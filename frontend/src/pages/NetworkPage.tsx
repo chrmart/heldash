@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Plus, Wifi, WifiOff, Zap, Edit2, Trash2, Search, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { api } from '../api'
 import { useStore } from '../store/useStore'
@@ -15,6 +16,7 @@ interface DeviceModalProps {
 }
 
 function DeviceModal({ device, existingGroups, onClose, onSave }: DeviceModalProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState(device?.name ?? '')
   const [ip, setIp] = useState(device?.ip ?? '')
   const [icon, setIcon] = useState(device?.icon ?? '🖥️')
@@ -63,7 +65,7 @@ function DeviceModal({ device, existingGroups, onClose, onSave }: DeviceModalPro
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="glass modal" style={{ width: '100%', maxWidth: 520, padding: 24, borderRadius: 'var(--radius-xl)' }}>
-        <h3 style={{ margin: '0 0 20px', fontFamily: 'var(--font-display)' }}>{device?.id ? 'Gerät bearbeiten' : 'Gerät hinzufügen'}</h3>
+        <h3 style={{ margin: '0 0 20px', fontFamily: 'var(--font-display)' }}>{device?.id ? t('network_form.edit_device') : t('network_form.add_device')}</h3>
 
         {error && <div className="error-banner" style={{ marginBottom: 16 }}>{error}</div>}
 
@@ -100,7 +102,7 @@ function DeviceModal({ device, existingGroups, onClose, onSave }: DeviceModalPro
           </div>
 
           <div style={{ position: 'relative' }}>
-            <label className="field-label">Gruppe</label>
+            <label className="field-label">{t('network_form.group')}</label>
             <input
               className="input"
               value={groupName}
@@ -125,12 +127,12 @@ function DeviceModal({ device, existingGroups, onClose, onSave }: DeviceModalPro
           </div>
 
           <div>
-            <label className="field-label">Subnetz (für Scanner-Vorausfüllung)</label>
+            <label className="field-label">{t('network_form.subnet')}</label>
             <input className="input" value={subnet} onChange={e => setSubnet(e.target.value)} placeholder="z.B. 192.168.1.0/24" />
           </div>
 
           <div>
-            <label className="field-label">Prüfmethode</label>
+            <label className="field-label">{t('network_form.check_method')}</label>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={() => setUseCustomPort(false)}
@@ -197,6 +199,7 @@ interface ScannerModalProps {
 }
 
 function ScannerModal({ defaultSubnet, existingIps, onClose, onAddDevice }: ScannerModalProps) {
+  const { t } = useTranslation()
   const [subnet, setSubnet] = useState(defaultSubnet)
   const [scanning, setScanning] = useState(false)
   const [results, setResults] = useState<ScanResult[]>([])
@@ -208,7 +211,7 @@ function ScannerModal({ defaultSubnet, existingIps, onClose, onAddDevice }: Scan
     /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/.test(s)
 
   const handleScan = async () => {
-    if (!subnet.trim()) { setError('Subnetz eingeben'); return }
+    if (!subnet.trim()) { setError(t('network_form.subnet_required')); return }
     if (!isValidSubnet(subnet.trim())) { setError('Format: 192.168.1.0/24 oder 10.10.0.0/20 (max. /20)'); return }
     setScanning(true)
     setError(null)
@@ -238,14 +241,14 @@ function ScannerModal({ defaultSubnet, existingIps, onClose, onAddDevice }: Scan
             {scanning ? 'Scanne...' : 'Scannen'}
           </button>
         </div>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, marginTop: 0 }}>Unterstützt /20–/32 (max. 4096 Hosts)</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, marginTop: 0 }}>{t('network_form.subnet_hint')}</p>
 
         {!scanned && !error && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 0 }}>Scan dauert ca. 20–30 Sekunden</p>}
         {error && <div className="error-banner" style={{ marginBottom: 12 }}>{error}</div>}
 
         {scanned && !scanning && (
           <>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>{results.length} Gerät{results.length !== 1 ? 'e' : ''} gefunden</p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>{t(results.length === 1 ? 'network_form.devices_found_one' : 'network_form.devices_found_other', { count: results.length })}</p>
             {results.length > 0 && (
               <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {results.map(r => {
@@ -257,9 +260,9 @@ function ScannerModal({ defaultSubnet, existingIps, onClose, onAddDevice }: Scan
                         <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 10 }}>Ports: {r.open_ports.join(', ')} · {r.latency}ms</span>
                       </div>
                       {exists ? (
-                        <span style={{ fontSize: 12, color: 'var(--status-online)', display: 'flex', alignItems: 'center', gap: 4 }}>✓ Vorhanden</span>
+                        <span style={{ fontSize: 12, color: 'var(--status-online)', display: 'flex', alignItems: 'center', gap: 4 }}>{t('network_form.already_exists')}</span>
                       ) : (
-                        <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => { onAddDevice(r.ip, r.open_ports); onClose() }}>Hinzufügen</button>
+                        <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => { onAddDevice(r.ip, r.open_ports); onClose() }}>{t('network_form.add')}</button>
                       )}
                     </div>
                   )
@@ -287,7 +290,10 @@ function DeviceCard({ device, isAdmin, onEdit, onDelete, onWol }: DeviceCardProp
   const [expanded, setExpanded] = useState(false)
   const [history, setHistory] = useState<NetworkDeviceHistory[]>([])
   const [wolLoading, setWolLoading] = useState(false)
-  const { toast } = useToast()
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
+  const use12h = settings?.time_format === '12h'
 
   const loadHistory = async () => {
     if (expanded) { setExpanded(false); return }
@@ -311,7 +317,7 @@ function DeviceCard({ device, isAdmin, onEdit, onDelete, onWol }: DeviceCardProp
   const statusColor = device.last_status === 'online' ? 'var(--status-online)' : device.last_status === 'offline' ? 'var(--status-offline)' : 'var(--text-muted)'
 
   const lastCheckedStr = (() => {
-    if (!device.last_checked) return 'Nie geprüft'
+    if (!device.last_checked) return t('network_form.never_checked')
     const d = new Date(device.last_checked.endsWith('Z') ? device.last_checked : device.last_checked + 'Z')
     const diff = Math.floor((Date.now() - d.getTime()) / 1000)
     if (diff < 60) return 'Gerade eben'
@@ -346,7 +352,7 @@ function DeviceCard({ device, isAdmin, onEdit, onDelete, onWol }: DeviceCardProp
               className="btn-icon"
               onClick={handleWol}
               disabled={wolLoading}
-              title="Wake-on-LAN senden"
+              title={t('network.wol')}
               style={{ color: 'var(--accent)' }}
             >
               <Zap size={14} />
@@ -354,8 +360,8 @@ function DeviceCard({ device, isAdmin, onEdit, onDelete, onWol }: DeviceCardProp
           )}
           {isAdmin && (
             <>
-              <button className="btn-icon" onClick={e => { e.stopPropagation(); onEdit() }} title="Bearbeiten"><Edit2 size={14} /></button>
-              <button className="btn-icon" onClick={e => { e.stopPropagation(); onDelete() }} title="Löschen" style={{ color: 'var(--status-offline)' }}><Trash2 size={14} /></button>
+              <button className="btn-icon" onClick={e => { e.stopPropagation(); onEdit() }} title={t('common.edit')}><Edit2 size={14} /></button>
+              <button className="btn-icon" onClick={e => { e.stopPropagation(); onDelete() }} title={t('common.delete')} style={{ color: 'var(--status-offline)' }}><Trash2 size={14} /></button>
             </>
           )}
         </div>
@@ -383,7 +389,7 @@ function DeviceCard({ device, isAdmin, onEdit, onDelete, onWol }: DeviceCardProp
                       {h.status === 'online' ? '● Online' : '● Offline'}
                     </span>
                     <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                      {new Date(h.checked_at.endsWith('Z') ? h.checked_at : h.checked_at + 'Z').toLocaleString('de-DE', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      {new Date(h.checked_at.endsWith('Z') ? h.checked_at : h.checked_at + 'Z').toLocaleString(locale, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: use12h })}
                     </span>
                   </div>
                 ))}
@@ -400,6 +406,7 @@ function DeviceCard({ device, isAdmin, onEdit, onDelete, onWol }: DeviceCardProp
 
 export function NetworkPage() {
   const { isAdmin } = useStore()
+  const { t } = useTranslation()
   const [devices, setDevices] = useState<NetworkDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -441,18 +448,18 @@ export function NetworkPage() {
     try {
       await api.network.devices.delete(device.id)
       await loadDevices()
-      toast({ message: `${device.name} entfernt`, type: 'info' })
+      toast({ message: `${device.name} removed`, type: 'info' })
     } catch (e) {
-      toast({ message: e instanceof Error ? e.message : 'Fehler', type: 'error' })
+      toast({ message: e instanceof Error ? e.message : 'Error', type: 'error' })
     }
   }
 
   const handleWol = async (device: NetworkDevice) => {
     try {
       await api.network.wol(device.id)
-      toast({ message: `Magic Packet an ${device.name} gesendet`, type: 'success' })
+      toast({ message: `Wake-on-LAN sent to ${device.name}`, type: 'success' })
     } catch (e) {
-      toast({ message: e instanceof Error ? e.message : 'WoL fehlgeschlagen', type: 'error' })
+      toast({ message: e instanceof Error ? e.message : 'WoL failed', type: 'error' })
     }
   }
 
@@ -530,7 +537,7 @@ export function NetworkPage() {
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🌐</div>
           <h3 style={{ fontFamily: 'var(--font-display)', marginBottom: 8 }}>Noch keine Geräte</h3>
-          <p style={{ marginBottom: 20 }}>Füge Netzwerkgeräte hinzu oder scanne dein Subnetz</p>
+          <p style={{ marginBottom: 20 }}>{t('network_form.empty_hint')}</p>
           {isAdmin && (
             <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>Erstes Gerät hinzufügen</button>
           )}
@@ -538,7 +545,7 @@ export function NetworkPage() {
       ) : (
         sortedGroups.map(groupKey => {
           const groupDevices = groupMap.get(groupKey) ?? []
-          const label = groupKey === '__ungrouped__' ? 'Ohne Gruppe' : groupKey
+          const label = groupKey === '__ungrouped__' ? t('network_form.no_group') : groupKey
           const collapsed = collapsedGroups.has(groupKey)
           return (
             <div key={groupKey}>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Plus, Bell, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import { api } from '../api'
 import type { HaAlert, HaEntityFull } from '../types'
@@ -9,14 +10,19 @@ interface Props {
   instanceId: string | null
 }
 
-const CONDITION_TYPE_LABELS: Record<string, string> = {
-  state_equals: 'Status gleich',
-  state_above: 'Wert über',
-  state_below: 'Wert unter',
-  state_changes: 'Status ändert sich',
+function useConditionLabels(): Record<string, string> {
+  const { t } = useTranslation()
+  return {
+    state_equals:  t('ha_alerts.condition_state_equals'),
+    state_above:   t('ha_alerts.condition_state_above'),
+    state_below:   t('ha_alerts.condition_state_below'),
+    state_changes: t('ha_alerts.condition_state_changes'),
+  }
 }
 
 export function HaAlertsManager({ onClose, stateMap, instanceId }: Props) {
+  const { t } = useTranslation()
+  const CONDITION_TYPE_LABELS = useConditionLabels()
   const [alerts, setAlerts] = useState<HaAlert[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -167,7 +173,7 @@ export function HaAlertsManager({ onClose, stateMap, instanceId }: Props) {
                 className="btn btn-ghost btn-icon"
                 style={{ flexShrink: 0, width: 28, height: 28, color: 'var(--status-offline)' }}
                 onClick={() => handleDelete(alert.id)}
-                data-tooltip="Löschen"
+                data-tooltip={t('ha_alerts.delete')}
               >
                 <Trash2 size={14} />
               </button>
@@ -280,7 +286,7 @@ export function HaAlertsManager({ onClose, stateMap, instanceId }: Props) {
           disabled={alerts.length >= 20}
           style={{ width: '100%', gap: 6, justifyContent: 'center' }}
         >
-          <Plus size={14} /> Benachrichtigung hinzufügen
+          <Plus size={14} /> {t('ha_alerts.add')}
         </button>
       )}
     </div>

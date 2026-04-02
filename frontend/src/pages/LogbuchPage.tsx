@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import React, { useEffect, useState, useRef } from 'react'
 import { Activity, TrendingUp, RefreshCw, Container, Home, Box, AlertTriangle, CheckCircle, XCircle, Search, ChevronRight, Cpu, Network, HardDrive } from 'lucide-react'
 import type { ResourceSnapshot } from '../types'
@@ -34,16 +35,20 @@ interface Anomaly {
 
 // ── Tab config ─────────────────────────────────────────────────────────────────
 
-const TABS = [
-  { key: 'aktivitaeten', label: 'Aktivitäten', icon: Activity },
-  { key: 'uptime', label: 'Uptime', icon: TrendingUp },
-  { key: 'sync', label: 'Sync-Verlauf', icon: RefreshCw },
-  { key: 'ressourcen', label: 'Ressourcen', icon: Cpu },
-]
+function useTabs() {
+  const { t } = useTranslation()
+  return [
+    { key: 'aktivitaeten', label: t('logbuch.tabs.activity'), icon: Activity },
+    { key: 'uptime', label: t('logbuch.tabs.uptime'), icon: TrendingUp },
+    { key: 'sync', label: t('logbuch.tabs.sync'), icon: RefreshCw },
+    { key: 'ressourcen', label: t('logbuch.tabs.resources'), icon: Cpu },
+  ]
+}
 
 // ── Health Score Badge ────────────────────────────────────────────────────────
 
 function HealthScoreBadge({ hs }: { hs: HealthScore | null }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
 
   const scoreColor = (s: number) => {
@@ -96,26 +101,25 @@ function HealthScoreBadge({ hs }: { hs: HealthScore | null }) {
             <span style={{ color: 'var(--text-secondary)' }}>
               {hs.breakdown.docker.available
                 ? `Docker: ${hs.breakdown.docker.running}/${hs.breakdown.docker.total} running`
-                : 'Docker: nicht verfügbar'}
-            </span>
+                : t('logbuch.health.docker_unavailable')}            </span>
             <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>+{hs.breakdown.docker.points}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-secondary)' }}>
               Recyclarr: {hs.breakdown.recyclarr.lastSyncSuccess === null
-                ? 'Kein Sync'
-                : hs.breakdown.recyclarr.lastSyncSuccess ? 'Letzter Sync erfolgreich' : 'Letzter Sync fehlgeschlagen'}
+                ? t('logbuch.health.no_sync')
+                : hs.breakdown.recyclarr.lastSyncSuccess ? t('logbuch.health.last_sync_ok') : t('logbuch.health.last_sync_failed')}
             </span>
             <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>+{hs.breakdown.recyclarr.points}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-secondary)' }}>
-              Home Assistant: {hs.breakdown.ha.reachable}/{hs.breakdown.ha.total} erreichbar
+              Home Assistant: {hs.breakdown.ha.reachable}/{hs.breakdown.ha.total}  {t('logbuch.health.reachable')}
             </span>
             <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>+{hs.breakdown.ha.points}</span>
           </div>
           <div style={{ borderTop: '1px solid var(--glass-border)', marginTop: 4, paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontWeight: 600 }}>Gesamt</span>
+            <span style={{ fontWeight: 600 }}>{t('logbuch.health.total')}</span>
             <span style={{ fontWeight: 700, color: scoreColor(hs.score), fontFamily: 'var(--font-mono)' }}>{hs.score}/100</span>
           </div>
         </div>
@@ -127,6 +131,9 @@ function HealthScoreBadge({ hs }: { hs: HealthScore | null }) {
 // ── Ereignis-Kalender ─────────────────────────────────────────────────────────
 
 function EreignisKalender({ days }: { days: CalendarDay[] }) {
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
   const [open, setOpen] = useState(false)
 
   const dayMap = new Map(days.map(d => [d.date, d]))
@@ -173,7 +180,7 @@ function EreignisKalender({ days }: { days: CalendarDay[] }) {
   const fmtDate = (iso: string) => {
     if (!iso) return ''
     const d = new Date(iso + 'T00:00:00')
-    return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
   const DAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
@@ -233,11 +240,11 @@ function EreignisKalender({ days }: { days: CalendarDay[] }) {
               ))}
               {/* Legend */}
               <div style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: 10, color: 'var(--text-muted)', alignItems: 'center' }}>
-                <span>Wenig</span>
+                <span>{t('logbuch.uptime.few')}</span>
                 {(['var(--glass-border)', 'var(--status-online)', '#f59e0b', 'var(--status-offline)'] as const).map((bg, i) => (
                   <div key={i} style={{ width: 12, height: 12, borderRadius: 2, background: bg, flexShrink: 0 }} />
                 ))}
-                <span>Viel / Fehler</span>
+                <span>{t('logbuch.uptime.many_errors')}</span>
               </div>
             </div>
           </div>
@@ -261,15 +268,16 @@ const categoryIconNode: Record<string, React.ReactNode> = {
   all: <Box size={12} />,
 }
 
-const TIME_FILTERS = ['Heute', '7 Tage', '30 Tage'] as const
-type TimeFilter = typeof TIME_FILTERS[number]
+const TIME_FILTERS = ['today', '7days', '30days'] as const
+type TimeFilter = 'today' | '7days' | '30days'
 
 const PAGE_SIZE = 20
 
 function AktivitaetenTab({ anomalies }: { anomalies: Anomaly[] }) {
   const { entries, loading, loadEntries } = useActivityStore()
+  const { t } = useTranslation()
   const [category, setCategory] = useState('all')
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('7 Tage')
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('7days')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
 
@@ -280,10 +288,10 @@ function AktivitaetenTab({ anomalies }: { anomalies: Anomaly[] }) {
   const now = new Date()
   const filtered = entries.filter(e => {
     const d = new Date(e.created_at)
-    if (timeFilter === 'Heute') {
+    if (timeFilter === 'today') {
       const today = new Date(now); today.setHours(0, 0, 0, 0)
       if (d < today) return false
-    } else if (timeFilter === '7 Tage') {
+    } else if (timeFilter === t('logbuch.resources.7d')) {
       if (now.getTime() - d.getTime() > 7 * 86400000) return false
     } else {
       if (now.getTime() - d.getTime() > 30 * 86400000) return false
@@ -311,8 +319,8 @@ function AktivitaetenTab({ anomalies }: { anomalies: Anomaly[] }) {
         <div className="glass" style={{ borderRadius: 'var(--radius-md)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(234,179,8,0.1)', borderColor: '#f59e0b' }}>
           <AlertTriangle size={14} style={{ color: '#f59e0b', flexShrink: 0 }} />
           <span style={{ fontSize: 12 }}>
-            <strong style={{ color: '#f59e0b' }}>Instabile Services:</strong>{' '}
-            {anomalies.map(a => `${a.serviceName ?? a.serviceId} (${a.offlineCount}× offline heute)`).join(', ')}
+            <strong style={{ color: '#f59e0b' }}>{t('logbuch.activity.unstable_services')}:</strong>{' '}
+            {anomalies.map(a => `${a.serviceName ?? a.serviceId} (${a.offlineCount}× {t('logbuch.activity.offline_today')})`).join(', ')}
           </span>
         </div>
       )}
@@ -368,7 +376,7 @@ function AktivitaetenTab({ anomalies }: { anomalies: Anomaly[] }) {
           onClick={() => loadEntries(category !== 'all' ? category : undefined).catch(() => {})}
           className="btn btn-ghost btn-sm"
           style={{ fontSize: 11, padding: '3px 8px', marginLeft: 'auto' }}
-          title="Aktualisieren"
+          title={t('common.refresh')}
         >
           <RefreshCw size={11} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
         </button>
@@ -378,8 +386,8 @@ function AktivitaetenTab({ anomalies }: { anomalies: Anomaly[] }) {
       {filtered.length === 0 && !loading ? (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>
           {entries.length === 0
-            ? 'Noch keine Aktivitäten aufgezeichnet'
-            : 'Keine Einträge für die gewählten Filter'}
+            ? t('logbuch.activity.no_activity')
+            : t('logbuch.activity.no_entries')}
         </div>
       ) : (
         <div className="glass" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
@@ -398,15 +406,15 @@ function AktivitaetenTab({ anomalies }: { anomalies: Anomaly[] }) {
             className="btn btn-ghost btn-sm"
             disabled={page === 0}
             onClick={() => setPage(p => p - 1)}
-          >← Zurück</button>
+          >{t('common.back')}</button>
           <span style={{ color: 'var(--text-muted)' }}>
-            Seite {page + 1} / {totalPages} ({filtered.length} Einträge)
+            {t('common.page_of', { current: page + 1, total: totalPages })} ({filtered.length} {t('common.entries', { count: filtered.length })})
           </span>
           <button
             className="btn btn-ghost btn-sm"
             disabled={page >= totalPages - 1}
             onClick={() => setPage(p => p + 1)}
-          >Weiter →</button>
+          >{t('common.next')}</button>
         </div>
       )}
     </div>
@@ -469,6 +477,10 @@ function uptimeColor(pct: number | null): string {
 }
 
 function UptimeOverview({ services }: { services: Service[] }) {
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
+  const use12h = settings?.time_format === '12h'
   const [data, setData] = useState<UptimeServiceData[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -530,7 +542,7 @@ function UptimeOverview({ services }: { services: Service[] }) {
       const isoHour = d.toISOString().slice(0, 13)
       const entry = history.find(h => h.hour.slice(0, 13) === isoHour)
       blocks.push({
-        label: d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+        label: d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: use12h }),
         uptime: entry ? entry.uptime : null,
       })
     }
@@ -540,17 +552,17 @@ function UptimeOverview({ services }: { services: Service[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 16, fontFamily: 'var(--font-display)', fontWeight: 600 }}>Uptime Übersicht</span>
+        <span style={{ fontSize: 16, fontFamily: 'var(--font-display)', fontWeight: 600 }}>{t('logbuch.uptime.title')}</span>
         {lastUpdated && (
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            Aktualisiert: {lastUpdated.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            {t('logbuch.uptime.updated')}: {lastUpdated.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: use12h })}
           </span>
         )}
-        <button onClick={load} className="btn btn-ghost btn-sm" disabled={loading} style={{ marginLeft: 4, padding: '3px 8px' }} title="Aktualisieren">
+        <button onClick={load} className="btn btn-ghost btn-sm" disabled={loading} style={{ marginLeft: 4, padding: '3px 8px' }} title={t('common.refresh')}>
           <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
         </button>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sortierung:</label>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('logbuch.uptime.sort')}:</label>
           <select
             value={sort}
             onChange={e => setSort(e.target.value as typeof sort)}
@@ -568,10 +580,10 @@ function UptimeOverview({ services }: { services: Service[] }) {
       </div>
 
       <div className="glass" style={{ borderRadius: 'var(--radius-md)', padding: '10px 16px', display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
-        <span><span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Gesamt:</span><strong>{data.length}</strong></span>
+        <span><span style={{ color: 'var(--text-muted)', marginRight: 4 }}>{t('logbuch.uptime.total')}:</span><strong>{data.length}</strong></span>
         <span><span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Online:</span><strong style={{ color: 'var(--status-online)' }}>{online}</strong></span>
         <span><span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Offline:</span><strong style={{ color: offline > 0 ? 'var(--status-offline)' : 'var(--text-secondary)' }}>{offline}</strong></span>
-        <span><span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Ø Uptime 7 Tage:</span><strong style={{ color: uptimeColor(avgUptime) }}>{avgUptime !== null ? `${avgUptime}%` : '—'}</strong></span>
+        <span><span style={{ color: 'var(--text-muted)', marginRight: 4 }}>{t('logbuch.uptime.avg_7d')}:</span><strong style={{ color: uptimeColor(avgUptime) }}>{avgUptime !== null ? `${avgUptime}%` : '—'}</strong></span>
       </div>
 
       {loading ? (
@@ -643,6 +655,10 @@ function UptimeOverview({ services }: { services: Service[] }) {
 // ── Sync-Verlauf Tab ──────────────────────────────────────────────────────────
 
 function SyncTab() {
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
+  const use12h = settings?.time_format === '12h'
   const { syncHistory, loadSyncHistory } = useRecyclarrStore()
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -656,7 +672,7 @@ function SyncTab() {
 
   const fmtTime = (iso: string) => {
     const d = new Date(iso)
-    return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleString(locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: use12h })
   }
 
   const toggleExpand = (id: string) => {
@@ -671,7 +687,7 @@ function SyncTab() {
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /></div>
 
   if (syncHistory.length === 0) {
-    return <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>Kein Sync-Verlauf vorhanden</div>
+    return <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>{t('logbuch.sync.no_history')}</div>
   }
 
   return (
@@ -682,7 +698,7 @@ function SyncTab() {
           style={{ fontSize: 11, padding: '3px 8px' }}
           onClick={() => { setLoading(true); loadSyncHistory().catch(() => {}).finally(() => setLoading(false)) }}
         >
-          <RefreshCw size={11} /> Aktualisieren
+          <RefreshCw size={11} /> Refresh
         </button>
       </div>
       {syncHistory.map(h => (
@@ -696,16 +712,16 @@ function SyncTab() {
               : <XCircle size={14} style={{ color: 'var(--status-offline)', flexShrink: 0 }} />
             }
             <span className={h.success ? 'badge-success' : 'badge-error'} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
-              {h.success ? 'OK' : 'Fehler'}
+              {h.success ? 'OK' : t('common.error')}
             </span>
             <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>
               {h.changes_summary
                 ? [
-                    h.changes_summary.created ? `+${h.changes_summary.created} erstellt` : '',
-                    h.changes_summary.updated ? `${h.changes_summary.updated} aktualisiert` : '',
-                    h.changes_summary.deleted ? `${h.changes_summary.deleted} gelöscht` : '',
-                  ].filter(Boolean).join(', ') || 'Keine Änderungen'
-                : 'Kein Änderungsprotokoll'}
+                    h.changes_summary.created ? `+${h.changes_summary.created} {t('logbuch.sync.created', { count: h.changes_summary.created })}` : '',
+                    h.changes_summary.updated ? `${h.changes_summary.updated} {t('logbuch.sync.updated', { count: h.changes_summary.updated })}` : '',
+                    h.changes_summary.deleted ? `${h.changes_summary.deleted} {t('logbuch.sync.deleted', { count: h.changes_summary.deleted })}` : '',
+                  ].filter(Boolean).join(', ') || t('logbuch.sync.no_changes')
+                : t('logbuch.sync.no_changelog')}
             </span>
             <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtTime(h.synced_at)}</span>
           </div>
@@ -786,6 +802,7 @@ function MetricCard({ label, value, subValue, color, data, maxVal }: MetricCardP
 }
 
 function RessourcenTab() {
+  const { t } = useTranslation()
   const [range, setRange] = useState<ResourceRange>('24h')
   const [snapshots, setSnapshots] = useState<ResourceSnapshot[]>([])
   const [loading, setLoading] = useState(true)
@@ -798,7 +815,7 @@ function RessourcenTab() {
       const data = await api.resources.history(r)
       setSnapshots(data)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Fehler beim Laden')
+      setError(e instanceof Error ? e.message : t('logbuch.resources.load_error'))
     } finally {
       setLoading(false)
     }
@@ -825,7 +842,7 @@ function RessourcenTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {snapshots.length > 0 ? `${snapshots.length} Messpunkte` : ''}
+          {snapshots.length > 0 ? `${snapshots.length} {t('logbuch.resources.data_points', { count: snapshots.length })}` : ''}
         </span>
         <div style={{ display: 'flex', gap: 4 }}>
           {(['1h', '24h', '7d'] as ResourceRange[]).map(r => (
@@ -835,7 +852,7 @@ function RessourcenTab() {
               className={range === r ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
               style={{ fontSize: 11, padding: '3px 10px' }}
             >
-              {r === '1h' ? '1 Std.' : r === '24h' ? '24 Std.' : '7 Tage'}
+              {r === '1h' ? t('logbuch.resources.1h') : r === '24h' ? t('logbuch.resources.24h') : t('logbuch.resources.7d')}
             </button>
           ))}
           <button
@@ -843,7 +860,7 @@ function RessourcenTab() {
             style={{ fontSize: 11, padding: '3px 8px' }}
             onClick={() => load(range)}
             disabled={loading}
-            title="Aktualisieren"
+            title={t('common.refresh')}
           >
             <RefreshCw size={11} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
           </button>
@@ -857,8 +874,8 @@ function RessourcenTab() {
       ) : snapshots.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
-          <p style={{ margin: 0, fontSize: 13 }}>Noch keine Ressourcen-Daten vorhanden.</p>
-          <p style={{ margin: '4px 0 0', fontSize: 12 }}>Daten werden minütlich aufgezeichnet — bitte warte einen Moment.</p>
+          <p style={{ margin: 0, fontSize: 13 }}>{t('logbuch.resources.no_data')}</p>
+          <p style={{ margin: '4px 0 0', fontSize: 12 }}>{t('logbuch.resources.no_data_hint')}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -875,6 +892,7 @@ function RessourcenTab() {
 // ── LogbuchPage ───────────────────────────────────────────────────────────────
 
 export function LogbuchPage() {
+  const tabs = useTabs()
   const { services } = useStore()
   const [activeTab, setActiveTab] = useState('aktivitaeten')
   const [healthScore, setHealthScore] = useState<HealthScore | null>(null)
@@ -921,7 +939,7 @@ export function LogbuchPage() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--glass-border)' }}>
-        {TABS.map(tab => {
+        {tabs.map(tab => {
           const Icon = tab.icon
           return (
             <button

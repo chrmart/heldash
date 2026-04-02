@@ -7,7 +7,10 @@ import {
   SkipBack, Play, Pause, SkipForward, ChevronUp, ChevronDown,
   Lock, Unlock, Shield, X, Clock,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useHaStore } from '../store/useHaStore'
+import { useStore } from '../store/useStore'
+import { formatTemperature } from '../utils'
 import type { HaPanel, HaEntityFull } from '../types'
 
 // ── Relative time ──────────────────────────────────────────────────────────────
@@ -85,6 +88,7 @@ interface ShellProps {
 }
 
 function PanelCardShell({ panel, entity, onEdit, onRemove, onShowHistory, isAdmin, dragHandleProps, children }: ShellProps) {
+  const { t } = useTranslation()
   const domain = getDomain(panel.entity_id)
   const label = panel.label || entity?.attributes.friendly_name || panel.entity_id
 
@@ -110,7 +114,7 @@ function PanelCardShell({ panel, entity, onEdit, onRemove, onShowHistory, isAdmi
         </div>
         <div style={{ display: 'flex', gap: 4, flexShrink: 0, opacity: 0, transition: 'opacity var(--transition-fast)' }} className="card-actions">
           {isAdmin && entity && onShowHistory && (
-            <button className="btn btn-ghost btn-icon" style={{ width: 22, height: 22 }} onClick={() => onShowHistory(entity)} data-tooltip="Verlauf">
+            <button className="btn btn-ghost btn-icon" style={{ width: 22, height: 22 }} onClick={() => onShowHistory(entity)} data-tooltip={t('ha.history.title')}>
               <Clock size={11} />
             </button>
           )}
@@ -268,10 +272,16 @@ function LightCard({ panel, entity, instanceId }: { panel: HaPanel; entity: HaEn
 
 function ClimateCard({ panel, entity, instanceId }: { panel: HaPanel; entity: HaEntityFull; instanceId: string }) {
   const { callService, updateEntityState } = useHaStore()
+  const { settings } = useStore()
+  const tempUnit = settings?.temp_unit ?? 'celsius'
   const attrs = entity.attributes
   const current = attrs.current_temperature
   const target = attrs.temperature
-  const unit = attrs.unit_of_measurement ?? '°C'
+  const rawUnit = (attrs.unit_of_measurement as string | undefined) ?? '°C'
+  const fmtTemp = (val: number | undefined) => val !== undefined ? formatTemperature(val, rawUnit, tempUnit) : null
+  const currentFmt = fmtTemp(current as number | undefined)
+  const targetFmt = fmtTemp(target as number | undefined)
+  const displayUnit = currentFmt?.unit ?? targetFmt?.unit ?? rawUnit
   const hvacMode = attrs.hvac_mode ?? entity.state
   const hvacModes = attrs.hvac_modes ?? []
   const minTemp = attrs.min_temp ?? 7
@@ -298,7 +308,7 @@ function ClimateCard({ panel, entity, instanceId }: { panel: HaPanel; entity: Ha
     <div>
       {current !== undefined && (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-          Current: <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{current}{unit}</span>
+          Current: <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{currentFmt ? `${currentFmt.value}${displayUnit}` : `${current}${rawUnit}`}</span>
         </div>
       )}
       {target !== undefined && (
@@ -307,7 +317,7 @@ function ClimateCard({ panel, entity, instanceId }: { panel: HaPanel; entity: Ha
             <ChevronDown size={14} />
           </button>
           <span style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-            {target}{unit}
+            {targetFmt ? `${targetFmt.value}${displayUnit}` : `${target}${rawUnit}`}
           </span>
           <button className="btn btn-ghost btn-icon" style={{ width: 28, height: 28 }} onClick={() => setTemp(0.5)}>
             <ChevronUp size={14} />
@@ -502,9 +512,15 @@ function SensorIcon({ deviceClass }: { deviceClass: string | undefined }) {
 }
 
 function SensorCard({ entity }: { entity: HaEntityFull }) {
-  const unit = entity.attributes.unit_of_measurement
+  const { settings } = useStore()
+  const tempUnit = settings?.temp_unit ?? 'celsius'
+  const rawUnit = entity.attributes.unit_of_measurement
   const isBinary = getDomain(entity.entity_id) === 'binary_sensor'
   const isOn = entity.state === 'on'
+  const isTempSensor = entity.attributes.device_class === 'temperature' || rawUnit === '°C'
+  const { value: displayValue, unit: displayUnit } = isTempSensor && rawUnit
+    ? formatTemperature(entity.state, rawUnit as string, tempUnit)
+    : { value: entity.state, unit: (rawUnit ?? '') as string }
 
   if (isBinary) {
     return (
@@ -525,9 +541,9 @@ function SensorCard({ entity }: { entity: HaEntityFull }) {
       <SensorIcon deviceClass={entity.attributes.device_class} />
       <div>
         <span style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-          {entity.state}
+          {displayValue}
         </span>
-        {unit && <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 3 }}>{unit}</span>}
+        {displayUnit && <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 3 }}>{displayUnit}</span>}
       </div>
     </div>
   )
@@ -761,7 +777,7 @@ function AlarmCard({ entity, panel, onCall }: AlarmCardProps) {
       </div>
       {showPin && (
         <PinModal
-          title={`Alarm ${pendingService === 'alarm_disarm' ? 'deaktivieren' : 'scharf stellen'}`}
+          title={`Alarm ${pendingService === 'alarm_disarm' ? 'disarm' : 'arm'}`}
           onConfirm={handlePinConfirm}
           onClose={() => { setShowPin(false); setPendingService(null) }}
         />
@@ -805,7 +821,7 @@ function GenericCard({ panel, entity, instanceId }: { panel: HaPanel; entity: Ha
     }
   }
 
-  const unit = entity.attributes.unit_of_measurement
+  const unit = entity.attributes.unit_of_measurement as string | undefined
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -832,6 +848,7 @@ export interface HaPanelCardProps {
   isAdmin?: boolean
 }
 
+// t() available via useTranslation in sub-components
 export function HaPanelCard({ panel, entity, instanceId, onEdit, onRemove, onShowHistory, isAdmin }: HaPanelCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: panel.id })
 

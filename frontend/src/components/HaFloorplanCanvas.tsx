@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Lightbulb, Power, Thermometer, ChevronUp, ChevronDown, Play,
   HelpCircle, ZoomIn, ZoomOut, RotateCcw,
@@ -6,6 +7,8 @@ import {
 } from 'lucide-react'
 import type { HaFloorplan, HaFloorplanEntity, HaEntityFull, HaInstance } from '../types'
 import { api } from '../api'
+import { useStore } from '../store/useStore'
+import { formatTemperature } from '../utils'
 
 // ── Domain helpers ────────────────────────────────────────────────────────────
 
@@ -49,6 +52,8 @@ interface MarkerProps {
 
 function EntityMarker({ placed, entity, editMode, isSelected, zoom, onSelect, onDragStart, onClick, onContextMenu }: MarkerProps) {
   const markerRef = useRef<HTMLDivElement>(null)
+  const { settings } = useStore()
+  const tempUnit = settings?.temp_unit ?? 'celsius'
   const domain = getDomain(placed.entity_id)
   const state = entity?.state ?? 'unavailable'
   const isUnavailable = state === 'unavailable' || !entity
@@ -116,7 +121,7 @@ function EntityMarker({ placed, entity, editMode, isSelected, zoom, onSelect, on
     const temp = entity?.attributes.current_temperature
     icon = temp !== undefined ? (
       <span style={{ fontSize: Math.max(9, iSize - 4), fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-        {Math.round(temp as number)}°
+        {(() => { const f = formatTemperature(temp as number, '°C', tempUnit); return `${f.value}${f.unit}` })()}
       </span>
     ) : <Thermometer size={iSize} />
   } else if (domain === 'cover') {
@@ -262,6 +267,9 @@ interface PopoverProps {
 
 function QuickControlPopover({ placed, entity, anchorRect, instanceId, onClose }: PopoverProps) {
   const popRef = useRef<HTMLDivElement>(null)
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const tempUnit = settings?.temp_unit ?? 'celsius'
   const domain = getDomain(placed.entity_id)
   const state = entity?.state ?? 'unavailable'
   const isOn = ['on', 'open', 'unlocked', 'playing', 'home', 'active'].includes(state)
@@ -407,7 +415,7 @@ function QuickControlPopover({ placed, entity, anchorRect, instanceId, onClose }
               onClick={() => callService(domain === 'scene' ? 'turn_on' : 'turn_on')}
               style={{ width: '100%', justifyContent: 'center' }}
             >
-              <Play size={13} /> Ausführen
+              <Play size={13} />{t('ha.floorplan.run')}
             </button>
           )}
 
@@ -415,13 +423,13 @@ function QuickControlPopover({ placed, entity, anchorRect, instanceId, onClose }
           {domain === 'climate' && (
             <div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                Modus: {state} · {entity.attributes.current_temperature}° aktuell
+                {t('ha.floorplan.mode')}: {state} · {entity.attributes.current_temperature}° {t('ha.floorplan.current')}
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
                 <button className="btn btn-ghost" style={{ padding: '4px 12px' }}
                   onClick={() => callService('set_temperature', { temperature: (entity.attributes.temperature as number ?? 20) - 0.5 })}
                   disabled={busy}>−</button>
-                <span style={{ fontSize: 18, fontWeight: 700 }}>{entity.attributes.temperature}°</span>
+                <span style={{ fontSize: 18, fontWeight: 700 }}>{entity.attributes.temperature !== undefined ? (() => { const f = formatTemperature(entity.attributes.temperature as number, '°C', tempUnit); return f.value + f.unit })() : '—'}</span>
                 <button className="btn btn-ghost" style={{ padding: '4px 12px' }}
                   onClick={() => callService('set_temperature', { temperature: (entity.attributes.temperature as number ?? 20) + 0.5 })}
                   disabled={busy}>+</button>
@@ -432,7 +440,7 @@ function QuickControlPopover({ placed, entity, anchorRect, instanceId, onClose }
           {/* Sensor / person / other: read-only */}
           {(domain === 'sensor' || domain === 'binary_sensor' || domain === 'person' || domain === 'device_tracker') && (
             <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>
-              {entity.state}{entity.attributes.unit_of_measurement ? ` ${entity.attributes.unit_of_measurement}` : ''}
+              {(() => { const ru = entity.attributes.unit_of_measurement as string | undefined; const isTemp = entity.attributes.device_class === 'temperature' || ru === '°C'; if (isTemp && ru) { const f = formatTemperature(entity.state, ru, tempUnit); return f.value + f.unit } return entity.state + (ru ? ` ${ru}` : '') })()}
             </p>
           )}
         </>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { useStore } from '../store/useStore'
 import { useArrStore } from '../store/useArrStore'
@@ -330,6 +331,9 @@ function InstancesTab({ showAddForm: showFromParent, onFormClose }: { showAddFor
 type CalendarView = 'day' | 'week' | 'month' | 'list' | 'grid'
 
 function CalendarTab() {
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
   const { instances, calendars, loadCalendar } = useArrStore()
   const [loading, setLoading] = useState(false)
   const [view, setView] = useState<CalendarView>('week')
@@ -366,12 +370,12 @@ function CalendarTab() {
 
   // Helper: format date as "Mo, 07.03.2026"
   const formatDate = (date: Date): string => {
-    return date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
+    return date.toLocaleDateString(locale, { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
   // Helper: short date for calendar items "Mo, 07.03"
   const formatShortDate = (date: Date): string => {
-    return date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+    return date.toLocaleDateString(locale, { weekday: 'short', day: '2-digit', month: '2-digit' })
   }
 
   // Helper: get date range for a given view
@@ -405,7 +409,7 @@ function CalendarTab() {
       return {
         start,
         end,
-        label: d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }),
+        label: d.toLocaleDateString(locale, { month: 'long', year: 'numeric' }),
       }
     }
   }
@@ -2229,8 +2233,8 @@ function RecyclarrWizard({ instances, onClose, onComplete }: {
             <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div><strong>Instanz:</strong> {selectedInstance?.name} ({selectedInstance?.type})</div>
               <div><strong>Profile:</strong> {selectedProfiles.map(tid => profilesList.find(p => p.trash_id === tid)?.name).join(', ') || '–'}</div>
-              <div><strong>Quality Definition:</strong> {qualDef ? 'Ja' : 'Nein'}</div>
-              <div><strong>Nur deutsch:</strong> {germanOnly ? 'Ja (min. 10000)' : 'Nein'}</div>
+              <div><strong>Quality Definition:</strong> {qualDef ? t('common.yes') : t('common.no')}</div>
+              <div><strong>Nur deutsch:</strong> {germanOnly ? 'Ja (min. 10000)' : t('common.no')}</div>
               <div><strong>User CFs:</strong> {selectedUserCfs.length}</div>
             </div>
           </div>
@@ -2326,6 +2330,10 @@ function formatRelativeTime(isoStr: string | null): string {
 }
 
 function RecyclarrTab() {
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
+  const use12h = settings?.time_format === '12h'
   const { isAdmin } = useStore()
   const { instances } = useArrStore()
   const {
@@ -2674,7 +2682,7 @@ function RecyclarrTab() {
       setScheduleSaveSuccess(true)
       setTimeout(() => setScheduleSaveSuccess(false), 3000)
     } catch (e) {
-      setScheduleSaveError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
+      setScheduleSaveError(e instanceof Error ? e.message : t('common.error'))
     } finally {
       setScheduleSaving(false)
     }
@@ -2714,7 +2722,7 @@ function RecyclarrTab() {
               try {
                 const res = await api.recyclarr.previewYaml()
                 setYamlPreview(res.yaml)
-              } catch { setYamlPreview('Fehler beim Laden') }
+              } catch { setYamlPreview(t('common.error')) }
             }
             setShowYamlPreview(v => !v)
           }} style={{ fontSize: 12, gap: 4 }}>
@@ -2750,13 +2758,13 @@ function RecyclarrTab() {
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Wirklich?</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowResetConfirm(false)} style={{ fontSize: 12 }}>Abbrechen</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowResetConfirm(false)} style={{ fontSize: 12 }}>Cancel</button>
               <button className="btn btn-sm" onClick={async () => {
                 setResetting(true)
                 try { await resetConfig() } catch { /* ignore */ } finally { setResetting(false); setShowResetConfirm(false) }
               }} disabled={resetting}
                 style={{ fontSize: 12, background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 'var(--radius-sm)', padding: '4px 10px', cursor: 'pointer' }}>
-                {resetting ? '…' : 'Ja, zurücksetzen'}
+                {resetting ? '…' : 'Yes, reset'}
               </button>
             </div>
           )}
@@ -2838,10 +2846,10 @@ function RecyclarrTab() {
                       : syncHistory.map(h => (
                           <div key={h.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'rgba(0,0,0,0.15)' }}>
                             <span className={h.success ? 'badge-success' : 'badge-error'} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>
-                              {h.success ? 'OK' : 'Fehler'}
+                              {h.success ? 'OK' : t('common.error')}
                             </span>
                             <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
-                              {new Date(h.synced_at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
+                              {new Date(h.synced_at).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short', hour12: use12h })}
                             </span>
                             {h.changes_summary && (
                               <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1 }}>
@@ -2974,7 +2982,7 @@ function RecyclarrTab() {
                   try { await acceptScoreChanges(instanceId!, scoreChanges); setScoreChanges([]) } catch { /* ignore */ }
                   setAcceptingChanges(false)
                 }} disabled={acceptingChanges} style={{ fontSize: 12 }}>
-                  {acceptingChanges ? '…' : 'Änderungen übernehmen'}
+                  {acceptingChanges ? '…' : 'Accept changes'}
                 </button>
                 <button className="btn btn-ghost btn-sm" onClick={() => setScoreChanges([])} style={{ fontSize: 12 }}>Ignorieren</button>
               </div>
@@ -3051,7 +3059,7 @@ function RecyclarrTab() {
                     {isAdmin && confirmDeleteProfile === selectedProfileId && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Profil entfernen?</span>
-                        <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDeleteProfile(null)} style={{ fontSize: 11 }}>Abbrechen</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDeleteProfile(null)} style={{ fontSize: 11 }}>Cancel</button>
                         <button className="btn btn-sm" onClick={() => {
                           setLocalProfilesConfig(prev => prev.filter(pc => pc.trash_id !== selectedProfileId))
                           setLocalScoreOverrides(prev => prev.filter(o => o.profileTrashId !== selectedProfileId))
@@ -3359,7 +3367,7 @@ function RecyclarrTab() {
                       <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || !hasUnsavedChanges}
                         style={{ fontSize: 12, gap: 4 }}>
                         {saving ? <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <Check size={12} />}
-                        {saving ? 'Speichern…' : 'Änderungen speichern'}
+                        {saving ? t('common.saving') : t('common.save')}
                       </button>
                     </div>
                   )}
@@ -3583,7 +3591,7 @@ function RecyclarrTab() {
               style={{ fontSize: 12, gap: 4 }}
             >
               {scheduleSaving ? <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <Check size={12} />}
-              {scheduleSaving ? 'Speichern…' : 'Zeitplan speichern'}
+              {scheduleSaving ? t('common.saving') : t('common.save')}
             </button>
             {scheduleSaveSuccess && <span className="badge-success" style={{ fontSize: 10 }}>Gespeichert</span>}
             {scheduleSaveError && <span style={{ fontSize: 11, color: '#f87171' }}>{scheduleSaveError}</span>}
@@ -3640,7 +3648,7 @@ function RecyclarrTab() {
                   ))
                 )}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setShowAddProfile(false)} style={{ fontSize: 12 }}>Abbrechen</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowAddProfile(false)} style={{ fontSize: 12 }}>Cancel</button>
                   <div style={{ flex: 1 }} />
                   <button className="btn btn-primary btn-sm" disabled={addProfileSelected.length === 0} onClick={() => setAddProfileStep(2)} style={{ fontSize: 12 }}>Weiter</button>
                 </div>
@@ -4144,7 +4152,7 @@ function UserCfRow({
     try {
       await onCreateInArr()
     } catch (e: unknown) {
-      setCreateError((e as Error).message ?? 'Fehler beim Erstellen')
+      setCreateError((e as Error).message ?? t('common.error'))
     } finally {
       setCreating(false)
     }
@@ -4220,14 +4228,14 @@ function UserCfRow({
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                 {notInArr
                   ? `Nur JSON-Datei löschen — CF existiert nicht in ${serviceLabel}`
-                  : 'Wirklich löschen?'}
+                  : 'Really delete?'}
               </span>
               <button
                 onClick={onDeleteConfirm}
                 className="btn btn-sm"
                 style={{ fontSize: 11, padding: '2px 8px', background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}
-              >{notInArr ? 'Löschen' : 'Ja'}</button>
-              <button onClick={onDeleteCancel} className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}>{notInArr ? 'Abbrechen' : 'Nein'}</button>
+              >{notInArr ? t('common.delete') : t('common.yes')}</button>
+              <button onClick={onDeleteCancel} className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}>{notInArr ? t('common.cancel') : t('common.no')}</button>
             </>
           )}
           {deleteError && !inUse && <span className="badge-error" style={{ fontSize: 11 }}>{deleteError}</span>}
@@ -4578,9 +4586,9 @@ function CfEditModal({
 
           {error && <span className="badge-error" style={{ fontSize: 12 }}>{error}</span>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-            <button onClick={onClose} className="btn btn-ghost">Abbrechen</button>
+            <button onClick={onClose} className="btn btn-ghost">Cancel</button>
             <button onClick={handleSave} disabled={saving} className="btn btn-primary">
-              {saving ? 'Speichern…' : 'Speichern'}
+              {saving ? t('common.saving') : 'Speichern'}
             </button>
           </div>
         </div>
@@ -4695,7 +4703,7 @@ function CopyCfModal({
           </div>
           {error && <span className="badge-error" style={{ fontSize: 12 }}>{error}</span>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button onClick={onClose} className="btn btn-ghost">Abbrechen</button>
+            <button onClick={onClose} className="btn btn-ghost">Cancel</button>
             <button onClick={handleCopy} disabled={saving || isDuplicate || !newName.trim()} className="btn btn-primary">
               {saving ? 'Kopieren…' : 'Kopieren'}
             </button>
@@ -4869,9 +4877,9 @@ function ImportModal({
             {saveError && <span className="badge-error" style={{ fontSize: 12 }}>{saveError}</span>}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-              <button onClick={onClose} className="btn btn-ghost">Abbrechen</button>
+              <button onClick={onClose} className="btn btn-ghost">Cancel</button>
               <button onClick={handleImport} disabled={saving || totalSelected === 0} className="btn btn-primary">
-                {saving ? 'Importieren…' : `Importieren (${totalSelected} ausgewählt)`}
+                {saving ? t('common.loading') : `Import (${totalSelected} selected)`}
               </button>
             </div>
           </div>
@@ -4920,7 +4928,7 @@ function CfManagerTab({ onSwitchTab }: { onSwitchTab: (tab: MediaTab) => void })
       loadCustomFormats(activeInstance.id),
       loadUserCfFiles(service),
       loadCfSchema(activeInstance.id),
-    ]).catch((e: unknown) => setLoadError((e as Error).message ?? 'Fehler beim Laden'))
+    ]).catch((e: unknown) => setLoadError((e as Error).message ?? t('common.error')))
   }, [activeInstance?.id, service]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const cfFiles = userCfFiles[service] ?? []

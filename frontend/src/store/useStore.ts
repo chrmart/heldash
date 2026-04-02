@@ -3,6 +3,7 @@ import type { Service, Group, Settings, ThemeMode, ThemeAccent, AuthUser, UserRe
 import { api } from '../api'
 import { calcAutoTheme } from '../utils'
 import { LS_GUEST_THEME_MODE, LS_GUEST_THEME_ACCENT } from '../constants'
+import { applyLanguage } from '../i18n'
 
 interface AppState {
   // App data
@@ -474,6 +475,8 @@ function applyTheme(settings: Settings) {
   root.setAttribute('data-density',    settings.design_density       ?? 'comfortable')
   root.setAttribute('data-animations', settings.design_animations    ?? 'full')
   root.setAttribute('data-sidebar',    settings.design_sidebar_style ?? 'default')
+  // Sync i18next language whenever settings are applied
+  if (settings.language) applyLanguage(settings.language)
   let el = document.getElementById('heldash-custom-css') as HTMLStyleElement | null
   if (!el) {
     el = document.createElement('style')

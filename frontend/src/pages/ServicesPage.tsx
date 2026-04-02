@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Service } from '../types'
 import { useStore } from '../store/useStore'
 import { useDashboardStore } from '../store/useDashboardStore'
@@ -31,6 +32,9 @@ interface HealthHistoryData {
 }
 
 function UptimeBar({ serviceId }: { serviceId: string }) {
+  const { t } = useTranslation()
+  const { settings } = useStore()
+  const locale = settings?.language ?? 'de'
   const [data, setData] = useState<HealthHistoryData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -42,7 +46,7 @@ function UptimeBar({ serviceId }: { serviceId: string }) {
 
   if (loading) return <div style={{ height: 24, display: 'flex', alignItems: 'center' }}><div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /></div>
   if (!data || data.history.length === 0) return (
-    <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingTop: 4 }}>Keine Verlaufsdaten</div>
+    <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingTop: 4 }}>{t('services.no_history')}</div>
   )
 
   // Show last 24 hours
@@ -54,7 +58,7 @@ function UptimeBar({ serviceId }: { serviceId: string }) {
     d.setHours(d.getHours() - i)
     const isoHour = d.toISOString().slice(0, 13) + ':00:00'
     const entry = data.history.find(h => h.hour.slice(0, 13) === isoHour.slice(0, 13))
-    blocks.push({ hour: d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }), uptime: entry ? entry.uptime : null })
+    blocks.push({ hour: d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }), uptime: entry ? entry.uptime : null })
   }
 
   return (
@@ -102,6 +106,7 @@ function SortableGroupSection({
   isAdmin: boolean
   isAuthenticated: boolean
 }) {
+  const { t } = useTranslation()
   const { addService, removeItem, isOnDashboard } = useDashboardStore()
   const { updateService, deleteService } = useStore()
   const { items: dashboardItems } = useDashboardStore()
@@ -313,7 +318,7 @@ function SortableGroupSection({
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     <button
                       className="btn btn-ghost btn-icon btn-sm"
-                      title="Uptime-Verlauf anzeigen"
+                      title={t('services.no_history')}
                       onClick={() => setUptimeOpen(prev => {
                         const next = new Set(prev)
                         if (next.has(s.id)) next.delete(s.id)

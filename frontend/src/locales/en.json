@@ -32,7 +32,8 @@
     "name": "Name",
     "type": "Type",
     "status": "Status",
-    "today": "Today"
+    "today": "Today",
+    "yes_remove": "Yes, remove"
   },
   "topbar": {
     "light_mode": "Light mode",
@@ -372,7 +373,14 @@
     "toast": {
       "enable": "Enabled",
       "disable": "Disabled"
-    }
+    },
+    "parity_running": "Parity check running…",
+    "parity_paused": "Parity check (paused)",
+    "close": "Close",
+    "remove_instance": "Remove instance? All saved data will be deleted.",
+    "instance_deleted": "Instance deleted",
+    "server_added": "Server added",
+    "import_result": "{{imported}} floors imported, {{skipped}} skipped. Images must be re-uploaded."
   },
   "ha": {
     "history": {
@@ -453,5 +461,89 @@
     "back": "Back",
     "next": "Next",
     "finish": "Open Dashboard"
+  },
+  "service_modal": {
+    "icon_image_label": "Icon Image (PNG, JPG, SVG · max. 512 KB)",
+    "image_too_large": "Image must be 512 KB or smaller.",
+    "upload": "Upload image",
+    "replace": "Replace",
+    "image_priority": "Image takes priority over the emoji icon."
+  },
+  "ha_alerts": {
+    "condition_state_equals": "State equals",
+    "condition_state_above": "Value above",
+    "condition_state_below": "Value below",
+    "condition_state_changes": "State changes",
+    "delete": "Delete",
+    "add": "Add notification"
+  },
+  "floorplan": {
+    "new_floor": "New Floor",
+    "add_floor": "+ Floor",
+    "delete_floor": "Delete floor",
+    "confirm_delete": "Yes, delete",
+    "upload_image": "Upload image",
+    "change_image": "Change image",
+    "undo": "Undo",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving…",
+    "create": "Create",
+    "no_entities": "No entities",
+    "no_instance": "No Home Assistant instance configured.",
+    "save_error": "Error saving",
+    "lights_off_confirm": "Turn off all lights on this floor?"
+  },
+  "gps": {
+    "battery": "Battery",
+    "no_data": "No GPS data available for the selected people",
+    "privacy_note": "GPS data is only shown locally — not transmitted to third parties",
+    "no_instance": "No HA instance selected.",
+    "no_persons": "No person.* entities found in Home Assistant.",
+    "persons_selected": "People ({{selected}}/{{total}} selected)",
+    "no_map": "GPS map not available",
+    "no_gps": "No GPS data available",
+    "show_map": "Show GPS map",
+    "hide_map": "Hide GPS map",
+    "btn_off": "GPS off",
+    "btn_on": "GPS map"
+  },
+  "ha_page": {
+    "tab_panels": "Panels",
+    "tab_floorplan": "🗺 Floorplan",
+    "tab_gps": "📍 GPS",
+    "tab_scenes": "🎭 Scenes",
+    "tab_automations": "⚡ Automations",
+    "rooms_not_configured": "Rooms not configured in Home Assistant",
+    "search_scenes": "Search scenes…",
+    "search_automations": "Search automations…",
+    "run": "Run",
+    "running": "Done!",
+    "trigger": "Trigger",
+    "no_scenes": "No scenes or scripts found.",
+    "no_automations": "No automations found."
+  },
+  "unraid_confirm": {
+    "confirm": "Confirm",
+    "vm_forcestop": "Force stop VM — data loss possible!",
+    "vm_reset": "Hard reset — data loss possible!",
+    "vm_stop": "Unsaved data in the VM may be lost.",
+    "new_api_key": "New API key (leave empty to keep current)"
+  },
+  "network_form": {
+    "group": "Group",
+    "subnet": "Subnet (for scanner pre-fill)",
+    "check_method": "Check method",
+    "subnet_required": "Enter subnet",
+    "no_group": "No group",
+    "empty_hint": "Add network devices or scan your subnet",
+    "add_device": "Add Device",
+    "edit_device": "Edit Device",
+    "subnet_hint": "Supports /20–/32 (max. 4096 hosts)",
+    "devices_found_one": "{{count}} device found",
+    "devices_found_other": "{{count}} devices found",
+    "already_exists": "✓ Already exists",
+    "add": "Add",
+    "never_checked": "Never checked"
   }
 }
